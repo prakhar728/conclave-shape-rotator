@@ -303,6 +303,39 @@ async def test_list_interviewees_admin_only():
 
 
 @pytest.mark.asyncio
+async def test_run_cohort_matching_admin_returns_graph():
+    instance_id, admin_info, _ = _make_instance_and_tokens()
+    token = set_caller_token_for_test(admin_info)
+    try:
+        transcript = (FIXTURE_DIR / "prod_internal.txt").read_text()
+        async with create_connected_server_and_client_session(build_mcp_server()) as client:
+            await client.initialize()
+            await client.call_tool("submit_interview", {
+                "transcript": transcript, "interviewee_slug": "leo",
+            })
+            result = await client.call_tool("run_cohort_matching", {})
+            data = _payload(result)
+            assert "matching" in data
+            assert "intros" in data["matching"] and "graph" in data["matching"]
+    finally:
+        reset_caller_token_for_test(token)
+
+
+@pytest.mark.asyncio
+async def test_run_cohort_matching_user_denied():
+    _instance_id, _admin, user_info = _make_instance_and_tokens()
+    token = set_caller_token_for_test(user_info)
+    try:
+        async with create_connected_server_and_client_session(build_mcp_server()) as client:
+            await client.initialize()
+            result = await client.call_tool("run_cohort_matching", {})
+            data = _payload(result)
+            assert data.get("error") and "admin" in data["error"].lower()
+    finally:
+        reset_caller_token_for_test(token)
+
+
+@pytest.mark.asyncio
 async def test_get_team_context_returns_v0_stub():
     _instance_id, admin_info, _ = _make_instance_and_tokens()
     token = set_caller_token_for_test(admin_info)

@@ -113,13 +113,17 @@ SERVER_INSTRUCTIONS = """\
 This is a Conclave interview_reflection instance running inside a Phala TDX TEE.
 
 It digests confidential 1:1 interview transcripts on behalf of an interviewer
-(typically a cohort organizer like Novel) and returns:
+(typically a cohort organizer like Novel) and returns, per interview:
 
-  - themes:                   3-5 short noun phrases per interview
-  - attribution_patterns:     internal vs external attribution proportions
-  - suggested_next_questions: 2-4 follow-up questions for the interviewer
-  - ownership_prompts:        gentle self-awareness prompts (interviewee-facing)
-  - session_summary:          1-2 sentences anchored to the team's stated goals
+  - collaboration_profile: what they're building + quote-anchored offers / needs
+                           / interests / stage (tagged to a closed taxonomy)
+  - rubric_panel:          five personality rubrics (coachability, agency,
+                           proactivity, goal-commitment, progress), each a score
+                           + evidence quotes or "insufficient evidence"
+  - rationale/summary/bullets: a composed organizer-facing view over the above
+
+Across the cohort it computes "who should talk to whom, and why" — ranked
+help / peer / cross-pollinate intros with both evidence quotes.
 
 Raw transcripts NEVER leave the enclave. Only the digests above do.
 
@@ -140,6 +144,10 @@ WHEN TO USE WHICH TOOL:
     - get_interview_results(interviewee_slug, time_window?)
       Admin sees any slug. A user-role (per-interviewee) token sees only its
       own submissions.
+    - run_cohort_matching(top_k?)                          — admin only
+      Cross-person "who should talk to whom": ranked help/peer/cross-pollinate
+      intros (with both evidence quotes) + a connection graph, over all stored
+      profiles.
 
   Grounding follow-up questions in cohort context
     - get_team_context(team_slug)
@@ -183,6 +191,7 @@ def _register_tools(mcp: FastMCP) -> None:
     from skills.interview_reflection import run_skill
     from skills.interview_reflection.aggregate import load_digests
     from skills.interview_reflection.models import TranscriptInput
+    from skills.interview_reflection.skill import run_matching
 
     @mcp.tool()
     def whoami() -> dict:
@@ -302,6 +311,18 @@ def _register_tools(mcp: FastMCP) -> None:
                     "last_ingest": last_ts,
                 })
         return _sign({"interviewees": rows, "tool": "list_interviewees"})
+
+    @mcp.tool()
+    def run_cohort_matching(top_k: Optional[int] = None) -> dict:
+        """Compute cross-person intros over all stored profiles. Admin only.
+
+        Returns ranked help / peer / cross-pollinate intros (each with both
+        evidence quotes) plus a cohort connection graph.
+        """
+        info = _current_caller()
+        if info.get("role") != "admin":
+            return _sign({"error": "admin role required to run_cohort_matching"})
+        return _sign({"matching": run_matching(top_k=top_k), "tool": "run_cohort_matching"})
 
     @mcp.tool()
     def get_team_context(team_slug: str) -> dict:

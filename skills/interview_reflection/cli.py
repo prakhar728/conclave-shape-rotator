@@ -1,236 +1,197 @@
 """
-End-to-end smoke runner for interview_reflection (Track A v0).
+CLI runner for interview_reflection.
 
-Pipes a fixture transcript through deterministic → agent → guardrails using the
-**real** NearAI LLM. Lets you eyeball output quality on synthetic transcripts
-before Step 10 (real Novel transcripts).
+Two modes:
 
-Usage:
+    # Single fixture → collaboration profile + rubric panel + composed summary
+    python -m skills.interview_reflection.cli prod_internal
 
-    # Single fixture through the pipeline
-    python -m skills.interview_reflection.cli <fixture-slug>
-    python -m skills.interview_reflection.cli prod_internal --share
+    # Cohort matching demo (THE artifact for Novel): ingest many transcripts,
+    # then print ranked cross-person intros + each person's panel
+    python -m skills.interview_reflection.cli --match tests/fixtures/interview_reflection/*.txt
 
-    # Multi-session trajectory through the pipeline + aggregation (Step 7)
-    python -m skills.interview_reflection.cli leo \\
-        --history prod_external,prod_mixed,prod_internal
-
-Available fixture slugs:
-    collab_internal, collab_mixed, edge_derailed, edge_silent,
-    prod_external, prod_internal, prod_mixed, prod_shifting,
-    research_external, research_shifting
-
-Requires CONCLAVE_NEARAI_API_KEY in env (same key V2 uses).
+Both modes ingest into a fresh temporary ledger so runs are reproducible and the
+shared data/ ledger is left untouched. With CONCLAVE_NEARAI_API_KEY set the real
+LLM + real embeddings are used; otherwise the offline fallbacks apply.
 """
 from __future__ import annotations
 
 import argparse
-import datetime as _dt
 import json
 import sys
+import tempfile
 import time
 from pathlib import Path
 
 import yaml
 
 from skills.interview_reflection import run_skill
-from skills.interview_reflection.aggregate import run_aggregate
+from skills.interview_reflection.aggregate import (
+    list_all_slugs,
+    load_latest_record,
+)
 from skills.interview_reflection.models import TranscriptInput
+from skills.interview_reflection.rubrics import RUBRIC_REGISTRY
+from skills.interview_reflection.skill import run_matching
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "interview_reflection"
-
-
-def _load_fixture(slug: str) -> tuple[str, dict]:
-    transcript_path = FIXTURE_DIR / f"{slug}.txt"
-    expected_path = FIXTURE_DIR / f"{slug}.expected.yaml"
-    if not transcript_path.exists():
-        sys.exit(f"error: no fixture {slug!r} (looked at {transcript_path})")
-    transcript = transcript_path.read_text()
-    expected = yaml.safe_load(expected_path.read_text()) if expected_path.exists() else {}
-    return transcript, expected
+BAR = "─" * 78
 
 
 def _print_block(title: str, body: str) -> None:
-    bar = "─" * 78
-    print(f"\n{bar}\n{title}\n{bar}\n{body}")
+    print(f"\n{BAR}\n{title}\n{BAR}\n{body}")
 
 
 def _print_backend() -> None:
-    """Print the active LLM backend and the per-node model IDs in effect."""
     from config import settings
-    from skills.interview_reflection.config import OWNERSHIP_MODEL, THEMES_MODEL
+    from skills.interview_reflection.config import PROFILE_MODEL, RUBRIC_MODEL, COMPOSE_MODEL
     if settings.llm_backend == "ollama":
-        print(
-            f"[cli] backend: ollama @ {settings.ollama_base_url} "
-            f"(model: {settings.ollama_model} — overrides ignored in ollama mode)"
-        )
+        print(f"[cli] backend: ollama @ {settings.ollama_base_url} (model: {settings.ollama_model})")
     else:
         print(f"[cli] backend: nearai @ {settings.nearai_base_url}")
-        print(f"[cli]   themes_model:    {THEMES_MODEL}")
-        print(f"[cli]   ownership_model: {OWNERSHIP_MODEL}")
+        print(f"[cli]   profile/rubric/compose models: {PROFILE_MODEL} / {RUBRIC_MODEL} / {COMPOSE_MODEL}")
+    print(f"[cli]   embedding model: {settings.embedding_model}")
+
+
+def _slug_for(path: Path) -> str:
+    expected = path.with_suffix("").with_suffix(".expected.yaml")
+    if expected.exists():
+        meta = yaml.safe_load(expected.read_text()) or {}
+        if meta.get("interviewee_slug"):
+            return meta["interviewee_slug"]
+    return path.stem
+
+
+def _ingest(paths: list[Path], ledger_root: Path) -> None:
+    for path in paths:
+        slug = _slug_for(path)
+        print(f"[cli]   ingesting {path.name} → slug={slug} ...", flush=True)
+        run_skill(
+            [TranscriptInput(transcript=path.read_text(), interviewee_slug=slug)],
+            ledger_root=ledger_root,
+        )
+
+
+def _fmt_items(items: list[dict]) -> str:
+    if not items:
+        return "    (none)"
+    lines = []
+    for it in items:
+        tags = f" [{', '.join(it['tags'])}]" if it.get("tags") else ""
+        cred = f" ({it['credibility']})" if it.get("credibility") else ""
+        lines.append(f"    • {it['text']}{tags}{cred}")
+        if it.get("quote"):
+            lines.append(f"        “{it['quote']}”")
+    return "\n".join(lines)
+
+
+def _print_panel(slug: str, record: dict) -> None:
+    profile = record.get("collaboration_profile") or {}
+    panel = record.get("rubric_panel") or {}
+    header = f"{slug.upper()} — {profile.get('building') or '(building unknown)'} · stage={profile.get('stage') or '?'}"
+    print(f"\n{BAR}\n{header}\n{BAR}")
+    print("  OFFERS\n" + _fmt_items(profile.get("offers")))
+    print("  NEEDS\n" + _fmt_items(profile.get("needs")))
+    print("  INTERESTS\n" + _fmt_items(profile.get("interests")))
+    print("  RUBRICS")
+    for key, spec in RUBRIC_REGISTRY.items():
+        rs = panel.get(key) or {}
+        if rs.get("reported"):
+            print(f"    {spec['name']}: {rs['score']}/5 [{rs.get('band')}]")
+        else:
+            print(f"    {spec['name']}: insufficient evidence")
+    if record.get("summary"):
+        print(f"  SUMMARY\n    {record['summary']}")
+    for b in record.get("bullets") or []:
+        print(f"    {b}")
+
+
+def _print_intros(result: dict) -> None:
+    intros = result["intros"]
+    _print_block(f"RANKED INTROS ({len(intros)})", "")
+    if not intros:
+        print("  (no intros — profiles too thin; see S10 enrichment)")
+        return
+    for i in intros:
+        tags = f"  tags={i['tags']}" if i.get("tags") else ""
+        print(f"\n  {i['from']} → {i['to']}  [{i['type']}]  score={i['score']}{tags}")
+        print(f"    {i['reason']}")
+        if i.get("quote_from"):
+            print(f"    {i['from']}: “{i['quote_from']}”")
+        if i.get("quote_to"):
+            print(f"    {i['to']}: “{i['quote_to']}”")
+
+
+def _run_match(targets: list[str], as_json: bool) -> int:
+    paths = [Path(t) for t in targets]
+    missing = [p for p in paths if not p.exists()]
+    if missing:
+        sys.exit(f"error: missing transcript file(s): {', '.join(str(m) for m in missing)}")
+    if not paths:
+        sys.exit("error: --match needs one or more transcript .txt paths")
+
+    _print_backend()
+    ledger_root = Path(tempfile.mkdtemp(prefix="ir_match_"))
+    print(f"[cli] match mode: {len(paths)} transcript(s) → ledger {ledger_root}")
+
+    started = time.monotonic()
+    _ingest(paths, ledger_root)
+    result = run_matching(root=ledger_root)
+    print(f"[cli] done in {time.monotonic() - started:.1f}s")
+
+    if as_json:
+        records = {s: load_latest_record(s, root=ledger_root) for s in list_all_slugs(ledger_root)}
+        print(json.dumps({"matching": result, "panels": records}, indent=2))
+        return 0
+
+    _print_intros(result)
+    print(f"\n{BAR}\nPER-PERSON PANELS\n{BAR}")
+    for slug in list_all_slugs(ledger_root):
+        record = load_latest_record(slug, root=ledger_root)
+        if record:
+            _print_panel(slug, record)
+    return 0
+
+
+def _run_single(slug: str, as_json: bool) -> int:
+    path = FIXTURE_DIR / f"{slug}.txt"
+    if not path.exists():
+        sys.exit(f"error: no fixture {slug!r} (looked at {path})")
+    _print_backend()
+    ledger_root = Path(tempfile.mkdtemp(prefix="ir_single_"))
+    interviewee = _slug_for(path)
+
+    started = time.monotonic()
+    response = run_skill(
+        [TranscriptInput(transcript=path.read_text(), interviewee_slug=interviewee)],
+        ledger_root=ledger_root,
+    )
+    print(f"[cli] done in {time.monotonic() - started:.1f}s")
+    result = response.results[0]
+
+    if as_json:
+        print(json.dumps(result, indent=2))
+        return 0
+    _print_panel(interviewee, result)
+    return 0
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[1])
-    parser.add_argument(
-        "slug",
-        help=(
-            "single mode: fixture slug, e.g. prod_internal. "
-            "history mode (with --history): interviewee_slug to anchor the sequence under."
-        ),
-    )
-    parser.add_argument(
-        "--share",
-        action="store_true",
-        help="set share_with_interviewee=True to exercise IntervieweeOutput path",
-    )
-    parser.add_argument(
-        "--json",
-        action="store_true",
-        help="print raw JSON instead of pretty blocks",
-    )
-    parser.add_argument(
-        "--history",
-        help=(
-            "comma-separated fixture slugs run as a single interviewee's session "
-            "trajectory. Each fixture is pumped through the full pipeline in order, "
-            "then aggregate.run_aggregate produces the cross-session summary."
-        ),
-    )
+    parser = argparse.ArgumentParser(description="interview_reflection CLI")
+    parser.add_argument("targets", nargs="*",
+                        help="fixture slug (default mode) or .txt paths (with --match)")
+    parser.add_argument("--match", action="store_true",
+                        help="cohort matching demo: ingest the given transcripts, print intros + panels")
+    parser.add_argument("--json", action="store_true", help="print raw JSON")
     args = parser.parse_args()
 
-    if args.history:
-        return _run_history(args)
-    return _run_single(args)
-
-
-def _run_single(args) -> int:
-
-    transcript, expected = _load_fixture(args.slug)
-    interviewee_slug = expected.get("interviewee_slug", "unknown")
-
-    print(f"[cli] fixture: {args.slug}")
-    print(f"[cli] interviewee_slug: {interviewee_slug}")
-    print(f"[cli] team_context: {expected.get('team_context', '?')}")
-    print(f"[cli] human_attribution_bucket: {expected.get('human_attribution_bucket') or expected.get('attribution_bucket')}")
-    print(f"[cli] share_with_interviewee: {args.share}")
-    _print_backend()
-
-    started = time.monotonic()
-    response = run_skill([
-        TranscriptInput(
-            transcript=transcript,
-            interviewee_slug=interviewee_slug,
-            share_with_interviewee=args.share,
-        )
-    ])
-    elapsed = time.monotonic() - started
-
-    print(f"[cli] done in {elapsed:.1f}s")
-
-    result = response.results[0]
-
-    if args.json:
-        print(json.dumps(result, indent=2))
-        return 0
-
-    _print_block("themes", "\n".join(f"  • {t}" for t in result.get("themes", [])))
-    _print_block("session_summary", result.get("session_summary", "") or "(empty)")
-    _print_block(
-        "attribution_patterns",
-        json.dumps(result.get("attribution_patterns", {}), indent=2),
-    )
-    _print_block(
-        "suggested_next_questions",
-        "\n".join(f"  • {q}" for q in result.get("suggested_next_questions", [])) or "(empty)",
-    )
-
-    if "interviewee_output" in result:
-        io = result["interviewee_output"]
-        _print_block(
-            "interviewee_output.themes",
-            "\n".join(f"  • {t}" for t in io.get("themes", [])) or "(empty)",
-        )
-        _print_block(
-            "interviewee_output.ownership_prompts",
-            "\n".join(f"  • {p}" for p in io.get("ownership_prompts", [])) or "(empty)",
-        )
-        _print_block(
-            "interviewee_output.evidence_quotes",
-            "\n".join(f"  • {q}" for q in io.get("evidence_quotes", [])) or "(empty)",
-        )
-
-    if "_leakage_warning" in result:
-        _print_block("⚠ leakage warning", result["_leakage_warning"])
-
-    return 0
-
-
-def _run_history(args) -> int:
-    """Run a sequence of fixtures as one interviewee's session history and aggregate."""
-    from config import settings
-
-    slugs = [s.strip() for s in args.history.split(",") if s.strip()]
-    if len(slugs) < 2:
-        print(f"error: --history needs at least 2 comma-separated slugs, got {slugs!r}")
-        return 1
-
-    print(f"[cli] history mode for interviewee_slug={args.slug!r}")
-    print(f"[cli] sessions: {' → '.join(slugs)}")
-    _print_backend()
-
-    digests: list[dict] = []
-    for idx, slug in enumerate(slugs, 1):
-        transcript, _expected = _load_fixture(slug)
-        print(f"\n[cli] session {idx}/{len(slugs)}: {slug} — calling LLM...")
-        started = time.monotonic()
-        response = run_skill([
-            TranscriptInput(
-                transcript=transcript,
-                interviewee_slug=args.slug,
-                share_with_interviewee=False,
-            )
-        ])
-        elapsed = time.monotonic() - started
-        result = response.results[0]
-        # Stamp ingest time in the in-memory digest so aggregate can show a window.
-        # append_digest already stamps the persisted copy, but the response is
-        # a separate object that doesn't get that side-effect.
-        result.setdefault("ingest_timestamp", _dt.datetime.now(_dt.UTC).isoformat())
-        print(f"[cli]   {elapsed:.1f}s · themes={result.get('themes')} · attribution={result.get('attribution_patterns')}")
-        digests.append(result)
-
-    aggregate = run_aggregate(digests)
-
-    if args.json:
-        print(json.dumps(aggregate, indent=2))
-        return 0
-
-    _print_block(
-        "session_count / window",
-        f"{aggregate['session_count']} sessions · "
-        f"first={aggregate.get('first_ingest')} · last={aggregate.get('last_ingest')}",
-    )
-    _print_block(
-        "attribution_trajectory",
-        f"{aggregate['attribution_trajectory']}\nseries: {aggregate['attribution_series']}",
-    )
-    _print_block(
-        "recurring_themes",
-        "\n".join(
-            f"  • {r['theme']} (sessions={r['sessions']}, "
-            f"first={r['first_seen_index']}, last={r['last_seen_index']})"
-            for r in aggregate["recurring_themes"]
-        ) or "(none)",
-    )
-    _print_block("new_themes (latest session only)",
-                 "\n".join(f"  • {t}" for t in aggregate["new_themes"]) or "(none)")
-    _print_block("dropped_themes (in earlier sessions, not in latest)",
-                 "\n".join(f"  • {t}" for t in aggregate["dropped_themes"]) or "(none)")
-    _print_block("overall_assessment", aggregate["overall_assessment"])
-    return 0
+    if args.match:
+        return _run_match(args.targets, args.json)
+    if not args.targets:
+        parser.error("provide a fixture slug, or use --match with transcript paths")
+    return _run_single(args.targets[0], args.json)
 
 
 if __name__ == "__main__":
