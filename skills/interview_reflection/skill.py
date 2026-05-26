@@ -62,6 +62,9 @@ def run_skill(
             interviewee_slug=sub.interviewee_slug,
             collaboration_profile=agent_out["collaboration_profile"],
             rubric_panel=agent_out["rubric_panel"],
+            rationale=agent_out["rationale"],
+            summary=agent_out["summary"],
+            bullets=agent_out["bullets"],
         )
         payload = novel.model_dump()
         # Carry share flag through so guardrails can gate the interviewee view.

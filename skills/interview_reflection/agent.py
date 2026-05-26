@@ -35,12 +35,20 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 
 from skills.interview_reflection import rubrics, taxonomy
-from skills.interview_reflection.config import PROFILE_MODEL, RUBRIC_MODEL
+from skills.interview_reflection.config import (
+    COMPOSE_MODEL,
+    PROFILE_MODEL,
+    RUBRIC_MODEL,
+)
 from skills.interview_reflection.models import CollaborationProfile, ProfileItem
 
 
 PROFILE_PROMPT_VERSION = "v1"
 RUBRIC_PROMPT_VERSION = "v1"
+COMPOSE_PROMPT_VERSION = "v1"
+
+INSUFFICIENT_EVIDENCE = "Insufficient evidence this session."
+MAX_BULLETS = 6
 
 
 class InterviewAgentState(TypedDict):
@@ -50,6 +58,9 @@ class InterviewAgentState(TypedDict):
     deterministic: dict
     collaboration_profile: dict
     rubric_panel: dict
+    rationale: dict
+    summary: str
+    bullets: list
 
 
 PROFILE_SYSTEM_PROMPT = """You are the collaboration-profile extraction node of a cohort-interview
@@ -108,6 +119,27 @@ Output ONLY a raw JSON object — no markdown fences, no prose. Keys are the ite
 """
 
 
+COMPOSE_SYSTEM_PROMPT = """You are the composition node of a cohort-interview pipeline. You PHRASE,
+you do not judge. You are given pre-selected scored items (each with a verbatim quote) and a short
+profile. Turn them into organizer-facing text.
+
+HARD RULES:
+- Use ONLY the provided items, quotes, and profile. Every clause must trace to something provided.
+- Add no new claims. No trait/diagnosis language — use observed-signal framing ("owned the delay",
+  not "is conscientious").
+- You are NOT given the transcript. Do not invent quotes.
+
+You receive JSON with `rubrics` (each: key, name, band, evidence items) and `profile`.
+
+Output ONLY a raw JSON object — no markdown fences, no prose:
+{{
+  "rationale": {{"coachability": "Coachability: strong — <one phrase> ('quote')", "...": "..."}},
+  "summary": "3-5 sentences synthesizing the reported rubrics; each clause backed by an item.",
+  "bullets": ["✓ <strength> ('quote')", "△ <watch-area> ('quote')"]
+}}
+"""
+
+
 # --- Nodes ---
 
 def profile_node(state: InterviewAgentState) -> dict:
@@ -143,15 +175,38 @@ def rubric_node(state: InterviewAgentState) -> dict:
     return {"rubric_panel": rubrics.aggregate_panel(raw_items).model_dump()}
 
 
+def compose_node(state: InterviewAgentState) -> dict:
+    """Phrase OUT-1/2/3 over the already-extracted item layer (a view, not a
+    second transcript pass). Code selects which items surface; the LLM only
+    phrases. Falls back to deterministic templates if the LLM is unavailable."""
+    from config import get_llm
+
+    selection = _select_for_compose(state["rubric_panel"], state["collaboration_profile"])
+    fallback = _compose_fallback(selection)
+
+    system = COMPOSE_SYSTEM_PROMPT
+    human = json.dumps(selection)
+    messages = [SystemMessage(content=system), HumanMessage(content=human)]
+    try:
+        response = get_llm(COMPOSE_MODEL, temperature=0).invoke(messages)
+        parsed = _parse_json_object(_text(response))
+    except Exception:
+        parsed = {}
+
+    return _merge_compose(parsed, fallback, selection)
+
+
 # --- Graph builder ---
 
 def build_agent_graph():
     graph = StateGraph(InterviewAgentState)
     graph.add_node("profile", profile_node)
     graph.add_node("rubric", rubric_node)
+    graph.add_node("compose", compose_node)
     graph.set_entry_point("profile")
     graph.add_edge("profile", "rubric")
-    graph.add_edge("rubric", END)
+    graph.add_edge("rubric", "compose")
+    graph.add_edge("compose", END)
     return graph.compile()
 
 
@@ -177,17 +232,24 @@ def run_agent(
         "deterministic": deterministic or {},
         "collaboration_profile": {},
         "rubric_panel": {},
+        "rationale": {},
+        "summary": "",
+        "bullets": [],
     }
     final = graph.invoke(initial, config={
         "metadata": {
             "profile_prompt": PROFILE_PROMPT_VERSION,
             "rubric_prompt": RUBRIC_PROMPT_VERSION,
+            "compose_prompt": COMPOSE_PROMPT_VERSION,
             "interviewee_slug": interviewee_slug,
         },
     })
     return {
         "collaboration_profile": final["collaboration_profile"],
         "rubric_panel": final["rubric_panel"],
+        "rationale": final["rationale"],
+        "summary": final["summary"],
+        "bullets": final["bullets"],
     }
 
 
@@ -304,3 +366,104 @@ def _as_str_list(v) -> list[str]:
     if not isinstance(v, list):
         return []
     return [x for x in v if isinstance(x, str)]
+
+
+# --- Composition (OUT-1/2/3): code selects, model phrases, fallback templates ---
+
+def _select_for_compose(panel: dict, profile: dict) -> dict:
+    """Pure-code selection of what surfaces. The model phrases only this.
+
+    Per rubric: its non-null scored items (id, factor, score, quote). Across all
+    reported rubrics: the top-3 highest and bottom-3 lowest scored items for the
+    bullets. Plus a compact profile slice.
+    """
+    panel = panel or {}
+    rubric_views: list[dict] = []
+    scored_all: list[dict] = []
+
+    for key, rs in panel.items():
+        if not isinstance(rs, dict):
+            continue
+        name = rs.get("rubric", key)
+        reported = bool(rs.get("reported"))
+        evidence = []
+        for item in rs.get("items") or []:
+            if item.get("score") is not None and item.get("quote"):
+                factor = rubrics.ITEM_DEFS.get(item["id"], {}).get("factor", "")
+                ev = {"id": item["id"], "factor": factor,
+                      "score": item["score"], "quote": item["quote"]}
+                evidence.append(ev)
+                if reported:
+                    scored_all.append({**ev, "rubric": name})
+        rubric_views.append({
+            "key": key, "name": name, "reported": reported,
+            "band": rs.get("band"), "score": rs.get("score"), "evidence": evidence,
+        })
+
+    highlights = sorted(scored_all, key=lambda e: e["score"], reverse=True)[:3]
+    hi_ids = {e["id"] for e in highlights}
+    watch = [e for e in sorted(scored_all, key=lambda e: e["score"]) if e["id"] not in hi_ids][:3]
+
+    profile = profile or {}
+    profile_slice = {
+        "building": profile.get("building"),
+        "stage": profile.get("stage"),
+        "offers": [o.get("text") for o in (profile.get("offers") or [])[:3]],
+        "needs": [n.get("text") for n in (profile.get("needs") or [])[:3]],
+    }
+    return {"rubrics": rubric_views, "highlights": highlights, "watch": watch,
+            "profile": profile_slice}
+
+
+def _compose_fallback(selection: dict) -> dict:
+    """Deterministic OUT-1/2/3 from the selection — used when the LLM is down."""
+    rationale: dict[str, str] = {}
+    for rv in selection["rubrics"]:
+        if rv["reported"] and rv["evidence"]:
+            top = max(rv["evidence"], key=lambda e: e["score"])
+            phrase = top["factor"] or "observed signal"
+            rationale[rv["key"]] = f"{rv['name']}: {rv['band']} — {phrase} ('{top['quote']}')."
+        else:
+            rationale[rv["key"]] = INSUFFICIENT_EVIDENCE
+
+    reported_lines = [rationale[rv["key"]] for rv in selection["rubrics"] if rv["reported"]]
+    building = selection["profile"].get("building")
+    summary_bits = []
+    if building:
+        summary_bits.append(f"Building {building}.")
+    summary_bits.extend(reported_lines)
+    summary = " ".join(summary_bits) if summary_bits else INSUFFICIENT_EVIDENCE
+
+    bullets = [f"✓ {e['factor'] or 'strength'} ('{e['quote']}')" for e in selection["highlights"]]
+    bullets += [f"△ {e['factor'] or 'watch area'} ('{e['quote']}')" for e in selection["watch"]]
+    return {"rationale": rationale, "summary": summary, "bullets": bullets[:MAX_BULLETS]}
+
+
+def _merge_compose(parsed: dict, fallback: dict, selection: dict) -> dict:
+    """Overlay the model's phrasing onto the deterministic fallback.
+
+    The fallback guarantees completeness + traceability; the model only gets to
+    rephrase reported rubrics / the summary / the bullets. Unreported rubrics
+    are always the fixed insufficient-evidence string (never invented)."""
+    if not isinstance(parsed, dict):
+        parsed = {}
+
+    reported_keys = {rv["key"] for rv in selection["rubrics"] if rv["reported"]}
+    rationale = dict(fallback["rationale"])
+    model_rationale = parsed.get("rationale")
+    if isinstance(model_rationale, dict):
+        for key in reported_keys:
+            v = model_rationale.get(key)
+            if isinstance(v, str) and v.strip():
+                rationale[key] = v.strip()
+
+    summary = parsed.get("summary")
+    summary = summary.strip() if isinstance(summary, str) and summary.strip() else fallback["summary"]
+
+    bullets = parsed.get("bullets")
+    if isinstance(bullets, list):
+        bullets = [b.strip() for b in bullets if isinstance(b, str) and b.strip()][:MAX_BULLETS]
+    if not bullets:
+        bullets = fallback["bullets"]
+
+    return {"rationale": rationale, "summary": summary, "bullets": bullets}

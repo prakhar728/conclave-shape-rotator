@@ -53,7 +53,9 @@ def test_graph_returns_profile_and_panel(monkeypatch):
         deterministic={},
     )
 
-    assert set(out.keys()) == {"collaboration_profile", "rubric_panel"}
+    assert set(out.keys()) == {
+        "collaboration_profile", "rubric_panel", "rationale", "summary", "bullets"
+    }
 
     profile = out["collaboration_profile"]
     assert profile["building"] == "Solana consumer payments app"
