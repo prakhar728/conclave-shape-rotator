@@ -29,7 +29,7 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-def get_llm(model: str | None = None):
+def get_llm(model: str | None = None, temperature: float | None = None):
     """Return the configured LangChain chat model.
 
     Backend is selected by `settings.llm_backend`:
@@ -37,9 +37,13 @@ def get_llm(model: str | None = None):
       - "ollama": local dev; assumes Ollama is running at settings.ollama_base_url
 
     model: specific model ID. Falls back to the backend's default if None.
+    temperature: when provided, pins the sampling temperature (e.g. 0 for the
+        deterministic interview extraction nodes). Left unset → backend default.
     Skills declare their own per-node models in their own config.py.
     """
     from langchain_openai import ChatOpenAI
+
+    kwargs = {} if temperature is None else {"temperature": temperature}
 
     if settings.llm_backend == "ollama":
         # Ignore the per-call `model` arg in ollama mode: NearAI model IDs
@@ -50,10 +54,12 @@ def get_llm(model: str | None = None):
             model=settings.ollama_model,
             api_key="ollama",  # Ollama ignores the key; ChatOpenAI requires one
             base_url=settings.ollama_base_url,
+            **kwargs,
         )
 
     return ChatOpenAI(
         model=model or settings.default_model,
         api_key=settings.nearai_api_key,
         base_url=settings.nearai_base_url,
+        **kwargs,
     )
