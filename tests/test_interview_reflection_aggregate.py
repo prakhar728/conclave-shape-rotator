@@ -21,7 +21,10 @@ from skills.interview_reflection.aggregate import (
     DEFAULT_STORAGE_ROOT,
     RECURRING_MIN_SESSIONS,
     append_digest,
+    list_all_slugs,
     load_digests,
+    load_latest_profile,
+    load_latest_record,
     run_aggregate,
 )
 
@@ -70,6 +73,57 @@ def test_append_adds_timestamp_when_missing(tmp_path):
 
 def test_load_returns_empty_for_unknown_slug(tmp_path):
     assert load_digests("never-existed", root=tmp_path) == []
+
+
+# --- cross-person cohort readers (S7) ---
+
+def _profile_digest(slug: str, building: str, session: int) -> dict:
+    return {
+        "submission_id": f"{slug}-s{session}",
+        "interviewee_slug": slug,
+        "collaboration_profile": {"building": building, "offers": [], "needs": []},
+        "rubric_panel": {},
+    }
+
+
+def test_list_all_slugs_finds_seeded_files(tmp_path):
+    append_digest("leo", _profile_digest("leo", "payments app", 1), root=tmp_path)
+    append_digest("mira", _profile_digest("mira", "infra tool", 1), root=tmp_path)
+    assert list_all_slugs(root=tmp_path) == ["leo", "mira"]
+
+
+def test_list_all_slugs_empty_when_no_dir(tmp_path):
+    assert list_all_slugs(root=tmp_path / "nope") == []
+
+
+def test_load_latest_record_returns_last(tmp_path):
+    append_digest("leo", _profile_digest("leo", "first", 1), root=tmp_path)
+    append_digest("leo", _profile_digest("leo", "second", 2), root=tmp_path)
+    rec = load_latest_record("leo", root=tmp_path)
+    assert rec["submission_id"] == "leo-s2"
+    assert load_latest_record("ghost", root=tmp_path) is None
+
+
+def test_load_latest_profile_returns_most_recent_profile(tmp_path):
+    append_digest("leo", _profile_digest("leo", "old build", 1), root=tmp_path)
+    append_digest("leo", _profile_digest("leo", "new build", 2), root=tmp_path)
+    profile = load_latest_profile("leo", root=tmp_path)
+    assert profile["building"] == "new build"
+
+
+def test_load_latest_profile_falls_back_past_profileless_record(tmp_path):
+    append_digest("leo", _profile_digest("leo", "good build", 1), root=tmp_path)
+    # a later record with no collaboration_profile (e.g. an old-shape entry)
+    append_digest("leo", {"submission_id": "leo-s2", "interviewee_slug": "leo"}, root=tmp_path)
+    profile = load_latest_profile("leo", root=tmp_path)
+    assert profile is not None
+    assert profile["building"] == "good build"
+
+
+def test_load_latest_profile_none_when_no_profile(tmp_path):
+    append_digest("kai", {"submission_id": "kai-s1", "interviewee_slug": "kai"}, root=tmp_path)
+    assert load_latest_profile("kai", root=tmp_path) is None
+    assert load_latest_profile("never", root=tmp_path) is None
 
 
 # --- trajectory: stays external ---

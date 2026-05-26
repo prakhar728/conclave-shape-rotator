@@ -86,6 +86,35 @@ def load_digests(slug: str, root: Optional[Path] = None) -> list[dict]:
     return out
 
 
+# --- Cross-person readers (the cohort matcher reads across slugs) ---
+
+def list_all_slugs(root: Optional[Path] = None) -> list[str]:
+    """Sorted stems of every per-slug ledger file under the root. Empty if none."""
+    base = Path(root) if root is not None else DEFAULT_STORAGE_ROOT
+    if not base.exists():
+        return []
+    return sorted(p.stem for p in base.glob("*.jsonl"))
+
+
+def load_latest_record(slug: str, root: Optional[Path] = None) -> Optional[dict]:
+    """Most recent ledger record for a slug, or None if the slug has no history."""
+    digests = load_digests(slug, root)
+    return digests[-1] if digests else None
+
+
+def load_latest_profile(slug: str, root: Optional[Path] = None) -> Optional[dict]:
+    """The collaboration_profile of the most recent record that carries one.
+
+    Walks the ledger newest-first so a session that failed to produce a profile
+    falls back to the last good one. Returns None if no record has a profile.
+    """
+    for record in reversed(load_digests(slug, root)):
+        profile = record.get("collaboration_profile")
+        if isinstance(profile, dict) and profile:
+            return profile
+    return None
+
+
 # --- Aggregation ---
 
 def _normalize_theme(t: str) -> str:
