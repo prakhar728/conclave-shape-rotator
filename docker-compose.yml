@@ -1,0 +1,49 @@
+services:
+  conclave:
+    # Pin via IMAGE_TAG env var (set in .env to the desired tag — usually a
+    # short git SHA so each deploy changes the image reference and forces
+    # Phala to re-pull. `:latest` gets deduped on the platform side.)
+    image: prakharojha/conclave:${IMAGE_TAG:-latest}
+    ports:
+      - "8000:8000"
+    restart: always
+    environment:
+      # BLAS / tokenizer thread pinning — avoids the OpenMP/MKL clash that's
+      # caused intermittent native crashes on macOS. On Linux it's a no-op
+      # at worst and keeps CPU usage predictable on the 1-vCPU CVM.
+      OMP_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      TOKENIZERS_PARALLELISM: "false"
+      KMP_DUPLICATE_LIB_OK: "TRUE"
+      # Enables real TDX attestation via the dstack agent; falls back to a
+      # tagged stub if the agent is unreachable.
+      IN_TEE: "true"
+      # Optional override list (comma-separated). Leave unset to use the
+      # built-in default candidates.
+      DSTACK_AGENT_URL: ${DSTACK_AGENT_URL:-}
+      # Skill / LLM config — pulled from --env-file at deploy time
+      CONCLAVE_NEARAI_API_KEY: ${CONCLAVE_NEARAI_API_KEY:-}
+      CONCLAVE_DEFAULT_MODEL: ${CONCLAVE_DEFAULT_MODEL:-deepseek-ai/DeepSeek-V3.1}
+      CONCLAVE_SUPABASE_URL: ${CONCLAVE_SUPABASE_URL:-}
+      CONCLAVE_SUPABASE_ANON_KEY: ${CONCLAVE_SUPABASE_ANON_KEY:-}
+      LANGCHAIN_TRACING_V2: ${LANGCHAIN_TRACING_V2:-false}
+      LANGCHAIN_API_KEY: ${LANGCHAIN_API_KEY:-}
+      LANGCHAIN_PROJECT: ${LANGCHAIN_PROJECT:-conclave-eval}
+      # Solana attestation (optional — leaves /attestations/publish in dry-run
+      # mode if unset)
+      CONCLAVE_SOLANA_KEYPAIR: ${CONCLAVE_SOLANA_KEYPAIR:-}
+      CONCLAVE_SOLANA_NETWORK: ${CONCLAVE_SOLANA_NETWORK:-devnet}
+      CONCLAVE_SOLANA_RPC_URL: ${CONCLAVE_SOLANA_RPC_URL:-}
+      # Public URL embedded in CreateInstanceResponse.enclave_url. Phala assigns
+      # this per CVM; set to the dstack-pha-prod5.phala.network host of the
+      # deployed instance.
+      CONCLAVE_PUBLIC_URL: ${CONCLAVE_PUBLIC_URL:-}
+    volumes:
+      # Persist SQLite + mock fixtures across CVM restarts.
+      - conclave-data:/app/data
+      # dstack agent socket — required for real TDX attestation quotes via
+      # the dstack-sdk DstackClient (dstack-os 0.5.x).
+      - /var/run/dstack.sock:/var/run/dstack.sock
+
+volumes:
+  conclave-data:

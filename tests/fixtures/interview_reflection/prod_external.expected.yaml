@@ -1,0 +1,20 @@
+slug: prod_external
+interviewee_slug: mira
+team_context: productization
+attribution_bucket: mixed
+human_attribution_bucket: mostly_external   # Step 5 target — Layer 1 pronouns under-detect named-others framing
+attribution_counts:
+  internal_range: [18, 28]
+  external_range: [12, 22]
+session_word_count_approx: 600
+expected_themes:
+  - blocked_on_design_partner
+  - co-founder_partnership_ownership_gap
+  - resistance_to_time_boxing
+alignment_direction: drifting
+notes: >
+  Heavy external attribution; named-others framing dominates. Interviewee
+  resists internalising selection error on partner. Interviewer surfaces
+  the "we picked them" question but interviewee does not pick it up.
+  Useful for testing "mostly_external" bucket and for Step 5 ownership-prompt
+  generation.

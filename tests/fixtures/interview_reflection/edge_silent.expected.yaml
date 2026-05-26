@@ -1,0 +1,16 @@
+slug: edge_silent
+interviewee_slug: kai
+team_context: productization
+attribution_bucket: insufficient_signal
+attribution_counts:
+  total_interviewee_pronouns_max: 6
+  insufficient_signal_threshold_violated: true
+session_word_count_approx: 150
+expected_themes: []
+alignment_direction: unknown
+notes: >
+  Edge case. Interviewee gives one- or two-word answers throughout. The
+  deterministic layer should flag this as below the minimum signal threshold
+  rather than emitting a forced bucket label. Useful for testing the
+  "insufficient_signal" return path. Also exercises Step 5 — agent should
+  return short summary acknowledging low signal, NOT fabricate themes.

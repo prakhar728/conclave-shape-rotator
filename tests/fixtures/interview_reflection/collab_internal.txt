@@ -1,0 +1,39 @@
+INTERVIEWER: What did the week look like for you?
+
+INTERVIEWEE: I ran two sync sessions with the cohort teams that share our infra. I made the agenda, I sent the pre-reads, I facilitated, and I wrote up the notes. I think both sessions landed.
+
+INTERVIEWER: How did you measure "landed"?
+
+INTERVIEWEE: I asked each team's lead afterwards if it was worth their time and what they'd change. Five out of six said yes. The one who said no said the pre-read was too long.
+
+INTERVIEWER: What did you do with that feedback?
+
+INTERVIEWEE: I cut the pre-read in half for next week. I had been writing too much because I wanted to look prepared. I see now that the prep work should be invisible and the meeting should be the value.
+
+INTERVIEWER: That's a good observation. What else?
+
+INTERVIEWEE: I paired with one of the other teams on a shared deploy script. We sat together for three hours and got something working. They'd been blocked for a week on it. I think I'm useful when I'm in the room.
+
+INTERVIEWER: What's the dependency you have on them?
+
+INTERVIEWEE: Honestly not much. I'm offering more than I'm seeking right now. Which I'm happy with — I have the bandwidth and they don't.
+
+INTERVIEWER: Are you tracking what they owe you, or letting it float?
+
+INTERVIEWEE: Letting it float. I have a small note about it but I'm not enforcing it. If I ever need to call in favors it's there, but I'm not optimising for that.
+
+INTERVIEWER: Any miss this week?
+
+INTERVIEWEE: I missed my own weekly intention. I had said I'd carve out two mornings for my own deep work and I gave both of them to other teams when they asked. I'm too easily redirected. That's me, not them — they asked nicely and I said yes both times when I should have said "Wednesday."
+
+INTERVIEWER: What's the smallest change for next week?
+
+INTERVIEWEE: I'm going to block 7-10am Tuesday and Thursday on the calendar with my own goal as the title, and treat it like a customer meeting — only move it for an emergency. I'll tell the other teams I'm available afternoons.
+
+INTERVIEWER: Monthly milestone?
+
+INTERVIEWEE: On track. The collaborative success dimension is the thing I'm being graded against and the work is showing up. I'm a bit ahead, actually.
+
+INTERVIEWER: Anything you want me to follow up on?
+
+INTERVIEWEE: Whether the Tuesday/Thursday block held. And whether I actually said no when asked.

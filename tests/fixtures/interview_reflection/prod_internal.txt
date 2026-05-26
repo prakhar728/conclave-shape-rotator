@@ -1,0 +1,35 @@
+INTERVIEWER: Walk me through your week. What did you ship?
+
+INTERVIEWEE: I shipped the onboarding flow rewrite. I cut three steps out, I added a stripe test mode toggle, and I wrote the migration so existing users land on the new screen without losing state. I missed the pricing copy though. I had told myself I'd land that on Tuesday and I didn't.
+
+INTERVIEWER: What stopped you on the pricing copy?
+
+INTERVIEWEE: I spent too long on the migration. I underestimated it. I knew there was a state-shape gap and I told myself I'd handle it in an hour, and it took most of Tuesday. I should have noticed faster and re-scoped.
+
+INTERVIEWER: When you say "I should have noticed faster" — what would noticing look like for you next time?
+
+INTERVIEWEE: I think a 90-minute checkpoint. I'm going to set a timer. If I'm not converging on a fix in 90 minutes, I stop and write down what I tried, then I either ask in the cohort channel or I rip it out and pick a smaller version. I haven't been doing that and I keep paying for it.
+
+INTERVIEWER: You said "in the cohort channel." Have you used it for this kind of ask before?
+
+INTERVIEWEE: Not really. I posted once about a tailwind config thing. I think I default to figuring things out myself because I want the shipping number to look good. But I'm starting to see that's costing me more than the help would.
+
+INTERVIEWER: What's the smallest version of "ask in the cohort channel" you could try this week?
+
+INTERVIEWEE: Posting one ask for the pricing copy. Like, "here's what I have, here's what I want it to do, who's done this before." I'll do that Monday morning before I touch the editor.
+
+INTERVIEWER: Good. What about monthly milestones — where are you against the milestone you set for end of month?
+
+INTERVIEWEE: I'm behind. I said I'd have ten paying users by end of month. I have three. The product is good enough now, I think, but I haven't been doing the outreach. That's on me. I built when I should have been talking to people.
+
+INTERVIEWER: What's the gap between three and ten — is it pipeline, or is it conversion?
+
+INTERVIEWEE: It's pipeline. I have only had eight conversations total. Three converted. So the ratio is fine, I just haven't talked to enough people. I'm going to block Tuesday and Thursday mornings for outbound this week. I'll send fifteen messages a day, that's thirty, and at my current ratio that should get me to ten.
+
+INTERVIEWER: What's going to make you actually do the outbound rather than slip back into building?
+
+INTERVIEWEE: Honestly, telling you here. And I'm going to put the outbound in front of the editor — I'll move the launcher icon. I'm small-brained enough that visual cues work on me. I tried disabling notifications and it didn't help, but moving the icon will.
+
+INTERVIEWER: Good self-knowledge. Anything you want me to ask you about next week?
+
+INTERVIEWEE: Whether I actually hit thirty sent and ten converted. And whether the 90-minute checkpoint thing held. Those two.

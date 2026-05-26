@@ -1,0 +1,18 @@
+slug: collab_mixed
+interviewee_slug: yuki
+team_context: collaborative
+attribution_bucket: mixed
+attribution_counts:
+  internal_range: [14, 24]
+  external_range: [14, 22]
+session_word_count_approx: 500
+expected_themes:
+  - infra_coleads_unresponsive
+  - own_scheduling_method_contributed_to_no-show
+  - escalation_plan_to_dmarz
+alignment_direction: aligned
+notes: >
+  Both internal and external attribution land roughly evenly. Interviewee
+  starts blaming co-leads, then concedes ("I also haven't made it easy for
+  them to show up") without fully shifting buckets. Tests "mixed" rather
+  than "shifting" — the late concession is qualified, not categorical.

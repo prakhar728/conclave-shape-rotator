@@ -1,0 +1,20 @@
+slug: research_external
+interviewee_slug: ada
+team_context: research_lineage
+attribution_bucket: shifting
+human_attribution_bucket: mostly_external   # Step 5 target — Layer 1 half-split catches the late micro-shift, but human judgment is that external attribution still dominates the session
+attribution_counts:
+  internal_range: [14, 26]
+  external_range: [10, 20]
+session_word_count_approx: 540
+expected_themes:
+  - paper_resubmission_stall
+  - reviewer_tone_as_avoidance_excuse
+  - advisor_followup_avoidance
+alignment_direction: drifting
+notes: >
+  Late-session micro-shift ("I haven't sent the nudge. And I haven't queued the
+  experiments.") — should NOT be enough to flip the overall bucket to
+  "shifting" given dominance of external attribution throughout. Useful test
+  for the bucket-classification threshold and for Step 5 alignment-with-stated-
+  goals scoring in a research_lineage team context.

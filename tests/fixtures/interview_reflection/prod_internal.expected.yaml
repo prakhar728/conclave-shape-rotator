@@ -1,0 +1,17 @@
+slug: prod_internal
+interviewee_slug: leo
+team_context: productization
+attribution_bucket: mostly_internal
+attribution_counts:
+  internal_min: 30   # I/I'm/I've/me/my/we/our combined, interviewee turns
+  external_max: 5    # they/them/their, interviewee turns
+session_word_count_approx: 580
+expected_themes:
+  - shipping_velocity
+  - outbound_neglected_in_favor_of_building
+  - self_imposed_checkpoint_discipline
+alignment_direction: aligned
+notes: >
+  Clean self-ownership throughout. Interviewee identifies own behaviors as
+  causes ("I spent too long", "that's on me"), proposes concrete countermeasures.
+  Useful smoke test for "mostly_internal" classification.

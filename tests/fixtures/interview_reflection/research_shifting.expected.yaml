@@ -1,0 +1,21 @@
+slug: research_shifting
+interviewee_slug: noor
+team_context: research_lineage
+attribution_bucket: mostly_internal
+human_attribution_bucket: shifting   # Step 5 target — half-split on pronouns misses the reframe; "the suite", "the field" are named-others not pronouns
+attribution_counts:
+  internal_range: [18, 32]
+  external_range: [3, 12]
+  trajectory: external_to_internal   # human label of the in-session shift
+session_word_count_approx: 510
+expected_themes:
+  - benchmark_normalization_error_discovery
+  - reframe_field_is_wrong_to_i_am_wrong
+  - intent_to_walk_back_reported_numbers
+alignment_direction: aligned_after_reframe
+notes: >
+  Same trajectory as prod_shifting.txt but in a research_lineage context.
+  Used to confirm Step 5 grounding works across team contexts — same shift
+  pattern, different vocabulary (benchmarks, normalization, suite).
+  Also exercises Pipeline C readiness (alignment to research_lineage success
+  dimension).

@@ -1,0 +1,43 @@
+INTERVIEWER: How are you doing?
+
+INTERVIEWEE: Fine.
+
+INTERVIEWER: How did the week go? Tell me about it.
+
+INTERVIEWEE: It was OK.
+
+INTERVIEWER: What did you ship?
+
+INTERVIEWEE: A couple of things. The login flow. Some bug fixes.
+
+INTERVIEWER: Walk me through the login flow change. What changed and why?
+
+INTERVIEWEE: It was just cleanup. Nothing big.
+
+INTERVIEWER: What about the work that didn't ship?
+
+INTERVIEWEE: There's stuff in progress.
+
+INTERVIEWER: What stuff?
+
+INTERVIEWEE: Backend things.
+
+INTERVIEWER: Anything you're stuck on?
+
+INTERVIEWEE: Not really.
+
+INTERVIEWER: Anything you want to think about out loud?
+
+INTERVIEWEE: Not today.
+
+INTERVIEWER: Anyone on the cohort you'd want me to connect you with?
+
+INTERVIEWEE: I'm good.
+
+INTERVIEWER: Monthly milestone — where are you?
+
+INTERVIEWEE: On track, I think.
+
+INTERVIEWER: OK. Let's leave it there. If anything comes up before next week, ping me.
+
+INTERVIEWEE: Will do.

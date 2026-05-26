@@ -1,0 +1,45 @@
+{
+  "skill_name": "conclave-novelty",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "I'm building for Solana Frontier and want to check if my idea is novel. The organizer gave me this URL: https://demo.dstack-pha-prod5.phala.network and instance ID 8ed7d18f-fdda-430d-843e-c8b42a92cdb0. My project is in this directory.",
+      "expected_behavior": "Skill triggers, surfaces the privacy boundary statement, hits /health and /instances/{id}, displays the TDX attestation, mints a token, summarizes the local repo, asks for confirmation, submits, and persists the submission_id to ~/.conclave/credentials.json."
+    },
+    {
+      "id": 2,
+      "prompt": "Is my hackathon idea unique?",
+      "expected_behavior": "Skill triggers; if no enclave is configured in ~/.conclave/credentials.json, asks the user for the enclave URL and instance ID before doing anything else. Does not invent a URL."
+    },
+    {
+      "id": 3,
+      "prompt": "What's my Conclave novelty score?",
+      "expected_behavior": "If a submission_id exists in credentials.json, fetches /results/{id} and renders the participant view (novelty_score, cluster, track_alignments, name_collisions). If no submission_id exists, prompts the user to submit first."
+    },
+    {
+      "id": 4,
+      "prompt": "Verify the Conclave enclave is real.",
+      "expected_behavior": "Skill calls /attestation and /attestations; shows the TDX quote prefix + verify URL, plus any Solana devnet attestation records with the explorer link; explains the difference between hardware attestation and on-chain attestation in one sentence."
+    },
+    {
+      "id": 5,
+      "prompt": "Can I update my Conclave submission?",
+      "expected_behavior": "Skill explains that resubmitting under the same token replaces the existing submission (cohort N does not grow), then offers to walk through the submit flow again."
+    },
+    {
+      "id": 6,
+      "prompt": "What does Conclave see about my code?",
+      "expected_behavior": "Skill states the privacy boundary verbatim from references/privacy.md — local agent reads the repo, only the summary leaves the machine, operator never sees raw idea/code/identity."
+    },
+    {
+      "id": 7,
+      "prompt": "Refactor this React component for me.",
+      "expected_behavior": "Skill does NOT trigger. This is unrelated to Conclave / hackathon novelty / enclave evaluation."
+    },
+    {
+      "id": 8,
+      "prompt": "Score this PR for novelty against past commits.",
+      "expected_behavior": "Skill does NOT trigger. This is general novelty assessment, not a hackathon submission to a Conclave enclave."
+    }
+  ]
+}

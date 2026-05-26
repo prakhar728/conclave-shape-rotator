@@ -1,0 +1,43 @@
+INTERVIEWER: How did the week go?
+
+INTERVIEWEE: Honestly, frustrating. The Stripe team broke their webhook signature spec on Tuesday and we lost two days chasing it. Then the design partner ghosted us for the second time this month. They keep saying they want the demo and then they don't show.
+
+INTERVIEWER: Two things in there. The Stripe issue and the design partner. Which one cost you more?
+
+INTERVIEWEE: The design partner. The Stripe thing they fixed, it was annoying but it's done. The design partner is the actual blocker. They were supposed to be our first case study and now we're three weeks in with no signed agreement.
+
+INTERVIEWER: What's your read on why they keep slipping?
+
+INTERVIEWEE: They're disorganized. Their PM is doing too much and the engineering lead doesn't really want to do it. I think we picked the wrong contact. Their head of product would say yes but we can't get to him.
+
+INTERVIEWER: You said "we picked the wrong contact." What was the decision when you picked them?
+
+INTERVIEWEE: I mean, they came to us. They reached out after the demo day. So it wasn't really a pick, it was more they showed up. We took it because they were the first one with a logo we recognized.
+
+INTERVIEWER: So when you say "they keep slipping," is the underlying problem their slipping, or that you took a partner that wasn't fit for the work?
+
+INTERVIEWEE: They're still slipping. I don't think the fit thing changes that. They committed and they're not following through.
+
+INTERVIEWER: Fair. What about the wider partner pipeline — what else is in motion?
+
+INTERVIEWEE: Not much. We've been so focused on this one that we haven't been working other angles. The team's bandwidth has been on the Stripe thing and on chasing this partner. It's been a bad week for forward motion.
+
+INTERVIEWER: Who on the team decides where the bandwidth goes?
+
+INTERVIEWEE: My co-founder mostly. He runs the week. I'm heads-down on the product. He owns the partnerships side.
+
+INTERVIEWER: Does he know the partner is at three weeks with no agreement?
+
+INTERVIEWEE: He knows. He says it'll close. He's been saying that for two weeks.
+
+INTERVIEWER: What would have to be true for you to redirect to other prospects this week?
+
+INTERVIEWEE: We'd have to agree to time-box this one. Set a deadline. If they don't sign by Friday, we move on. The market won't wait for us — there are other tools in this space getting traction while we sit on one stalled partner.
+
+INTERVIEWER: Will you propose the time-box to your co-founder?
+
+INTERVIEWEE: I'll bring it up. He'll push back. He doesn't like giving up on things. But I'll bring it up.
+
+INTERVIEWER: What's the milestone you set for end of month?
+
+INTERVIEWEE: Signed design partner. That was the milestone. It's not happening at this rate. Not because of us — the partner just isn't moving fast enough.

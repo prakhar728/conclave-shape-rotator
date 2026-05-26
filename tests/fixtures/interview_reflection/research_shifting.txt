@@ -1,0 +1,43 @@
+INTERVIEWER: What's the headline of your week?
+
+INTERVIEWEE: The benchmark numbers came back and they're worse than I told the cohort last week. The eval suite they pushed has a different normalization than ours and our numbers don't translate. I think the suite is wrong for our setting.
+
+INTERVIEWER: How sure are you?
+
+INTERVIEWEE: Pretty sure. They normalize per-token, we normalize per-sequence. It changes everything for long-context.
+
+INTERVIEWER: And the suite is widely used?
+
+INTERVIEWEE: Yeah. It's the standard. Most papers in the area report on it.
+
+INTERVIEWER: So if our normalization is right and the field's is wrong, what's the path to making that argument?
+
+INTERVIEWEE: ... A paper. A method paper showing the normalization changes the conclusion. Which is a real contribution but it's not what we set out to do.
+
+INTERVIEWER: And if your normalization is the unusual one, what would that mean?
+
+INTERVIEWEE: That our reported numbers from last month overstated the result and I need to redo them in the standard normalization before talking about them.
+
+INTERVIEWER: Which is more likely to be true?
+
+INTERVIEWEE: Honestly... probably mine is the unusual one. I picked it because it made the plots cleaner. I didn't think about field-standard at the time.
+
+INTERVIEWER: How long would it take to redo in the standard normalization?
+
+INTERVIEWEE: Two days. The runs are the same, only the eval changes. I'd have to rewrite the eval harness.
+
+INTERVIEWER: And the cohort numbers you reported last week — what's the right thing to do about those?
+
+INTERVIEWEE: Walk them back. Tell dmarz this week that the numbers I shared aren't comparable to the field and I'm redoing them. It's embarrassing but I'd rather do it now than in three weeks when it surfaces.
+
+INTERVIEWER: That's a clean call. Anything else you'd reframe from when you walked in today?
+
+INTERVIEWEE: When I came in I said the suite was wrong. Now I think I was wrong. I built a story where the field had the bug. It's more likely I have the bug.
+
+INTERVIEWER: What's the milestone for end of month?
+
+INTERVIEWEE: Was: state-of-art on the benchmark. Will be: comparable numbers, honestly reported, with a clear write-up of what the normalization choice does. Less impressive headline but it's the real thing.
+
+INTERVIEWER: One more thing — who else needs to know about the walk-back?
+
+INTERVIEWEE: My co-author. And my advisor, but later — I want a real result before he hears about the scramble.

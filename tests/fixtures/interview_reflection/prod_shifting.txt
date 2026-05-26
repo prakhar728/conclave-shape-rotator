@@ -1,0 +1,51 @@
+INTERVIEWER: Where are you at this week?
+
+INTERVIEWEE: Honestly it's been bad. The market is just not responding to the messaging. We've changed the headline three times and the conversion is flat. They don't get it. The whole category is confused and we're paying the price for that.
+
+INTERVIEWER: When you say "they don't get it" — who is "they"?
+
+INTERVIEWEE: Inbound visitors from the cold traffic. The ones from the ads. The cold pool.
+
+INTERVIEWER: What's the conversion rate now versus three weeks ago?
+
+INTERVIEWEE: It's about the same. Maybe slightly worse. 1.4 percent to 1.2.
+
+INTERVIEWER: And the warm traffic? Referrals, word of mouth?
+
+INTERVIEWEE: That converts fine. 18 percent.
+
+INTERVIEWER: So is the problem the market not getting it, or your cold-traffic landing page?
+
+INTERVIEWEE: ... I mean, when you put it that way. The warm conversion is fine. So the value prop works once people know what we are. The page is the gap.
+
+INTERVIEWER: Right. So who owns the page?
+
+INTERVIEWEE: I do. I wrote it. I rewrote it three times this week.
+
+INTERVIEWER: What did you change each time?
+
+INTERVIEWEE: Headline mostly. I kept tweaking the verb. "Build" vs "ship" vs "launch." I didn't change the page structure or the proof section or the demo.
+
+INTERVIEWER: When you change just the headline, what's the testable hypothesis?
+
+INTERVIEWEE: That the headline is the gap. Which... it might not be, if the warm pool converts at 18 percent on the same page.
+
+INTERVIEWER: What would you change if you treated the warm pool conversion as the signal that the page mostly works?
+
+INTERVIEWEE: I'd look at what warm visitors know that cold ones don't. They show up already knowing it's a tool for X. Cold visitors don't. So either the headline needs to do that work, or there needs to be a thirty-second explainer right after the fold.
+
+INTERVIEWER: Which one is faster to test?
+
+INTERVIEWEE: Explainer. I can record a Loom and embed it in an afternoon.
+
+INTERVIEWER: OK. So three weeks ago you said the market wasn't getting it. Now?
+
+INTERVIEWEE: Now I think I haven't been doing the work of explaining. I framed it as a market problem. It's a me problem.
+
+INTERVIEWER: Anything else that frame changes for you?
+
+INTERVIEWEE: Yeah. I'd stop blaming category confusion for our trajectory. We're early enough that we're allowed to teach the category. I just hadn't been doing it.
+
+INTERVIEWER: Good. End-of-month milestone?
+
+INTERVIEWEE: Three percent cold conversion. I'm at 1.2. Tight but possible if the explainer works.

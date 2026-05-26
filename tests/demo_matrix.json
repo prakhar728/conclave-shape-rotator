@@ -1,0 +1,131 @@
+{
+  "title": "Confidential Data Procurement \u2014 Demo Results",
+  "generated": "2026-03-22",
+  "model": "deepseek-ai/DeepSeek-V3.1",
+  "pipeline": "deterministic \u2192 LLM agent (schema match + claim verify) \u2192 guardrails",
+  "note": "base_price=0: bad data \u2192 payment approaches $0. Reserve not met \u2192 deal rejected.",
+  "buyer_prompt": "We are building a machine learning pipeline for real-time fraud detection in payment processing. We need a labeled transaction dataset with four specific columns: transaction_id (a unique identifier per transaction), amount (the transaction value in USD), is_fraud (a binary label \u2014 1 for fraudulent, 0 for legitimate), and category (merchant category code). The dataset must contain at least 500 rows. We can tolerate at most 5% missing values and at most 10% duplicate rows. No personally identifiable information should appear \u2014 date of birth, credit card numbers, social security numbers, or any customer names and addresses are strictly not acceptable. This data will train a gradient boosting classifier so label accuracy and field completeness are critical. Our maximum budget for a perfect dataset is $400. We have no floor price \u2014 if the data is unusable we expect to pay nothing.",
+  "evaluation_matrix": [
+    {
+      "id": 1,
+      "scenario": "Full Satisfaction",
+      "narrative": "Buyer described exact requirements in natural language \u2014 LLM extracted the policy. Seller uploaded clean real transaction data (HuggingFace) with all four required columns. Agent verified claims and found no schema gaps. Both parties accepted the enclave's offer.",
+      "seller_variant": "clean",
+      "buyer_variant": "standard ($400)",
+      "seller_input": {
+        "column_definitions": {
+          "transaction_id": "Unique identifier per transaction",
+          "amount": "Transaction value in USD",
+          "is_fraud": "Binary fraud label \u2014 1 if fraudulent, 0 otherwise",
+          "category": "Merchant category code"
+        },
+        "seller_claims": {
+          "completeness": "All four columns are fully populated \u2014 zero missing values",
+          "label_rate": "Approximately 4% of transactions are labeled as fraudulent"
+        }
+      },
+      "reserve_price": 150.0,
+      "quality_score": 1.0,
+      "proposed_payment": 400.0,
+      "deal": true,
+      "settlement_status": "pending_approval",
+      "notes": [],
+      "explanation": "All four required columns (transaction_id, amount, is_fraud, category) are present with exact name matches. Both seller claims are fully verified: all columns show 0.0% null rates, and the fraud label distribution shows exactly 4.0% of transactions are labeled as fraudulent (40 out of 1000). The dataset demonstrates excellent data quality with no missing values and meets the specified label distribution requirements precisely.",
+      "schema_matching": {
+        "transaction_id": "transaction_id",
+        "amount": "amount",
+        "is_fraud": "is_fraud",
+        "category": "category"
+      },
+      "claim_verification": {
+        "completeness: All four columns are fully populated \u2014 zero missing values": "verified",
+        "label_rate: Approximately 4% of transactions are labeled as fraudulent": "verified"
+      }
+    },
+    {
+      "id": 2,
+      "scenario": "Partial Satisfaction",
+      "narrative": "Seller omitted the 'category' column, which the buyer explicitly required. Agent identified the schema gap and noted it in the explanation. Quality score and payment reflect the LLM's assessment of the partial dataset.",
+      "seller_variant": "partial (missing category)",
+      "buyer_variant": "standard ($400)",
+      "seller_input": {
+        "column_definitions": {
+          "transaction_id": "Unique identifier per transaction",
+          "amount": "Transaction value in USD",
+          "is_fraud": "Binary fraud label"
+        },
+        "seller_claims": {
+          "completeness": "Data is mostly complete"
+        }
+      },
+      "reserve_price": 50.0,
+      "quality_score": 1.0,
+      "proposed_payment": 400.0,
+      "deal": true,
+      "settlement_status": "pending_approval",
+      "notes": [],
+      "explanation": "The dataset contains all three required columns (transaction_id, amount, is_fraud) with exact name matches, but is missing the required category column. The seller's completeness claim is verified as all columns show 0.0% null rates across all 1000 rows. Notably, the fraud detection label shows a 4% fraud rate (40 fraudulent transactions out of 1000), which appears reasonable for typical transaction monitoring scenarios. The transaction amounts range from $1.01 to $1,315 with a mean of $87.34.",
+      "schema_matching": {
+        "transaction_id": "transaction_id",
+        "amount": "amount",
+        "is_fraud": "is_fraud",
+        "category": null
+      },
+      "claim_verification": {
+        "completeness: Data is mostly complete": "verified"
+      }
+    },
+    {
+      "id": 3,
+      "scenario": "Critical: >50% Duplicates",
+      "narrative": "Seller submitted a dataset where every row is duplicated \u2014 over 50% dup rate. The deterministic layer flags this as a critical violation and rejects immediately. No LLM call. Payment = $0. Seller's reserve price is irrelevant.",
+      "seller_variant": "duplicated (>50%)",
+      "buyer_variant": "standard ($400)",
+      "seller_input": {
+        "column_definitions": {
+          "transaction_id": "Unique identifier per transaction",
+          "amount": "Transaction value in USD",
+          "is_fraud": "Binary fraud label \u2014 1 if fraudulent, 0 otherwise",
+          "category": "Merchant category code"
+        },
+        "seller_claims": {},
+        "note": "Every row duplicated \u2014 submitted 2000 rows from a 1000-row base dataset"
+      },
+      "reserve_price": 0.0,
+      "quality_score": 0.0,
+      "proposed_payment": 0.0,
+      "deal": false,
+      "settlement_status": "rejected",
+      "notes": [
+        "Duplicate rate (50.0%) exceeds critical threshold (50%). Dataset quality is insufficient."
+      ],
+      "explanation": null,
+      "schema_matching": null,
+      "claim_verification": null
+    }
+  ],
+  "renegotiation_matrix": [
+    {
+      "id": 1,
+      "scenario": "Renegotiation \u2014 Terms Overlap",
+      "narrative": "Enclave offers $770 for partial data (missing category). Buyer revises down to $678 (\u221212%). Seller lowers floor to $608 (\u221221%). $678 \u2265 $608 \u2192 deal at buyer's revised offer. Neither party saw the other's private number.",
+      "initial_offer": 770.0,
+      "buyer_action": "renegotiate \u2192 $678",
+      "supplier_action": "renegotiate \u2192 $608",
+      "final_payment": 678,
+      "deal": true,
+      "settlement_status": "authorized"
+    },
+    {
+      "id": 2,
+      "scenario": "Renegotiation \u2014 No Overlap",
+      "narrative": "Enclave offers $770 for partial data. Buyer drops hard to $462 (\u221240%). Seller holds firm at $732 (\u22125%). $462 < $732 \u2192 deal falls through. One round used \u2014 both sides walked away.",
+      "initial_offer": 770.0,
+      "buyer_action": "renegotiate \u2192 $462",
+      "supplier_action": "renegotiate \u2192 $732",
+      "final_payment": null,
+      "deal": false,
+      "settlement_status": "rejected"
+    }
+  ]
+}

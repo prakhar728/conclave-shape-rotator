@@ -1,0 +1,7 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "hackathon_novelty": "./skills/hackathon_novelty/agent.py:build_agent_graph"
+  },
+  "env": ".env"
+}

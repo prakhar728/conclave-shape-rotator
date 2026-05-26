@@ -1,0 +1,51 @@
+INTERVIEWER: How's the work going?
+
+INTERVIEWEE: Slow. The reviewers on the last paper were brutal and they didn't really engage with the contribution. They asked for experiments that aren't really in the spirit of the work. I don't know if I want to do them.
+
+INTERVIEWER: What did they ask for?
+
+INTERVIEWEE: Two more baselines and a bigger scale ablation. Their baselines are obvious — anyone in the field already knows those don't work for this setup. They're just asking because they have a checklist.
+
+INTERVIEWER: Have you read the reviews carefully or skimmed?
+
+INTERVIEWEE: I read them once. Maybe I should read them again. But the tone was bad. They were dismissive.
+
+INTERVIEWER: Set aside tone for a second. If you assume each ask is in good faith, what would you have to do?
+
+INTERVIEWEE: Run the two baselines. Run them. Even if I think they're a waste. And the scale ablation — that's actually a fair ask, I just didn't want to do it because the compute is expensive.
+
+INTERVIEWER: So one of the three asks is fair?
+
+INTERVIEWEE: Yes. Maybe two. The second baseline is also fair if I'm honest. The first one is silly.
+
+INTERVIEWER: How does the field tend to handle a silly ask?
+
+INTERVIEWEE: You run it, you put it in the appendix, you say "for completeness, included; does not change the contribution." It's an hour of work and it neutralises the reviewer's objection.
+
+INTERVIEWER: Why didn't you do that?
+
+INTERVIEWEE: Because the tone made me defensive. They were rude in the framing and I bounced off the substance.
+
+INTERVIEWER: Fair. What's the cost of doing the runs?
+
+INTERVIEWEE: A day. Maybe two. And I have the compute. I just hadn't queued it.
+
+INTERVIEWER: What about the other paper — the survey?
+
+INTERVIEWEE: Still on hold. My advisor hasn't read the draft. He said he would two weeks ago. I'm waiting on him.
+
+INTERVIEWER: Have you reminded him?
+
+INTERVIEWEE: Once. I didn't want to bug him.
+
+INTERVIEWER: What if you just sent a short follow-up today?
+
+INTERVIEWEE: I could. He'd respond. He always does when nudged. I was being precious about it.
+
+INTERVIEWER: What's the research-lineage milestone you set for the month?
+
+INTERVIEWEE: Resubmit the rejected paper, get the survey to advisor-approved draft. I'm behind on both. Mostly because of the reviewers being unfair on the first one and my advisor being slow on the second.
+
+INTERVIEWER: Anything you'd reframe there?
+
+INTERVIEWEE: ... I haven't sent the nudge. And I haven't queued the experiments. So it's not just them.

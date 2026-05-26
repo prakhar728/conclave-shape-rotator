@@ -1,0 +1,19 @@
+slug: prod_mixed
+interviewee_slug: dax
+team_context: productization
+attribution_bucket: mostly_internal
+human_attribution_bucket: mixed   # Step 5 target — pronoun proportion is internal-dominant despite mixed ownership
+attribution_counts:
+  internal_range: [22, 32]
+  external_range: [3, 12]
+session_word_count_approx: 480
+expected_themes:
+  - shipping_with_external_blocker
+  - co-founder_check-in_gap
+  - referral_ask_avoidance
+alignment_direction: aligned
+notes: >
+  Interviewee oscillates between owning and naming-others. Crucially, when
+  challenged, lands the ownership ("they triggered it but I made the mess").
+  Good case for the mixed-bucket and for Step 5 ownership-prompt nuance —
+  prompts should reinforce the existing self-correction, not push for more.

@@ -1,0 +1,19 @@
+slug: collab_internal
+interviewee_slug: sasha
+team_context: collaborative
+attribution_bucket: mostly_internal
+attribution_counts:
+  internal_min: 28
+  external_max: 8
+session_word_count_approx: 470
+expected_themes:
+  - facilitation_load_landing_well
+  - over-prepping_to_look_ready
+  - deep_work_redirected_to_others
+alignment_direction: aligned
+notes: >
+  Collaborative-team context. Healthy ownership of own behaviors including
+  the failure mode ("I'm too easily redirected. That's me, not them"). Useful
+  test that mostly_internal classification works when the dominant frame is
+  "we" and "I" mixed with "the other teams" — pronoun counting should still
+  resolve internal-dominant.

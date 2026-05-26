@@ -1,0 +1,23 @@
+slug: edge_derailed
+interviewee_slug: rune
+team_context: research_lineage
+attribution_bucket: mostly_internal
+human_attribution_bucket: mixed   # Step 5 target — pronoun count overstates ownership
+attribution_counts:
+  internal_range: [22, 32]
+  external_range: [4, 12]
+session_word_count_approx: 560
+expected_themes:
+  - shiny_object_distraction_pattern
+  - committed_milestone_at_risk
+  - self-recognition_of_repeat_behavior
+alignment_direction: drifting_until_reframe
+notes: >
+  Edge case — long off-topic stretch about SAE work before returning to the
+  committed milestone. Tests two things at once:
+    1) Deterministic word-count signal stays valid despite topic drift
+       (transcript is long enough; bucket is determinable).
+    2) Step 5 agent layer should detect that the dominant theme is *not* the
+       off-topic SAE content but the pattern of distraction the interviewer
+       surfaces. Theme extraction that returns "SAE interpretability" as a
+       top theme is a failure mode worth catching.

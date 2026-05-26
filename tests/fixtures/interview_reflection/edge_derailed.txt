@@ -1,0 +1,43 @@
+INTERVIEWER: What's been on your mind this week?
+
+INTERVIEWEE: A lot. I've been going down a rabbit hole on transformer mechanistic interpretability. Have you read the recent Anthropic SAE work? They're doing some genuinely interesting things on feature ablation but I think their setup is off in a few ways.
+
+INTERVIEWER: Tell me how it connects to your project.
+
+INTERVIEWEE: I'll get to that. But first — the thing about their setup is they're using a fixed sparsity penalty and I think a dynamic one would work better. I've been writing notes on it. I might write a short paper.
+
+INTERVIEWER: How does that connect to your stated research milestone?
+
+INTERVIEWEE: It doesn't directly. My milestone is the reasoning evals project. But I think the SAE work is more important. The reasoning evals stuff feels played out. Everyone's doing it. The interpretability angle is fresher.
+
+INTERVIEWER: When did you decide it felt played out?
+
+INTERVIEWEE: This week. I was reading on Twitter and there were three new papers and they all said the same thing my paper would say. So what's the point.
+
+INTERVIEWER: Did you read them carefully?
+
+INTERVIEWEE: I read the abstracts. And the figures.
+
+INTERVIEWER: Is it possible they're not actually saying what your paper would?
+
+INTERVIEWEE: ... Maybe. I should read them properly. I haven't.
+
+INTERVIEWER: Set aside the SAE thing for one second. You're three weeks from the milestone you committed to at the start of the program. What's your plan?
+
+INTERVIEWEE: I should read those three papers tonight. Then probably keep going with the reasoning evals. I haven't shipped any of it yet. The plan was to have the eval suite running by week 5 and I'm at the end of week 4 with nothing.
+
+INTERVIEWER: What happens if you spend next week on SAEs instead?
+
+INTERVIEWEE: I miss the milestone. I'd justify it as a pivot but it's not really a pivot, it's a distraction. I do this. I see something shinier and I drop what I committed to.
+
+INTERVIEWER: Is naming it as a pattern useful?
+
+INTERVIEWEE: Yes. Because I can recognise it now. I've done this three times this year already.
+
+INTERVIEWER: What's the smallest commitment you can make to the original milestone?
+
+INTERVIEWEE: Eval suite running, even if ugly, by next Friday. I'll keep the SAE notes in a folder and not touch them until then.
+
+INTERVIEWER: Anything else you want to put on the followups?
+
+INTERVIEWEE: Whether I caught myself if I started drifting again. That's the real test.

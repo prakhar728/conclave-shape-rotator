@@ -1,0 +1,39 @@
+INTERVIEWER: How was the week?
+
+INTERVIEWEE: Mixed. I got the dashboard out, that was the big one. I also lost most of Thursday because GCP threw a billing alert and I had to spend the day un-fucking the project setup.
+
+INTERVIEWER: What part of the dashboard shipped?
+
+INTERVIEWEE: The metrics tiles and the date range filter. I didn't get the export-to-CSV in. Users have been asking for it. They keep filing it as a P0 in support but I had to push it to next week because of the GCP thing.
+
+INTERVIEWER: Was the GCP issue on you or external?
+
+INTERVIEWEE: Both. I had set up billing on a personal card three months ago because I was lazy. So when the team account got linked, GCP flagged it as a payment-method change and shut down the project for review. So they triggered it but I made the mess that let them trigger it.
+
+INTERVIEWER: That's clear. What else this week?
+
+INTERVIEWEE: I had three user calls. Two of them were great, very specific feedback about the onboarding wording. One was a guy who I think wasn't really a prospect, he was just looking around. I should have qualified him before I took the call.
+
+INTERVIEWER: How would you qualify next time?
+
+INTERVIEWEE: A short async form. Three questions. If they can't fill that out it's not worth me showing up live. I'll set that up Monday.
+
+INTERVIEWER: What about the team — anything moving there?
+
+INTERVIEWEE: My co-founder is wrestling with the back end migration. He's been quiet about it. I should check in with him properly, not just on standup. He gets stuck in his head when things are hard. That's on me to notice earlier.
+
+INTERVIEWER: When was the last time you and he had an actual conversation, not a standup?
+
+INTERVIEWEE: Probably ten days ago. We've both been heads-down. That's not great.
+
+INTERVIEWER: What will you do about it?
+
+INTERVIEWEE: Tomorrow morning. I'll suggest a walk. He likes walks. We'll talk about the migration but also just how he's doing.
+
+INTERVIEWER: Good. Milestone check?
+
+INTERVIEWEE: Behind on revenue, on track on product. We said ten paying by end of month. We have four. We said dashboard MVP shipped. That's basically done, minus the CSV export.
+
+INTERVIEWER: What's the most likely path to ten?
+
+INTERVIEWEE: Honestly, asking the four current ones for referrals. They love it. I haven't asked because I felt weird about it. That's a me thing — I should just ask.

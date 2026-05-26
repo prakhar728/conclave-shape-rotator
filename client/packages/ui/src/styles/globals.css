@@ -1,0 +1,417 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+@source "../../../apps/**/*.{ts,tsx}";
+@source "../../../components/**/*.{ts,tsx}";
+@source "../**/*.{ts,tsx}";
+
+/*
+ * Conclave — Roman arena aesthetic.
+ * Travertine cream + porphyry purple + arena ochre. Cinzel display,
+ * EB Garamond body, IBM Plex Mono for hashes/IDs (the modern tension that
+ * keeps it from reading as costume).
+ */
+:root {
+  /* Page surfaces — travertine */
+  --background: #f0ead8;        /* travertine cream */
+  --foreground: #2a2018;        /* warm carved ink */
+
+  /* Cards = same as bg, distinguished by hairline border */
+  --card: #f0ead8;
+  --card-foreground: #2a2018;
+  --popover: #f5f0e0;
+  --popover-foreground: #2a2018;
+
+  /* Primary accent — porphyry (rank, judgment) */
+  --primary: #5d2545;
+  --primary-foreground: #f0ead8;
+
+  /* Secondary — soft travertine shade */
+  --secondary: #e6dec9;
+  --secondary-foreground: #2a2018;
+
+  /* Muted — slightly darker stone for alt sections */
+  --muted: #e6dec9;
+  --muted-foreground: #6b5d49;
+
+  /* Accent (hover/focus surfaces) */
+  --accent: #e6dec9;
+  --accent-foreground: #2a2018;
+
+  /* Arena ochre — the imperial gold */
+  --gold: #c08a3e;
+  --gold-foreground: #2a2018;
+
+  /* Blood — destructive only, never decorative */
+  --blood: #8b2317;
+
+  /* Destructive aliases blood */
+  --destructive: #8b2317;
+
+  /* Borders — weathered stone */
+  --border: #cabc99;
+  --input: #cabc99;
+  --ring: #5d2545;
+
+  /* Radius — small, mechanical */
+  --radius: 0.25rem;
+
+  /* Semantic */
+  --success: #4a6a3a;
+  --warning: #c08a3e;
+  --glow: #5d2545;
+
+  /* Mono utility tokens */
+  --mono-bg: #e6dec9;
+  --mono-text: #2a2018;
+
+  /* Basalt slab — for inverted sections */
+  --basalt: #1a1612;
+  --basalt-foreground: #f0ead8;
+  --basalt-border: #3a3026;
+
+  /* Charts */
+  --chart-1: #5d2545;
+  --chart-2: #c08a3e;
+  --chart-3: #4a6a3a;
+  --chart-4: #6b5d49;
+  --chart-5: #1a1612;
+
+  /* Sidebar */
+  --sidebar: #e6dec9;
+  --sidebar-foreground: #2a2018;
+  --sidebar-primary: #5d2545;
+  --sidebar-primary-foreground: #f0ead8;
+  --sidebar-accent: #cabc99;
+  --sidebar-accent-foreground: #2a2018;
+  --sidebar-border: #cabc99;
+  --sidebar-ring: #5d2545;
+}
+
+/* Dark variant — kept identical so theme toggle is a no-op for now. */
+.dark {
+  --background: #f0ead8;
+  --foreground: #2a2018;
+  --card: #f0ead8;
+  --card-foreground: #2a2018;
+  --popover: #f5f0e0;
+  --popover-foreground: #2a2018;
+  --primary: #5d2545;
+  --primary-foreground: #f0ead8;
+  --secondary: #e6dec9;
+  --secondary-foreground: #2a2018;
+  --muted: #e6dec9;
+  --muted-foreground: #6b5d49;
+  --accent: #e6dec9;
+  --accent-foreground: #2a2018;
+  --gold: #c08a3e;
+  --gold-foreground: #2a2018;
+  --blood: #8b2317;
+  --destructive: #8b2317;
+  --border: #cabc99;
+  --input: #cabc99;
+  --ring: #5d2545;
+  --success: #4a6a3a;
+  --warning: #c08a3e;
+  --glow: #5d2545;
+  --mono-bg: #e6dec9;
+  --mono-text: #2a2018;
+  --basalt: #1a1612;
+  --basalt-foreground: #f0ead8;
+  --basalt-border: #3a3026;
+  --chart-1: #5d2545;
+  --chart-2: #c08a3e;
+  --chart-3: #4a6a3a;
+  --chart-4: #6b5d49;
+  --chart-5: #1a1612;
+  --sidebar: #e6dec9;
+  --sidebar-foreground: #2a2018;
+  --sidebar-primary: #5d2545;
+  --sidebar-primary-foreground: #f0ead8;
+  --sidebar-accent: #cabc99;
+  --sidebar-accent-foreground: #2a2018;
+  --sidebar-border: #cabc99;
+  --sidebar-ring: #5d2545;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-glow: var(--glow);
+  --color-mono-bg: var(--mono-bg);
+  --color-mono-text: var(--mono-text);
+  --color-gold: var(--gold);
+  --color-gold-foreground: var(--gold-foreground);
+  --color-blood: var(--blood);
+  --color-basalt: var(--basalt);
+  --color-basalt-foreground: var(--basalt-foreground);
+  --color-basalt-border: var(--basalt-border);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --font-sans: var(--font-serif);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-serif), ui-serif, Georgia, "Times New Roman", serif;
+    font-feature-settings: "liga", "dlig";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background: var(--primary);
+    color: var(--primary-foreground);
+  }
+}
+
+/* Subtle travertine grain — applied to body via .arena-bg utility */
+.arena-bg {
+  background-color: var(--background);
+  background-image:
+    radial-gradient(circle at 20% 30%, rgba(107, 93, 73, 0.06) 0px, transparent 1.5px),
+    radial-gradient(circle at 70% 65%, rgba(107, 93, 73, 0.05) 0px, transparent 2px),
+    radial-gradient(circle at 85% 15%, rgba(107, 93, 73, 0.04) 0px, transparent 1px);
+  background-size: 240px 240px, 320px 320px, 180px 180px;
+}
+
+/* Marquee for the Forum announcements strip */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+
+@keyframes seal-stamp {
+  0%   { transform: scale(0.5) rotate(-18deg); opacity: 0; }
+  60%  { transform: scale(1.18) rotate(-8deg); opacity: 1; }
+  100% { transform: scale(1) rotate(-6deg); opacity: 1; }
+}
+
+@keyframes laurel-grow {
+  from { transform: scale(0.8); opacity: 0; }
+  to   { transform: scale(1); opacity: 1; }
+}
+
+@layer utilities {
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+
+  /* Cinzel display */
+  .font-display {
+    font-family: var(--font-display), "Trajan Pro", Georgia, serif;
+    letter-spacing: 0.02em;
+  }
+  /* EB Garamond body */
+  .font-serif {
+    font-family: var(--font-serif), Georgia, "Times New Roman", serif;
+  }
+  /* IBM Plex Mono for hashes/IDs */
+  .font-mono {
+    font-family: var(--font-mono), ui-monospace, monospace;
+  }
+
+  /* Bracketed inscription label */
+  .bracket-label {
+    font-family: var(--font-mono), monospace;
+    @apply text-[11px] uppercase tracking-[0.18em] text-muted-foreground;
+  }
+  .bracket-label::before { content: "[ "; }
+  .bracket-label::after  { content: " ]"; }
+
+  /* Roman small-caps for section eyebrows */
+  .small-caps {
+    font-family: var(--font-display), serif;
+    font-variant: small-caps;
+    letter-spacing: 0.18em;
+    text-transform: lowercase;
+  }
+
+  /* Single hairline */
+  .hairline { @apply border-t border-border; }
+
+  /* Marquee */
+  .marquee { @apply overflow-hidden whitespace-nowrap; }
+  .marquee-track {
+    display: inline-flex;
+    gap: 2.5rem;
+    animation: marquee 60s linear infinite;
+  }
+
+  /* Inverted basalt slab */
+  .basalt-slab {
+    background: var(--basalt);
+    color: var(--basalt-foreground);
+  }
+  .basalt-slab .text-muted-foreground {
+    color: #8a7a64;
+  }
+
+  /* Card on travertine — borders only, no shadow */
+  .paper-card {
+    @apply border border-border rounded-sm bg-background;
+  }
+
+  /* Inscribed plaque — used for /setup form sections */
+  .plaque {
+    @apply border border-border rounded-sm bg-background;
+    background-image: linear-gradient(180deg, rgba(202, 188, 153, 0.15), transparent 60%);
+  }
+
+  /* Stamped seal animation */
+  .seal-stamp { animation: seal-stamp 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .laurel-grow { animation: laurel-grow 0.6s ease-out forwards; }
+
+  .mono-badge {
+    font-family: var(--font-mono);
+    background: var(--mono-bg);
+    color: var(--mono-text);
+    @apply text-xs px-2 py-0.5 rounded-sm;
+  }
+
+  /* Gold rule — a thin ochre underline used under instance names */
+  .gold-rule {
+    background: linear-gradient(90deg, var(--gold) 0%, transparent 100%);
+    height: 2px;
+  }
+
+  /* ----- Mobile-first additions ------------------------------------- */
+
+  /* Reach Apple's 44pt minimum tap target on inline controls */
+  .touch-target { min-height: 44px; }
+  .touch-target-sm { min-height: 40px; }
+
+  /* Dotted leader (Roman manuscript table-of-contents fill) used in
+     the mobile drawer between a label and its inscription number. */
+  .leader-dots {
+    flex: 1;
+    border-bottom: 1px dotted var(--border);
+    transform: translateY(-0.35em);
+    margin: 0 0.6rem;
+    min-width: 1.5rem;
+  }
+
+  /* Codex / unfurled scroll panel — used by the mobile drawer */
+  .codex-panel {
+    background: var(--background);
+    background-image:
+      linear-gradient(180deg, rgba(192, 138, 62, 0.06) 0%, transparent 28%, transparent 72%, rgba(192, 138, 62, 0.05) 100%),
+      radial-gradient(circle at 20% 30%, rgba(107, 93, 73, 0.08) 0px, transparent 1.5px),
+      radial-gradient(circle at 70% 65%, rgba(107, 93, 73, 0.06) 0px, transparent 2px);
+    background-size: 100% 100%, 240px 240px, 320px 320px;
+    box-shadow:
+      -1px 0 0 var(--border) inset,
+      -8px 0 24px -12px rgba(42, 32, 24, 0.25);
+  }
+
+  /* Drawer enter animation — unfurls from the right edge */
+  @keyframes codex-unfurl {
+    from { transform: translateX(100%); opacity: 0.6; }
+    to   { transform: translateX(0); opacity: 1; }
+  }
+  .codex-enter { animation: codex-unfurl 0.32s cubic-bezier(0.22, 0.65, 0.31, 1) forwards; }
+  @keyframes scrim-fade { from { opacity: 0; } to { opacity: 1; } }
+  .scrim-enter { animation: scrim-fade 0.22s ease-out forwards; }
+
+  /* Wax-tablet card — used for the mobile submissions list */
+  .wax-tablet {
+    position: relative;
+    background: linear-gradient(180deg, #f4eeda 0%, #ebe3cb 100%);
+    border: 1px solid var(--border);
+    border-radius: 0.25rem;
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.5),
+      inset 0 -1px 0 rgba(107, 93, 73, 0.18);
+  }
+  .wax-tablet::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 12px;
+    bottom: 12px;
+    width: 3px;
+    background: linear-gradient(180deg, transparent, var(--gold) 30%, var(--gold) 70%, transparent);
+    opacity: 0.75;
+  }
+
+  /* Inscribed novelty roundel — a coin-like score chip */
+  .roundel {
+    width: 56px;
+    height: 56px;
+    border-radius: 999px;
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-display), serif;
+    line-height: 1;
+    border: 1.5px solid currentColor;
+    box-shadow:
+      inset 0 0 0 3px var(--background),
+      inset 0 0 0 4px currentColor,
+      0 1px 0 rgba(42, 32, 24, 0.15);
+  }
+  .roundel-num { font-size: 1.05rem; font-weight: 600; letter-spacing: 0.02em; }
+  .roundel-pct { font-size: 0.55rem; letter-spacing: 0.18em; opacity: 0.85; margin-top: 1px; }
+
+  /* Sticky herald — bottom-pinned CTA strip on mobile landing */
+  .sticky-herald {
+    background: var(--basalt);
+    color: var(--basalt-foreground);
+    border-top: 1px solid var(--basalt-border);
+    box-shadow: 0 -8px 24px -12px rgba(0, 0, 0, 0.35);
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  /* Edge-fade shadows for horizontally scrolling tab/segment rows */
+  .scroll-fade-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+            mask-image: linear-gradient(90deg, transparent 0, #000 16px, #000 calc(100% - 16px), transparent 100%);
+  }
+
+  /* Lock body scroll when a drawer or modal is open */
+  .body-locked { overflow: hidden; touch-action: none; }
+}

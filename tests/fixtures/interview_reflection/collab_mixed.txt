@@ -1,0 +1,43 @@
+INTERVIEWER: Talk to me about the week.
+
+INTERVIEWEE: I'll start with what worked. I ran the cross-team office hours and three teams used them productively. I wrote up a one-page playbook for the new GPU sharing and circulated it.
+
+INTERVIEWER: Good. And what didn't work?
+
+INTERVIEWEE: The two co-leads on the infra team are not pulling their weight. They missed both of the sync calls I scheduled and they haven't responded to my Slack. They keep saying they're slammed but I've seen their PRs — they're shipping plenty, just not on the shared work.
+
+INTERVIEWER: When you scheduled the calls, did you check that those times worked for them?
+
+INTERVIEWEE: I sent a poll. They didn't fill it out. I picked a time anyway.
+
+INTERVIEWER: Picked from what?
+
+INTERVIEWEE: Times that worked for me and the other teams. Their calendar was busy at every option but I picked the least bad.
+
+INTERVIEWER: How likely was it that they'd show up to a slot they hadn't agreed to?
+
+INTERVIEWEE: ... Not very. When you put it that way.
+
+INTERVIEWER: Right. What about the Slack non-response?
+
+INTERVIEWEE: I sent one message. Long-ish. Asking for status, asking for blockers, asking when they'd be free for the call. I think I overloaded it.
+
+INTERVIEWER: What would a smaller ask have been?
+
+INTERVIEWEE: One question. Like, "what's the earliest day next week you can do 30 minutes." Just that.
+
+INTERVIEWER: OK. So what's the read on the situation now?
+
+INTERVIEWEE: It's still mostly on them. They knew the shared infra work was part of their commitment to the cohort. They've been avoiding it. But I also haven't made it easy for them to show up — picking a time they didn't pick, sending a wall of text.
+
+INTERVIEWER: Anything else this week?
+
+INTERVIEWEE: My own deep work was fine. I shipped the cohort directory update. That part went well.
+
+INTERVIEWER: Monthly milestone?
+
+INTERVIEWEE: Mid. The collaborative milestone has two parts. The infra-sharing part is stuck — half on them, half on the way I've been managing it. The directory and playbook part is done.
+
+INTERVIEWER: What's one thing you'll change next week?
+
+INTERVIEWEE: One-question Slack DM to each of the infra co-leads. With a specific 30-minute proposal. If both decline, I escalate to dmarz. If one accepts, I work with that one and let the other one slide for the week.

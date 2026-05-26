@@ -1,0 +1,21 @@
+slug: prod_shifting
+interviewee_slug: ren
+team_context: productization
+attribution_bucket: mostly_internal
+human_attribution_bucket: shifting   # Step 5 target — half-split on pronouns misses the reframe trajectory
+attribution_counts:
+  internal_range: [16, 28]
+  external_range: [0, 8]
+  trajectory: external_to_internal   # human label of the in-session shift
+session_word_count_approx: 540
+expected_themes:
+  - cold_conversion_diagnosis
+  - reframe_market_problem_as_messaging_problem
+  - shipping_explainer_loom_as_next_test
+alignment_direction: aligned_after_reframe
+notes: >
+  Critical fixture for Step 5 — interviewer's Socratic question ("So who owns
+  the page?") triggers a clear external→internal shift mid-transcript.
+  Aggregation (Step 7) should be able to label this trajectory as
+  "shifted to internal in-session." Compare against research_shifting.txt for
+  same trajectory in a different team context.
