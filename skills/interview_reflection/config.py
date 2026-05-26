@@ -48,6 +48,17 @@ THEMES_MODEL: str = (
 OWNERSHIP_MODEL: str = (
     os.environ.get("CONCLAVE_INTERVIEW_OWNERSHIP_MODEL") or _DEFAULT_MODEL
 )
+# Collaboration-matching + rubric-panel nodes (temp 0). Same default model;
+# overridable per node via env for tuning without code edits.
+PROFILE_MODEL: str = (
+    os.environ.get("CONCLAVE_INTERVIEW_PROFILE_MODEL") or _DEFAULT_MODEL
+)
+RUBRIC_MODEL: str = (
+    os.environ.get("CONCLAVE_INTERVIEW_RUBRIC_MODEL") or _DEFAULT_MODEL
+)
+COMPOSE_MODEL: str = (
+    os.environ.get("CONCLAVE_INTERVIEW_COMPOSE_MODEL") or _DEFAULT_MODEL
+)
 
 
 ALLOWED_NOVEL_OUTPUT_KEYS: set[str] = {
