@@ -31,25 +31,26 @@ def _slugs() -> list[str]:
 
 
 def _benign_llm_stub():
-    """LLM stub: returns short, fixture-agnostic JSON that won't trip the filter."""
+    """LLM stub: returns short, fixture-agnostic JSON that won't trip the filter.
+
+    Cycles profile → rubric items. Quotes are benign (not transcript spans) so
+    the leakage scan finds nothing to redact.
+    """
+    calls = {"n": 0}
+
     def _factory(*_a, **_k):
         class _S:
-            _calls = {"n": 0}
-
             def invoke(self, _m):
-                _S._calls["n"] += 1
-                # First call = themes; second = ownership.
-                if _S._calls["n"] % 2 == 1:
+                calls["n"] += 1
+                if calls["n"] % 2 == 1:
                     payload = {
-                        "themes": ["shipping cadence", "blocked on partner"],
-                        "session_summary": "Short benign summary.",
+                        "building": "a consumer app",
+                        "building_tags": ["consumer-social"],
+                        "offers": [{"text": "frontend help", "tags": ["frontend"],
+                                    "quote": "benign offer quote"}],
                     }
                 else:
-                    payload = {
-                        "attribution_patterns": {"internal": 0.6, "external": 0.4},
-                        "ownership_prompts": ["What part of this is in your control?"],
-                        "suggested_next_questions": ["How will you check next week?"],
-                    }
+                    payload = {"items": {f"CO{i}": {"score": 4, "quote": "ev"} for i in range(1, 6)}}
                 return SimpleNamespace(content=json.dumps(payload))
         return _S()
     return _factory

@@ -48,12 +48,11 @@ def isolated_ledger(tmp_path, monkeypatch):
 
 @pytest.fixture
 def mocked_llm(monkeypatch):
-    """Two-call canned stub: themes then ownership.
+    """Canned stub cycling profile → rubric items across get_llm() calls.
 
-    A module-level counter (closure cell) is shared across every get_llm()
-    call within the test, so the *second* call inside one run_agent invocation
-    correctly receives the ownership payload regardless of how many times
-    get_llm() is constructed.
+    A shared counter steps through the per-person node sequence (profile first,
+    rubric second) regardless of how many times get_llm() is constructed. Quotes
+    are benign strings (not transcript substrings) so the leakage scan is a no-op.
     """
     call_count = {"n": 0}
 
@@ -62,15 +61,16 @@ def mocked_llm(monkeypatch):
             call_count["n"] += 1
             if call_count["n"] % 2 == 1:
                 payload = {
-                    "themes": ["shipping cadence", "outbound neglected"],
-                    "session_summary": "Short canned summary.",
+                    "building": "a consumer app",
+                    "building_tags": ["consumer-social"],
+                    "stage": "early-traction",
+                    "offers": [{"text": "frontend help", "tags": ["frontend"],
+                                "quote": "benign offer quote", "credibility": "claimed"}],
+                    "needs": [{"text": "sales help", "tags": ["sales"],
+                               "quote": "benign need quote"}],
                 }
             else:
-                payload = {
-                    "attribution_patterns": {"internal": 0.75, "external": 0.25},
-                    "ownership_prompts": [],
-                    "suggested_next_questions": ["What's the next test?"],
-                }
+                payload = {"items": {f"CO{i}": {"score": 4, "quote": "ev"} for i in range(1, 6)}}
             return SimpleNamespace(content=json.dumps(payload))
 
     monkeypatch.setattr("config.get_llm", lambda *_a, **_k: _Stub())
@@ -145,8 +145,10 @@ def test_full_e2e_submit_trigger_results(client, mocked_llm):
     assert one.status_code == 200, one.text
     result = one.json()
     assert result["interviewee_slug"] == "leo"
-    assert result["themes"] == ["shipping cadence", "outbound neglected"]
-    assert result["attribution_patterns"] == {"internal": 0.75, "external": 0.25}
+    assert result["collaboration_profile"]["building"] == "a consumer app"
+    assert result["collaboration_profile"]["offers"][0]["tags"] == ["frontend"]
+    assert result["rubric_panel"]["coachability"]["reported"] is True
+    assert result["rubric_panel"]["coachability"]["score"] == 4.0
 
 
 def test_submit_validates_against_transcript_input(client):

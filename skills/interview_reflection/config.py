@@ -64,6 +64,13 @@ COMPOSE_MODEL: str = (
 ALLOWED_NOVEL_OUTPUT_KEYS: set[str] = {
     "submission_id",
     "interviewee_slug",
+    # Collaboration matching + rubric panel (S4+)
+    "collaboration_profile",
+    "rubric_panel",
+    "rationale",
+    "summary",
+    "bullets",
+    # Legacy (emitted no more after S4; pruned from the whitelist in S6)
     "themes",
     "attribution_patterns",
     "suggested_next_questions",

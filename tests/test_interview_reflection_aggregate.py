@@ -186,20 +186,18 @@ def test_skill_appends_to_ledger_on_run(tmp_path, monkeypatch):
     import skills.interview_reflection.aggregate as agg_mod
     monkeypatch.setattr(agg_mod, "DEFAULT_STORAGE_ROOT", tmp_path)
 
-    # Mock LLM so the agent returns predictable output
+    # Mock LLM so the agent returns predictable output (profile → rubric items)
+    call_count = {"n": 0}
+
     def _stub(*_a, **_k):
         class _S:
-            calls = {"n": 0}
             def invoke(self, _m):
-                _S.calls["n"] += 1
+                call_count["n"] += 1
                 payload = (
-                    {"themes": ["shipping"], "session_summary": "Short."}
-                    if _S.calls["n"] % 2 == 1
-                    else {
-                        "attribution_patterns": {"internal": 0.7, "external": 0.3},
-                        "ownership_prompts": [],
-                        "suggested_next_questions": [],
-                    }
+                    {"building": "a thing", "building_tags": ["frontend"],
+                     "offers": [{"text": "x", "tags": ["frontend"], "quote": "benign quote"}]}
+                    if call_count["n"] % 2 == 1
+                    else {"items": {f"CO{i}": {"score": 4, "quote": "ev"} for i in range(1, 6)}}
                 )
                 return SimpleNamespace(content=json.dumps(payload))
         return _S()

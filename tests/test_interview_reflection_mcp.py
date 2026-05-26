@@ -59,7 +59,7 @@ def isolated_ledger(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def mocked_llm(monkeypatch):
-    """Two-call themes-then-ownership stub shared across get_llm() invocations."""
+    """Stub cycling profile → rubric items across get_llm() invocations."""
     call_count = {"n": 0}
 
     class _Stub:
@@ -67,15 +67,14 @@ def mocked_llm(monkeypatch):
             call_count["n"] += 1
             if call_count["n"] % 2 == 1:
                 payload = {
-                    "themes": ["shipping cadence"],
-                    "session_summary": "Short canned summary.",
+                    "building": "a consumer app",
+                    "building_tags": ["consumer-social"],
+                    "stage": "early-traction",
+                    "offers": [{"text": "frontend help", "tags": ["frontend"],
+                                "quote": "benign offer quote"}],
                 }
             else:
-                payload = {
-                    "attribution_patterns": {"internal": 0.8, "external": 0.2},
-                    "ownership_prompts": [],
-                    "suggested_next_questions": ["What's the next test?"],
-                }
+                payload = {"items": {f"CO{i}": {"score": 4, "quote": "ev"} for i in range(1, 6)}}
             return SimpleNamespace(content=json.dumps(payload))
 
     monkeypatch.setattr("config.get_llm", lambda *_a, **_k: _Stub())
@@ -193,7 +192,7 @@ async def test_submit_interview_admin_happy_path():
             data = _payload(result)
             assert data["submission_id"]
             assert data["result"]["interviewee_slug"] == "leo"
-            assert "themes" in data["result"]
+            assert "collaboration_profile" in data["result"]
     finally:
         reset_caller_token_for_test(token)
 

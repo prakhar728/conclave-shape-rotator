@@ -96,27 +96,16 @@ class TranscriptInput(Submission):
 
 
 class NovelOutput(BaseModel):
-    """Interviewer-facing digest for one interview.
-
-    New collaboration-matching fields land in S2 alongside the legacy
-    themes/ownership fields (kept for back-compat this step). S4 removes the
-    legacy fields once the rubric node replaces themes/ownership.
-    """
+    """Interviewer-facing digest for one interview: collaboration profile +
+    rubric panel + composed rationale/summary/bullets (the composition fields
+    are populated by the compose node in S5)."""
     submission_id: str
     interviewee_slug: str
-
-    # New (collaboration matching + rubric panel)
     collaboration_profile: Optional[CollaborationProfile] = None
     rubric_panel: Optional[RubricPanel] = None
     rationale: dict[str, str] = Field(default_factory=dict)    # OUT-1, per-rubric one-liners
     summary: str = ""                                          # OUT-2
     bullets: list[str] = Field(default_factory=list)           # OUT-3
-
-    # Legacy (removed in S4)
-    themes: list[str] = Field(default_factory=list)
-    attribution_patterns: dict[str, float] = Field(default_factory=dict)
-    suggested_next_questions: list[str] = Field(default_factory=list)
-    session_summary: str = ""
 
 
 class IntervieweeOutput(BaseModel):

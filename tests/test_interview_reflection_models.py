@@ -109,16 +109,3 @@ def test_novel_output_accepts_new_fields_and_round_trips():
     assert dumped["rationale"]["coachability"].startswith("Coachability")
     assert dumped["summary"] == "A short composed summary."
     assert len(dumped["bullets"]) == 2
-
-
-def test_novel_output_still_accepts_legacy_fields():
-    """S2 keeps legacy fields so existing tests stay green until S4."""
-    out = NovelOutput(
-        submission_id="s1",
-        interviewee_slug="leo",
-        themes=["shipping cadence"],
-        attribution_patterns={"internal": 0.8, "external": 0.2},
-        session_summary="legacy summary",
-    )
-    assert out.themes == ["shipping cadence"]
-    assert out.collaboration_profile is None

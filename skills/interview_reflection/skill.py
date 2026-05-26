@@ -1,17 +1,26 @@
 """
-Skill entry point for interview_reflection (Track A v0).
+Skill entry point for interview_reflection.
 
-Pipeline (current):
+Per-person ingestion pipeline:
     1. deterministic.run_deterministic — pronoun counts, word count, keywords
-    2. agent.run_agent                 — themes + ownership prompts (LangGraph + LLM)
-    3. guardrails.InterviewReflectionFilter — key whitelist, quote stripping,
-                                             evidence_quote gating, name redaction,
-                                             leakage check
+    2. agent.run_agent                 — collaboration profile + rubric panel
+                                         (+ composed rationale/summary/bullets, S5)
+    3. guardrails.InterviewReflectionFilter — key whitelist, quote handling,
+                                             name redaction, leakage check
+    4. aggregate.append_digest         — per-slug ledger (cross-person matcher
+                                         reads across slugs)
 
-Team context lookup is stubbed in v0 — Step 8 wires it to Shape Rotator OS
-`teams/<slug>.md`. For now it's an empty dict and the agent works without it.
+Cohort matching ("who should talk to whom") is a separate cross-person pass —
+see run_matching, which reads the ledger the per-person path writes.
+
+The interviewee-facing path (share_with_interviewee → IntervieweeOutput) is
+retained as the seam for future role-based per-subject output; v1 is
+organizer-only, so it carries no retired theme/ownership content.
 """
 from __future__ import annotations
+
+from pathlib import Path
+from typing import Optional
 
 from core.models import OperatorConfig, SkillResponse
 from skills.interview_reflection.agent import run_agent
@@ -25,8 +34,17 @@ from skills.interview_reflection.models import (
 )
 
 
-def run_skill(inputs: list[TranscriptInput], params: OperatorConfig | None = None) -> SkillResponse:
-    """Run deterministic → agent → guardrails for each transcript in the batch."""
+def run_skill(
+    inputs: list[TranscriptInput],
+    params: OperatorConfig | None = None,
+    ledger_root: Optional[Path] = None,
+) -> SkillResponse:
+    """Run deterministic → agent → guardrails for each transcript in the batch.
+
+    ledger_root overrides the per-slug ledger directory (used by the --match
+    demo to ingest into a clean, reproducible root). Defaults to the standard
+    data/ ledger when None.
+    """
     results: list[dict] = []
     raw_transcripts: list[str] = []
 
@@ -35,29 +53,25 @@ def run_skill(inputs: list[TranscriptInput], params: OperatorConfig | None = Non
         agent_out = run_agent(
             transcript=sub.transcript,
             interviewee_slug=sub.interviewee_slug,
-            team_context={},  # Step 8 wires Shape Rotator OS lookup
+            team_context={},
             deterministic=det,
         )
 
         novel = NovelOutput(
             submission_id=sub.submission_id,
             interviewee_slug=sub.interviewee_slug,
-            themes=agent_out["themes"],
-            attribution_patterns=agent_out["attribution_patterns"],
-            suggested_next_questions=agent_out["suggested_next_questions"],
-            session_summary=agent_out["session_summary"],
+            collaboration_profile=agent_out["collaboration_profile"],
+            rubric_panel=agent_out["rubric_panel"],
         )
         payload = novel.model_dump()
-        # Carry share flag through so guardrails can gate evidence_quotes.
+        # Carry share flag through so guardrails can gate the interviewee view.
         payload["share_with_interviewee"] = sub.share_with_interviewee
 
         if sub.share_with_interviewee:
+            # Role-based per-subject view lands here later; organizer-only for now.
             interviewee = IntervieweeOutput(
                 submission_id=sub.submission_id,
                 interviewee_slug=sub.interviewee_slug,
-                themes=agent_out["themes"],
-                ownership_prompts=agent_out["ownership_prompts"],
-                evidence_quotes=[],  # populated only if Step 5 emits any; empty in v0
             )
             payload["interviewee_output"] = interviewee.model_dump()
 
@@ -66,11 +80,16 @@ def run_skill(inputs: list[TranscriptInput], params: OperatorConfig | None = Non
 
     filtered = InterviewReflectionFilter().apply(results, raw_transcripts)
 
-    # Persist each guardrailed digest to the per-slug ledger so Step 7's
-    # aggregation has history to work with. Persistence happens AFTER
-    # guardrails so raw transcript text can never enter the ledger.
+    # Persist each guardrailed digest to the per-slug ledger. Persistence happens
+    # AFTER guardrails so raw transcript text can never enter the ledger.
     for sub, digest in zip(inputs, filtered):
         if sub.interviewee_slug:
-            append_digest(sub.interviewee_slug, digest)
+            append_digest(sub.interviewee_slug, digest, root=ledger_root)
 
     return SkillResponse(skill="interview_reflection", results=filtered)
+
+
+def run_matching(root: Optional[Path] = None, top_k: Optional[int] = None) -> dict:
+    """Cross-person cohort matching over the stored profiles (S8/S9)."""
+    from skills.interview_reflection import matching
+    return matching.run_matching(root=root, top_k=top_k)
