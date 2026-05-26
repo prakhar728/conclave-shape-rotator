@@ -16,11 +16,74 @@ the guardrail layer — mirrors the hackathon_novelty pattern.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from core.models import Submission
+
+
+# --- Collaboration profile (primary lead extraction) ---
+
+class ProfileItem(BaseModel):
+    """One offer / need / interest / seeking entry from a transcript.
+
+    Every entry is quote-anchored: `quote` is a short verbatim transcript span
+    that justifies the entry, or None. The profile node drops list entries that
+    lack a quote (never invented). `credibility` is meaningful on offers only.
+    """
+    text: str
+    tags: list[str] = Field(default_factory=list)              # normalized taxonomy tags
+    quote: Optional[str] = None
+    credibility: Optional[Literal["demonstrated", "claimed"]] = None
+
+
+class CollaborationProfile(BaseModel):
+    """Per-person collaboration profile — the matcher's primary input.
+
+    Tags are normalized onto the closed taxonomy at extraction time; `stage` is
+    one of taxonomy.STAGES (or None). See collaboration_matching_vertical.md §1.
+    """
+    building: Optional[str] = None
+    building_tags: list[str] = Field(default_factory=list)
+    offers: list[ProfileItem] = Field(default_factory=list)
+    needs: list[ProfileItem] = Field(default_factory=list)
+    interests: list[ProfileItem] = Field(default_factory=list)
+    seeking: list[ProfileItem] = Field(default_factory=list)
+    stage: Optional[str] = None
+
+
+# --- Rubric panel (secondary personality signals) ---
+
+class RubricItem(BaseModel):
+    """One scored item of a rubric (e.g. CO1). score in 1..5 or None; every
+    non-null score carries a verbatim evidence quote (instrument_registry_v0.md
+    universal rules)."""
+    id: str
+    score: Optional[int] = None
+    quote: Optional[str] = None
+
+
+class RubricScore(BaseModel):
+    """One rubric's aggregated result. `reported` is False when fewer than the
+    rubric's minimum items are scored — surfaced as "insufficient evidence",
+    a feature not a failure. `contradiction_flag` is progress-only (None in v1,
+    no bound observed source)."""
+    rubric: str
+    score: Optional[float] = None
+    band: Optional[str] = None                                 # "low" | "mixed" | "strong" | None
+    reported: bool = False
+    items: list[RubricItem] = Field(default_factory=list)
+    contradiction_flag: Optional[bool] = None
+
+
+class RubricPanel(BaseModel):
+    """The five frozen instruments (instrument_registry_v0.md)."""
+    coachability: RubricScore
+    agency: RubricScore
+    proactivity: RubricScore
+    goal_commitment: RubricScore
+    progress: RubricScore
 
 
 class TranscriptInput(Submission):
@@ -33,9 +96,23 @@ class TranscriptInput(Submission):
 
 
 class NovelOutput(BaseModel):
-    """Interviewer-facing digest for one interview."""
+    """Interviewer-facing digest for one interview.
+
+    New collaboration-matching fields land in S2 alongside the legacy
+    themes/ownership fields (kept for back-compat this step). S4 removes the
+    legacy fields once the rubric node replaces themes/ownership.
+    """
     submission_id: str
     interviewee_slug: str
+
+    # New (collaboration matching + rubric panel)
+    collaboration_profile: Optional[CollaborationProfile] = None
+    rubric_panel: Optional[RubricPanel] = None
+    rationale: dict[str, str] = Field(default_factory=dict)    # OUT-1, per-rubric one-liners
+    summary: str = ""                                          # OUT-2
+    bullets: list[str] = Field(default_factory=list)           # OUT-3
+
+    # Legacy (removed in S4)
     themes: list[str] = Field(default_factory=list)
     attribution_patterns: dict[str, float] = Field(default_factory=dict)
     suggested_next_questions: list[str] = Field(default_factory=list)
