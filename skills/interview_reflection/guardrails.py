@@ -50,6 +50,8 @@ from skills.interview_reflection.config import (
     DEFAULT_QUOTE_CAP,
     FIELD_QUOTE_CAPS,
     MIN_LEAKAGE_SUBSTRING_LENGTH,
+    QUOTE_FIELD_CAP,
+    QUOTE_FIELD_KEYS,
 )
 
 
@@ -124,10 +126,14 @@ class InterviewReflectionFilter:
         min_leakage_length: int = MIN_LEAKAGE_SUBSTRING_LENGTH,
         field_quote_caps: Optional[dict[str, int]] = None,
         default_quote_cap: int = DEFAULT_QUOTE_CAP,
+        quote_field_keys: frozenset[str] = QUOTE_FIELD_KEYS,
+        quote_field_cap: int = QUOTE_FIELD_CAP,
     ):
         self.cohort_people = {s.lower() for s in (cohort_people if cohort_people is not None else COHORT_PEOPLE_SLUGS)}
         self.field_quote_caps = field_quote_caps if field_quote_caps is not None else FIELD_QUOTE_CAPS
         self.default_quote_cap = default_quote_cap
+        self.quote_field_keys = quote_field_keys
+        self.quote_field_cap = quote_field_cap
         self.leakage_detector = LeakageDetector(min_length=min_leakage_length)
 
     # --- public ---
@@ -154,48 +160,54 @@ class InterviewReflectionFilter:
             inner = self._strip_long_quotes(inner)
             inner = self._redact_unknown_names(inner)
             outer["interviewee_output"] = inner
-        # else: nested dropped — evidence_quotes never leaves when share=False
+        # else: nested dropped — the interviewee view never leaves when share=False
 
-        # Final leakage scan over the serialised payload.
-        leakage = self.leakage_detector.check(str(outer), raw_transcripts)
-        if leakage:
-            outer = self._redact_leakage(outer, raw_transcripts)
-            outer["_leakage_warning"] = f"Redacted {len(leakage)} leaked substring(s)"
+        # Structural leakage scan. Designated quote fields are EXEMPT — a real
+        # evidence quote IS a transcript substring, and these are organizer-only.
+        # Every other string is scanned/redacted as before; the warning counts
+        # non-quote leaks only.
+        outer, n_leaks = self._scan_redact_leakage(outer, None, raw_transcripts)
+        if n_leaks:
+            outer["_leakage_warning"] = f"Redacted {n_leaks} leaked substring(s)"
 
         return outer
 
     def _filter_keys(self, payload: dict, allowed: set[str]) -> dict:
         return {k: v for k, v in payload.items() if k in allowed}
 
-    def _strip_long_quotes(self, payload: dict) -> dict:
-        cleaned = {}
-        for k, v in payload.items():
-            cap = self.field_quote_caps.get(k, self.default_quote_cap)
-            cleaned[k] = self._strip_value(v, cap)
-        return cleaned
+    # --- caps (key-aware) ---
 
-    def _strip_value(self, v, cap: int):
+    def _strip_long_quotes(self, payload: dict) -> dict:
+        return {k: self._strip_value(v, k) for k, v in payload.items()}
+
+    def _cap_for(self, key: Optional[str]) -> int:
+        if key in self.quote_field_keys:
+            return self.quote_field_cap
+        return self.field_quote_caps.get(key, self.default_quote_cap)
+
+    def _strip_value(self, v, key: Optional[str]):
         if isinstance(v, str):
-            return _REDACTED_QUOTE if len(v) > cap else v
+            return _REDACTED_QUOTE if len(v) > self._cap_for(key) else v
         if isinstance(v, list):
-            return [self._strip_value(x, cap) for x in v]
+            return [self._strip_value(x, key) for x in v]   # list items inherit the field key
         if isinstance(v, dict):
-            return {k: self._strip_value(x, cap) for k, x in v.items()}
+            return {k: self._strip_value(x, k) for k, x in v.items()}
         return v
 
-    def _redact_unknown_names(self, payload: dict) -> dict:
-        cleaned = {}
-        for k, v in payload.items():
-            cleaned[k] = self._redact_names_in(v)
-        return cleaned
+    # --- name redaction (key-aware: quote fields exempt) ---
 
-    def _redact_names_in(self, v):
+    def _redact_unknown_names(self, payload: dict) -> dict:
+        return {k: self._redact_names_in(v, k) for k, v in payload.items()}
+
+    def _redact_names_in(self, v, key: Optional[str]):
+        if key in self.quote_field_keys:
+            return v  # organizer-only quote — names left intact
         if isinstance(v, str):
             return _NAME_TOKEN_RE.sub(self._maybe_redact_name, v)
         if isinstance(v, list):
-            return [self._redact_names_in(x) for x in v]
+            return [self._redact_names_in(x, key) for x in v]
         if isinstance(v, dict):
-            return {k: self._redact_names_in(x) for k, x in v.items()}
+            return {k: self._redact_names_in(x, k) for k, x in v.items()}
         return v
 
     def _maybe_redact_name(self, m: re.Match) -> str:
@@ -206,17 +218,29 @@ class InterviewReflectionFilter:
             return token
         return _REDACTED_NAME
 
-    def _redact_leakage(self, payload: dict, raw_transcripts: list[str]) -> dict:
-        cleaned = {}
-        for k, v in payload.items():
-            cleaned[k] = self._redact_leakage_value(v, raw_transcripts)
-        return cleaned
+    # --- leakage scan/redact (key-aware: quote fields exempt) ---
 
-    def _redact_leakage_value(self, v, raw_transcripts: list[str]):
+    def _scan_redact_leakage(self, v, key: Optional[str], raw_transcripts: list[str]):
+        """Return (cleaned_value, n_leaks). Quote fields pass through untouched."""
+        if key in self.quote_field_keys:
+            return v, 0
         if isinstance(v, str):
-            return self.leakage_detector.redact(v, raw_transcripts)
+            n = len(self.leakage_detector.check(v, raw_transcripts))
+            if n:
+                return self.leakage_detector.redact(v, raw_transcripts), n
+            return v, 0
         if isinstance(v, list):
-            return [self._redact_leakage_value(x, raw_transcripts) for x in v]
+            out, total = [], 0
+            for x in v:
+                cx, n = self._scan_redact_leakage(x, key, raw_transcripts)
+                out.append(cx)
+                total += n
+            return out, total
         if isinstance(v, dict):
-            return {k: self._redact_leakage_value(x, raw_transcripts) for k, x in v.items()}
-        return v
+            out, total = {}, 0
+            for k, x in v.items():
+                cx, n = self._scan_redact_leakage(x, k, raw_transcripts)
+                out[k] = cx
+                total += n
+            return out, total
+        return v, 0

@@ -64,17 +64,11 @@ COMPOSE_MODEL: str = (
 ALLOWED_NOVEL_OUTPUT_KEYS: set[str] = {
     "submission_id",
     "interviewee_slug",
-    # Collaboration matching + rubric panel (S4+)
     "collaboration_profile",
     "rubric_panel",
     "rationale",
     "summary",
     "bullets",
-    # Legacy (emitted no more after S4; pruned from the whitelist in S6)
-    "themes",
-    "attribution_patterns",
-    "suggested_next_questions",
-    "session_summary",
 }
 
 ALLOWED_INTERVIEWEE_OUTPUT_KEYS: set[str] = {
@@ -85,23 +79,25 @@ ALLOWED_INTERVIEWEE_OUTPUT_KEYS: set[str] = {
     "evidence_quotes",
 }
 
-# Per-field length caps. Any string field exceeding its cap is assumed to be
-# a verbatim transcript slice and is redacted. Caps are tuned to the natural
-# length of each field:
-#   - themes:                    short noun phrases (3-8 words)  → ~120 chars
-#   - suggested_next_questions:  one-sentence prompts            → ~240 chars
-#   - ownership_prompts:         one-sentence gentle nudges      → ~240 chars
-#   - session_summary:           1-2 sentences anchored to goals → ~400 chars
-#   - evidence_quotes:           short transcript snippets       → ~300 chars
-#                                (only emitted when share_with_interviewee=True)
+# Length caps. A string longer than its cap is assumed to be an accidental
+# transcript dump and is redacted. With the matching vertical the real leakage
+# defense is the substring scan below; the cap is a coarse secondary guard, so a
+# single generous non-quote default suffices (3-5 sentence summaries, rationale
+# lines, and bullets all fit comfortably under it; a full transcript paragraph
+# does not).
+DEFAULT_QUOTE_CAP: int = 500
 FIELD_QUOTE_CAPS: dict[str, int] = {
-    "themes": 120,
-    "suggested_next_questions": 240,
-    "ownership_prompts": 240,
-    "session_summary": 400,
-    "evidence_quotes": 300,
+    "summary": 500,
 }
-DEFAULT_QUOTE_CAP: int = 240
+
+# Designated organizer-only evidence-quote fields. Values reached under one of
+# these dict keys are intentional verbatim transcript spans: they are EXEMPT
+# from the leakage redactor and name redaction (a quote may legitimately contain
+# a name), and capped only against a runaway (non-span) dump. Everything else
+# keeps full name redaction + leakage scanning. Raw FULL transcripts are still
+# never persisted — only short spans ride along as quotes.
+QUOTE_FIELD_KEYS: frozenset[str] = frozenset({"quote"})
+QUOTE_FIELD_CAP: int = 300
 
 # Legacy alias retained for any out-of-tree callers; not used by the filter.
 MAX_QUOTE_CHARS: int = DEFAULT_QUOTE_CAP

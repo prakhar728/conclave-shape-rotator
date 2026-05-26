@@ -95,46 +95,106 @@ def test_filter_drops_unknown_keys():
     assert keys <= ALLOWED_NOVEL_OUTPUT_KEYS | {"_leakage_warning"}
 
 
-def test_long_quote_in_novel_output_is_redacted():
-    # Long enough to exceed every per-field cap (themes=120, summary=400, etc.)
-    long_string = "I shipped this thing and the partner did not show up " * 10  # ~530 chars
+def test_long_runaway_string_in_summary_is_redacted():
+    # Long enough to exceed the non-quote cap (500) — an accidental dump.
+    long_string = "I shipped this thing and the partner did not show up " * 12  # ~640 chars
     f = InterviewReflectionFilter()
     out = f.apply(
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": [long_string],
-            "attribution_patterns": {"internal": 0.5, "external": 0.5},
-            "session_summary": long_string,
-            "suggested_next_questions": ["short ok"],
+            "summary": long_string,
+            "bullets": [long_string],
         }],
         raw_transcripts=[long_string],
     )
-    assert "[REDACTED LONG QUOTE]" in out[0]["themes"]
-    assert out[0]["session_summary"] == "[REDACTED LONG QUOTE]"
+    assert out[0]["summary"] == "[REDACTED LONG QUOTE]"
+    assert "[REDACTED LONG QUOTE]" in out[0]["bullets"]
 
 
-def test_per_field_quote_caps_allow_normal_session_summary():
-    """A 2-sentence session_summary must NOT be over-redacted as a long quote."""
+def test_normal_summary_not_over_redacted():
+    """A 2-sentence summary must NOT be over-redacted as a long quote."""
     summary = (
         "The interviewee owns the shipping miss and proposes a 90-minute "
         "checkpoint as a countermeasure. Outbound is the gap to monthly milestone."
-    )  # ~210 chars — over old 120 cap, under new 400 cap
-    assert len(summary) > 120
-    assert len(summary) < 400
+    )  # ~210 chars, well under the 500 cap
+    assert len(summary) < 500
     f = InterviewReflectionFilter()
     out = f.apply(
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": ["shipping miss"],
-            "attribution_patterns": {"internal": 0.8, "external": 0.2},
-            "session_summary": summary,
-            "suggested_next_questions": ["What's the next test?"],
+            "summary": summary,
         }],
         raw_transcripts=["unrelated transcript content"],
     )
-    assert out[0]["session_summary"] == summary
+    assert out[0]["summary"] == summary
+
+
+def test_evidence_quote_field_survives_leakage_and_cap():
+    """A verbatim transcript span under a `quote` key is organizer-only: it must
+    survive the leakage scan and the cap, while the SAME span in a non-quote
+    field (summary) is redacted as a leak."""
+    transcript = (
+        "INTERVIEWER: walk me through the week.\n"
+        "INTERVIEWEE: I spent two years doing contract security audits before this, "
+        "so smart-contract review is where I'm genuinely strong."
+    )
+    quote = "I spent two years doing contract security audits before this"
+    assert len(quote) >= 60  # long enough that the leakage scan would catch it
+    f = InterviewReflectionFilter()
+    out = f.apply(
+        [{
+            "submission_id": "s1",
+            "interviewee_slug": "leo",
+            "collaboration_profile": {
+                "offers": [{"text": "contract audits", "tags": ["security-audit"], "quote": quote}],
+            },
+            "summary": f"They noted: {quote}.",
+        }],
+        raw_transcripts=[transcript],
+    )
+    # quote field intact
+    assert out[0]["collaboration_profile"]["offers"][0]["quote"] == quote
+    # same span leaked into a non-quote field is redacted
+    assert quote not in out[0]["summary"]
+    assert "[REDACTED]" in out[0]["summary"]
+    assert out[0]["_leakage_warning"]
+
+
+def test_runaway_quote_field_is_capped():
+    """A quote longer than the quote cap (a non-span dump) is still redacted."""
+    f = InterviewReflectionFilter()
+    huge = "x " * 200  # ~400 chars > 300 quote cap
+    out = f.apply(
+        [{
+            "submission_id": "s1",
+            "interviewee_slug": "leo",
+            "collaboration_profile": {"offers": [{"text": "t", "tags": [], "quote": huge}]},
+        }],
+        raw_transcripts=[],
+    )
+    assert out[0]["collaboration_profile"]["offers"][0]["quote"] == "[REDACTED LONG QUOTE]"
+
+
+def test_name_inside_quote_preserved_outside_redacted():
+    """A non-cohort name survives inside a quote (organizer-only) but is redacted
+    in a non-quote field."""
+    f = InterviewReflectionFilter(cohort_people={"leo"})
+    out = f.apply(
+        [{
+            "submission_id": "s1",
+            "interviewee_slug": "leo",
+            "collaboration_profile": {
+                "needs": [{"text": "intro help", "tags": [], "quote": "I paired with Eddie all week"}],
+            },
+            "summary": "They paired with Eddie all week.",
+        }],
+        raw_transcripts=[],
+    )
+    assert out[0]["collaboration_profile"]["needs"][0]["quote"] == "I paired with Eddie all week"
+    assert "Eddie" not in out[0]["summary"]
+    assert "[REDACTED NAME]" in out[0]["summary"]
 
 
 def test_modal_verbs_at_sentence_start_not_redacted():
@@ -144,10 +204,8 @@ def test_modal_verbs_at_sentence_start_not_redacted():
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": ["shipping cadence"],
-            "attribution_patterns": {"internal": 0.8, "external": 0.2},
-            "session_summary": "Short.",
-            "suggested_next_questions": [
+            "summary": "Short.",
+            "bullets": [
                 "Can you elaborate on the cohort channel?",
                 "Could you describe the 90-minute checkpoint?",
                 "Would Leo change anything about the outbound cadence?",
@@ -157,26 +215,21 @@ def test_modal_verbs_at_sentence_start_not_redacted():
         }],
         raw_transcripts=[],
     )
-    for q in out[0]["suggested_next_questions"]:
-        assert "[REDACTED NAME]" not in q, f"false positive in: {q}"
+    for b in out[0]["bullets"]:
+        assert "[REDACTED NAME]" not in b, f"false positive in: {b}"
 
 
-def test_evidence_quotes_dropped_when_share_false():
+def test_interviewee_output_dropped_when_share_false():
     f = InterviewReflectionFilter()
     out = f.apply(
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": [],
-            "attribution_patterns": {"internal": 0.5, "external": 0.5},
-            "session_summary": "",
-            "suggested_next_questions": [],
+            "summary": "",
             "share_with_interviewee": False,
             "interviewee_output": {
                 "submission_id": "s1",
                 "interviewee_slug": "leo",
-                "themes": [],
-                "ownership_prompts": [],
                 "evidence_quotes": ["This is a quote we should NEVER see"],
             },
         }],
@@ -185,16 +238,14 @@ def test_evidence_quotes_dropped_when_share_false():
     assert "interviewee_output" not in out[0]
 
 
-def test_evidence_quotes_preserved_when_share_true():
+def test_interviewee_output_preserved_when_share_true():
+    """The interviewee view (the role-based seam) is filtered to its whitelist."""
     f = InterviewReflectionFilter()
     out = f.apply(
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": [],
-            "attribution_patterns": {"internal": 0.5, "external": 0.5},
-            "session_summary": "",
-            "suggested_next_questions": [],
+            "summary": "",
             "share_with_interviewee": True,
             "interviewee_output": {
                 "submission_id": "s1",
@@ -218,24 +269,22 @@ def test_unknown_names_are_redacted():
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": ["the work was done by Leo on time", "the demo was blocked by Eddie"],
-            "attribution_patterns": {"internal": 0.5, "external": 0.5},
             # Mid-sentence "Eddie" after "; " — should be redacted.
             # Mid-sentence "Leo" and "Mira" — cohort names, should pass.
-            "session_summary": "the team paired well with Leo and Mira; Eddie did not show up.",
-            "suggested_next_questions": [],
+            "summary": "the team paired well with Leo and Mira; Eddie did not show up.",
+            "bullets": ["the work was done by Leo on time", "the demo was blocked by Eddie"],
         }],
         raw_transcripts=[],
     )
-    summary = out[0]["session_summary"]
+    summary = out[0]["summary"]
     assert "Leo" in summary
     assert "Mira" in summary
     assert "Eddie" not in summary
     assert "[REDACTED NAME]" in summary
 
-    themes_joined = " | ".join(out[0]["themes"])
-    assert "Leo" in themes_joined
-    assert "Eddie" not in themes_joined
+    bullets_joined = " | ".join(out[0]["bullets"])
+    assert "Leo" in bullets_joined
+    assert "Eddie" not in bullets_joined
 
 
 def test_sentence_start_capitals_are_not_treated_as_names():
@@ -249,12 +298,9 @@ def test_sentence_start_capitals_are_not_treated_as_names():
         [{
             "submission_id": "s1",
             "interviewee_slug": "leo",
-            "themes": ["shipping cadence"],
-            "attribution_patterns": {"internal": 0.5, "external": 0.5},
-            "session_summary": "Outbound is the gap. Shipping is on track. Friday will be a stretch.",
-            "suggested_next_questions": [],
+            "summary": "Outbound is the gap. Shipping is on track. Friday will be a stretch.",
         }],
         raw_transcripts=[],
     )
-    summary = out[0]["session_summary"]
+    summary = out[0]["summary"]
     assert summary == "Outbound is the gap. Shipping is on track. Friday will be a stretch."
