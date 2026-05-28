@@ -253,6 +253,115 @@ def test_dedup_signals_keeps_first_occurrence():
 
 
 # ---------------------------------------------------------------------------
+# v4 — tightened entity-name normalisation (§6)
+# ---------------------------------------------------------------------------
+
+def test_dedup_entities_merges_flashbots_and_flash_bots():
+    """v4 §6 fix for the observed `Flashbots`/`Flash Bots` duplicate pair."""
+    out = _dedup_entities([
+        {"name": "Flashbots", "type": "org", "evidence": "Alex's affiliation"},
+        {"name": "Flash Bots", "type": "org", "evidence": "spelled with a space"},
+    ])
+    assert len(out) == 1
+    # First-occurrence name wins.
+    assert out[0].name == "Flashbots"
+    # Evidence merges across the spelling variants.
+    assert "Alex's affiliation" in out[0].evidence
+    assert "spelled with a space" in out[0].evidence
+
+
+def test_dedup_entities_strips_light_punctuation():
+    out = _dedup_entities([
+        {"name": "Dr. Strange", "type": "person", "evidence": "with period"},
+        {"name": "Dr Strange", "type": "person", "evidence": "without period"},
+    ])
+    assert len(out) == 1
+
+
+# ---------------------------------------------------------------------------
+# v4 — cohort_status post-process (§G7)
+# ---------------------------------------------------------------------------
+
+def test_stamp_cohort_status_marks_roster_member(monkeypatch):
+    """Person entities whose name resolves through MOCK_DIRECTORY → 'member'."""
+    from transcripts.enrich import _stamp_cohort_status
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {"shaw": "shaw-walters"})
+    out = _stamp_cohort_status([
+        Entity(name="Shaw", type="person"),
+    ])
+    assert out[0].cohort_status == "member"
+
+
+def test_stamp_cohort_status_marks_non_roster_external(monkeypatch):
+    """Person entities not in MOCK_DIRECTORY → 'external' (guests, mentions)."""
+    from transcripts.enrich import _stamp_cohort_status
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {"shaw": "shaw-walters"})
+    out = _stamp_cohort_status([
+        Entity(name="Kevin", type="person"),  # not in roster
+    ])
+    assert out[0].cohort_status == "external"
+
+
+def test_stamp_cohort_status_overrides_llm_emitted_value(monkeypatch):
+    """The post-process is authoritative — roster lookup wins over LLM hint."""
+    from transcripts.enrich import _stamp_cohort_status
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {"shaw": "shaw-walters"})
+    out = _stamp_cohort_status([
+        Entity(name="Shaw", type="person", cohort_status="external"),  # LLM was wrong
+    ])
+    assert out[0].cohort_status == "member"
+
+
+def test_stamp_cohort_status_leaves_non_person_alone(monkeypatch):
+    """cohort_status only applies to Person entities."""
+    from transcripts.enrich import _stamp_cohort_status
+    out = _stamp_cohort_status([
+        Entity(name="TDX", type="technology"),
+        Entity(name="Conclave", type="project"),
+        Entity(name="Phala", type="org"),
+        Entity(name="attestation", type="concept"),
+    ])
+    assert all(e.cohort_status is None for e in out)
+
+
+# ---------------------------------------------------------------------------
+# v4 — topics aggregation in _reduce (§G7)
+# ---------------------------------------------------------------------------
+
+def test_reduce_aggregates_and_dedups_topics():
+    """Topics from each partial concat → lowercase → dedup → capped at MAX_TOPICS."""
+    from transcripts.config import MAX_TOPICS
+    partials = [
+        {"summary": "s1", "topics": ["Attestation", "RAG"]},
+        {"summary": "s2", "topics": ["attestation", "context management"]},  # dup case
+        {"summary": "s3", "topics": ["GTM"]},
+    ]
+    fake = FakeLLM({"summary": "merged"})
+    derived = _reduce(partials, llm=fake, model=None)
+    # Dedup'd to lowercase, in first-seen order.
+    assert derived.topics == ["attestation", "rag", "context management", "gtm"]
+
+
+def test_reduce_caps_topics_at_max_topics():
+    from transcripts.config import MAX_TOPICS
+    partials = [{"summary": "s", "topics": [f"topic-{i}" for i in range(MAX_TOPICS + 5)]}]
+    fake = FakeLLM({"summary": "merged"})
+    derived = _reduce(partials, llm=fake, model=None)
+    assert len(derived.topics) == MAX_TOPICS
+
+
+def test_reduce_with_no_topics_returns_none():
+    """No topics anywhere → Derived.topics is None, not []."""
+    partials = [{"summary": "s", "signals": [], "entities": []}]
+    fake = FakeLLM({"summary": "merged"})
+    derived = _reduce(partials, llm=fake, model=None)
+    assert derived.topics is None
+
+
+# ---------------------------------------------------------------------------
 # enrich_pending — backfill pass + provider-error resilience
 # ---------------------------------------------------------------------------
 

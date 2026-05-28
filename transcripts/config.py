@@ -46,6 +46,10 @@ MAX_SIGNALS: int = 8
 #: Maximum number of entities to keep after the reduce step.
 MAX_ENTITIES: int = 30
 
+#: Maximum number of topics in `Derived.topics` after the reduce step. Topics
+#: are short theme tags (1–3 words) — 8 is plenty for a meeting card filter.
+MAX_TOPICS: int = 8
+
 
 # --- Paths -----------------------------------------------------------------
 

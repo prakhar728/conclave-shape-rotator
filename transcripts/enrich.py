@@ -22,9 +22,11 @@ from typing import Any, Optional
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+import re
+
 from transcripts import store
 from transcripts.chunk import chunk_segments
-from transcripts.config import MAX_ENTITIES, MAX_SIGNALS
+from transcripts.config import MAX_ENTITIES, MAX_SIGNALS, MAX_TOPICS
 from transcripts.llm import LLMOutputError, LLMUnavailable, invoke_json
 from transcripts.models import Derived, Entity, RawSegment, Session, Signal
 from transcripts.prompts import (
@@ -257,15 +259,24 @@ def _reduce(partials: list[dict], *, llm: Any, model: Optional[str]) -> Derived:
                 raw_signals.append(item)
     signals = _dedup_signals(raw_signals)[:MAX_SIGNALS]
 
-    # Entities: concat → dedup by normalized name → cap.
+    # Entities: concat → dedup by normalized name → cohort_status post-process → cap.
     raw_entities: list[dict] = []
     for p in partials:
         for item in p.get("entities") or []:
             if isinstance(item, dict):
                 raw_entities.append(item)
-    entities = _dedup_entities(raw_entities)[:MAX_ENTITIES]
+    entities = _stamp_cohort_status(_dedup_entities(raw_entities))[:MAX_ENTITIES]
 
-    return Derived(summary=summary, signals=signals, entities=entities, graph_nodes=None)
+    # v4: Topics — concat → normalize → dedup → cap.
+    raw_topics: list[str] = []
+    for p in partials:
+        for t in p.get("topics") or []:
+            if t and str(t).strip():
+                raw_topics.append(str(t).strip())
+    topics = _dedup_topics(raw_topics)[:MAX_TOPICS] or None
+
+    return Derived(summary=summary, signals=signals, entities=entities,
+                   topics=topics, graph_nodes=None)
 
 
 # ---------------------------------------------------------------------------
@@ -336,7 +347,11 @@ def _to_derived(data: dict) -> Derived:
         if topics_raw else None
     )
 
-    return Derived(summary=summary, signals=signals, entities=entities,
+    # v4: also stamp cohort_status on the single-shot path so 1-chunk sessions
+    # get the same dashboard chip treatment as multi-chunk ones.
+    entities_stamped = _stamp_cohort_status(entities)
+
+    return Derived(summary=summary, signals=signals, entities=entities_stamped,
                    topics=topics, graph_nodes=None)
 
 
@@ -388,11 +403,13 @@ def _dedup_signals(raw: list[dict]) -> list[Signal]:
 
 
 def _dedup_entities(raw: list[dict]) -> list[Entity]:
-    """Dedup by normalized name; join evidence strings on duplicates.
+    """Dedup by ``_normalize_entity_name`` (v4 — lowercase + whitespace
+    collapse + strip light punctuation + strip internal spaces).
 
-    v1 plumbs ``cohort_status`` and ``affiliation`` through the dedup —
-    the deterministic post-process that *populates* ``cohort_status`` from
-    MOCK_DIRECTORY lands in V4 along with the §6 normalization tightening.
+    Joins evidence strings on duplicates. Plumbs ``cohort_status`` and
+    ``affiliation`` through; the deterministic ``cohort_status``
+    post-process via ``_stamp_cohort_status`` runs AFTER this dedup
+    (called by ``_to_derived``/``_reduce``).
     """
     by_key: dict[str, dict] = {}
     order: list[str] = []
@@ -400,7 +417,7 @@ def _dedup_entities(raw: list[dict]) -> list[Entity]:
         name = str(item.get("name") or "").strip()
         if not name:
             continue
-        key = _normalize_for_dedup(name)
+        key = _normalize_entity_name(name)
         if key not in by_key:
             etype = str(item.get("type") or "concept").strip().lower()
             if etype not in _VALID_ENTITY_TYPES:
@@ -434,7 +451,79 @@ def _dedup_entities(raw: list[dict]) -> list[Entity]:
 
 
 def _normalize_for_dedup(s: str) -> str:
+    """Signal-text dedup key: lowercase + whitespace collapse.
+
+    Deliberately NOT applying the entity-name normalisation (strip-spaces +
+    strip-punct) — signal text is full sentences, not surface forms, so
+    aggressive normalisation over-merges.
+    """
     return " ".join(s.lower().split())
+
+
+# v4 §6: entity-name normalisation
+#
+# Catches the observed "Flashbots" / "Flash Bots" pair where the model
+# emitted two surface forms for the same entity. Spaces and light
+# punctuation are stripped; case-insensitive.
+#
+# Risk acknowledged in plan §6: "Sam I." → "sami" collides with "Sami".
+# The optional Levenshtein-1 merge that would also catch "Sam"/"Sami" is
+# gated behind STRICT_DEDUP=false and not enabled here.
+_ENTITY_PUNCT_RE = re.compile(r"[.,'\"]")
+
+
+def _normalize_entity_name(name: str) -> str:
+    """Tightened entity dedup key (v4 §6).
+
+    Lowercase → strip light punctuation → strip ALL whitespace (internal
+    and leading/trailing) so "Flash Bots" → "flashbots" merges with
+    "Flashbots".
+    """
+    n = name.lower().strip()
+    n = _ENTITY_PUNCT_RE.sub("", n)
+    return "".join(n.split())
+
+
+def _dedup_topics(raw: list[str]) -> list[str]:
+    """Topic dedup (v4 §G7): lowercase + whitespace collapse, order preserved."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for t in raw:
+        key = " ".join(str(t).lower().split())
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(key)
+    return out
+
+
+def _stamp_cohort_status(entities: list[Entity]) -> list[Entity]:
+    """Post-process: set ``cohort_status`` on every Person entity from
+    ``MOCK_DIRECTORY`` (v4 §G7).
+
+    Authoritative — overrides any LLM-emitted value because the roster
+    match is deterministic. Non-person entities pass through unchanged
+    (``cohort_status`` doesn't apply).
+
+    Lazy import of ``identity`` to avoid a circular dep at module load.
+    """
+    if not entities:
+        return entities
+    from transcripts.identity import MOCK_DIRECTORY, _normalize_name
+    out: list[Entity] = []
+    for e in entities:
+        if e.type != "person":
+            out.append(e)
+            continue
+        normalized = _normalize_name(e.name)
+        if not normalized:
+            new_status = "unknown"
+        elif normalized in MOCK_DIRECTORY:
+            new_status = "member"
+        else:
+            new_status = "external"
+        out.append(e.model_copy(update={"cohort_status": new_status}))
+    return out
 
 
 # ---------------------------------------------------------------------------
