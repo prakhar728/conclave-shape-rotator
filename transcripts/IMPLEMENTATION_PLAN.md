@@ -635,3 +635,271 @@ store/enrich/dashboard. Don't build them now — keep them addable.
   `ollama pull qwen2.5:14b-instruct` (Apple Silicon M-series handles 14B comfortably). Set
   `num_ctx` ≥ `CHUNK_MAX_TOKENS` so long transcripts don't silently truncate. Not a decision; a switch.
 ```
+
+---
+
+## v1 Improvements — Post-PoC
+
+> Minimal-change, maximum-impact lift to Phase 1 extraction quality, between the current PoC (commits up to `36e1feb`) and Phase 1.5 (permissions). Adds a per-team **context XML** for few-shot grounding, schema fixes (mostly additive; one breaking `Signal` field rename), a richer participant model, and a tightened prompt. No architectural reshuffle.
+>
+> **Companion docs:** `../METHODOLOGY_SURVEY.md` (literature), `../DECISION_INPUTS.md` (empirical inputs), `BUILD_PLAN.md` (strategy), this file (execution). `BUILD_PLAN.md` carries a parallel set of edits (architecture, compute model, list B, phases, connector roadmap, open questions) — applied in the same v1 cycle.
+
+### 1. Why v1 — the diagnosis
+
+The Phase 1 PoC ships end-to-end (parse → enrich → store → API → dashboard, C1-C11 done). It works as a demo. But signal quality is mediocre, and the diagnosis is **model-agnostic** — the four root causes below hold for any backend (local qwen-7B per `cf40f73`, hosted Gemma 3 27B per `36e1feb` — the current production default, or whatever lands in this slot next):
+
+- **Zero-shot prompt.** `prompts.py` asks for "3-8 signals" with no examples and no contrast. The model converges on the safe default (`kind=insight`) — observed in `office-hours-transcript.txt` and `project-intros-agents-day-3-transcript-may-21.txt` where nearly every extracted signal is `insight` despite obvious decisions and action items in the source.
+- **Generic entity taxonomy.** Current `Entity.type ∈ {person | project | concept | org}` has no `technology` bucket, so TDX / SGX / RATLS / Opus 4.0 / Whisper / Matrix all collapse to `concept`. The "concept" type becomes meaningless.
+- **No team priors.** The model has no anchor list of what projects, technologies, or topics this cohort actually works on, so it can't tell "EZTE" is a project worth canonicalizing, "Make OSI" needs the spelling fix, or "Flashbots" and "Flash Bots" are the same thing.
+- **Conflated participant roles.** `Signal.speakers` lumps "who spoke this turn" with "who the signal is about," and there's no record of who else was *listening* in the room. A 3-person panel with 30 audience members extracts the same as a 1-on-1 — we lose the participant graph.
+
+Observed in real enriched outputs at `enriched-output*/` (repo root, gitignored) — including the qwen baseline, the Gemma 6K and Gemma 12K runs.
+
+**Strategy.** v1 fixes all four cheaply: a per-team XML of priors + few-shot examples (§2), schema changes — mostly additive, one breaking rename plus a participants slot (§3), a tightened prompt (§4), tighter identity / dedup (§5–§6). Versioning + backfill (§7) lets us iterate. Verification (§8) is by side-by-side spot check across the existing `enriched-output*/` variants and an organizer walk-through — not formal eval — per the no-mass-annotation constraint in `../DECISION_INPUTS.md` §C and §H.
+
+**What's NOT in v1.** Vector store, FTS5, graph layer, bi-temporal facts, cross-meeting connections, real Google Meet / Zoom / calendar attendance connector — all Phase 2 or later. The bright line is per-meeting extraction quality (v1) vs. cross-meeting intelligence (Phase 2). v1 doesn't add a single SQL table; everything is additive JSON.
+
+### 2. The team-context XML — the load-bearing change
+
+The single most impactful change in v1: a per-team file giving the model domain priors and few-shot examples that it can't infer from a transcript alone. **For v1 the file is hand-authored as if it were exported from a future cohort-OS ingestion connector.** The connector itself is deferred (§9). The core pipeline doesn't care where the file came from; it reads it from a path.
+
+#### 2.1 What's in the file
+
+```xml
+<team_context>
+  <team>
+    <name>Shape Rotator Cohort</name>
+    <domain>confidential AI infrastructure</domain>
+  </team>
+
+  <known_projects>
+    <project name="Conclave" aliases="conclave">
+      Cohort context intelligence layer running in TEE.
+    </project>
+    <project name="Phala" aliases="phala network,phala">
+      Confidential compute network providing CVM (TEE) execution.
+    </project>
+    <project name="DStack" aliases="D-Stack,dstack">
+      Stack for running TDX workloads.
+    </project>
+    <!-- … -->
+  </known_projects>
+
+  <known_technologies>
+    <tech name="TDX" kind="standard">Intel Trust Domain Extensions</tech>
+    <tech name="SGX" kind="standard">Intel Software Guard Extensions</tech>
+    <tech name="TEE" kind="concept">Trusted Execution Environment</tech>
+    <tech name="RATLS" kind="protocol">Remote Attestation TLS</tech>
+    <tech name="MCP" kind="protocol">Model Context Protocol</tech>
+    <!-- … -->
+  </known_technologies>
+
+  <known_topics>
+    <topic>attestation</topic>
+    <topic>reproducible builds</topic>
+    <topic>context management</topic>
+    <topic>cohort programs</topic>
+    <!-- … -->
+  </known_topics>
+
+  <extraction_examples>
+    <example>
+      <chunk>
+[Hang] Yeah, we want to get rid of TPM.
+[Alex] OK, this also supports backwards compatibility for that.
+[Hang] Right, we should remove the TPM dependency from the GCP variant.
+      </chunk>
+      <expected>
+        {
+          "summary": "Team decided to remove TPM dependency from the GCP variant, with backwards compatibility preserved.",
+          "signals": [
+            {"kind": "decision",
+             "text": "Remove TPM dependency from the GCP variant",
+             "source_quote": "we should remove the TPM dependency from the GCP variant",
+             "said_by": ["Hang"],
+             "about_person": []}
+          ],
+          "entities": [
+            {"name": "TPM", "type": "technology", "evidence": "explicit removal target"},
+            {"name": "GCP", "type": "org", "evidence": "deployment target for the variant being modified"}
+          ],
+          "topics": ["attestation", "platform compatibility"]
+        }
+      </expected>
+    </example>
+    <!-- 2-3 more examples, varied in shape: one action_item, one open_question, one with a Speaker N anonymous label -->
+  </extraction_examples>
+
+  <style_guide>
+    <kind name="decision">A course of action the group agreed on. Past or present tense ("we decided", "let's go with").</kind>
+    <kind name="action_item">A concrete next step someone agreed to do. Often "I'll send", "you handle", "can you".</kind>
+    <kind name="open_question">A question raised in this chunk that is NOT answered within the same chunk.</kind>
+    <kind name="insight">A non-obvious observation or learning. Use sparingly — prefer a more specific kind when one fits.</kind>
+    <kind name="impactful_point">A consequential statement that doesn't fit decision/action/question but matters for prep. Use rarely.</kind>
+  </style_guide>
+
+  <open_world_note>
+    The lists above are NON-EXHAUSTIVE. New projects, technologies, people (including guests joining a single meeting), and topics WILL appear in transcripts and must be extracted faithfully even when not listed here. Treat the lists as ANCHORS for known entities, not as a closed vocabulary.
+  </open_world_note>
+</team_context>
+```
+
+#### 2.2 How it's consumed
+
+- **New module:** `transcripts/team_context.py` — loads the XML once at process start, renders it to a single string fragment for splicing into prompts.
+- **Path:** resolved from `CONCLAVE_TEAM_CONTEXT` env var. Default points to a worked example shipped at `transcripts/team_context.example.xml` (Shape-Rotator-cohort flavored) so the demo works out of the box.
+- **Splice point:** between the security data-injection guard and the JSON contract in both `SINGLE_SYSTEM` and `CHUNK_SYSTEM` in `transcripts/prompts.py`. Format is roughly what the model sees — adopters reading the XML can predict what's in the prompt. Transparency = adoption.
+- **Cached:** loaded once per process; `enrich_pending` doesn't re-read it per session.
+
+#### 2.3 Boundary commitment
+
+The XML is a **STATIC curation artifact** the adopter maintains. It is NOT a snapshot of dynamic cohort-OS graph state, NOT a feed of "who's working on what right now," NOT a pull from a live API. The bright line:
+
+- **OK to include** (and what the file is for): project names, technology vocab, topic taxonomy, style examples, open-world note. Facts the adopter explicitly hands the system as "this is what we work on."
+- **NOT OK to include** (would break portability): current standings, recent decisions made in OTHER meetings, live progress trackers, individual status. That's Phase 2 graph-traversal territory and leaking it back into per-meeting extraction couples Phase 1 and Phase 2 in a way that breaks the "works for every team" property.
+
+This boundary is what makes v1 portable: a new adopter writes their own XML, points `CONCLAVE_TEAM_CONTEXT` at it, and the system works. No code changes, no connector setup, no cohort-OS API binding.
+
+#### 2.4 Token budget
+
+For local **qwen2.5:7B** at `num_ctx=8192`:
+
+- Team context priming: ~800 tokens (lists + 3 examples + style guide)
+- System prompt + JSON contract: ~700 tokens
+- Total priming: ~1.5K tokens
+- Available for chunk: ~6K tokens
+
+Matches existing `CHUNK_MAX_TOKENS=6000` in `transcripts/config.py` — no chunk-budget retuning required on the local path.
+
+For hosted **Gemma 3 27B** at 54K context (the current production default): ample headroom — the 12K chunk experiment (see `enriched-output-gemma3-12k/`) ran cleanly even with the priming overhead. The chunk-budget decision (6K vs 12K hosted) is orthogonal to v1 and tracked separately.
+
+#### 2.5 Multi-pass alternative — considered, deferred
+
+Two-call extraction (entities first, signals second, with entities-from-pass-1 fed to pass-2) is a known pattern from Itext2KG (see `../METHODOLOGY_SURVEY.md` §5). For our config it would push effective chunk budget below 4K per turn (carrying both the original chunk AND the previous output), and quality would likely regress. Defer unless rich single-pass plateaus.
+
+### 3. Schema additions
+
+All storage additions are additive on the JSON column — no SQL migration. **One breaking source-level rename** (`Signal.speakers` → `Signal.said_by`) is budgeted as v1 implementation work; affects 3 test files plus `cli.render_markdown` and `web/app.js`. Bump `ENRICH_PROMPT_VERSION` (§7) so backfill picks up the new fields automatically via `enrich_pending`.
+
+| Field | Where | Why |
+|---|---|---|
+| `Entity.type ∈ {... , "technology"}` | `transcripts/models.py` `Entity.type` + `transcripts/enrich.py` `_VALID_ENTITY_TYPES` + prompt entity-type vocabulary | Recovers an entire entity class currently dumped into `concept`. Observed misclassifications: TDX, SGX, RATLS, Opus 4.0, Whisper, Matrix, MCP, ATLS all tagged `concept` in real outputs. |
+| `Signal.source_quote: Optional[str]` | `transcripts/models.py` `Signal` + prompt requirement + `transcripts/enrich.py` `_to_derived` + `_dedup_signals` | Verbatim quote (≤120 chars) anchoring the signal to a span in the chunk. **API-served alongside the rest of `derived`** — the TEE is the privacy boundary, not the API field surface; a 120-char highlight is no more sensitive than the model-paraphrased `signals[].text` already returned. The C10 raw-leak guard continues to protect `raw_diarization` (the FULL transcript blob) from leaking. Useful for: dashboard quote chips, dev spot-checks, future debugging. |
+| `Signal.said_by: list[str]` **replaces** `Signal.speakers` | `transcripts/models.py` + prompt + `_to_derived` + `_dedup_signals` + `cli.render_markdown` + `web/app.js` + 3 test files (`test_transcript_pipeline.py`, `test_enrich_mapreduce.py`, `test_api_transcripts.py`) | **Breaking rename.** Verbatim speaker labels at the turn the signal was extracted from — disambiguates "who literally spoke" from "who's the subject." Coordinated updates across tests, CLI digest, and dashboard chips are part of v1 implementation work; no DB migration because the rename is JSON-side. |
+| `Signal.about_person: list[str]` (NEW, default `[]`) | same set | Explicit subjects of the signal — may or may not be in the meeting. Captures *"Hang mentioned Tina to Andrew"* → `said_by=["Hang"]`, `about_person=["Tina","Andrew"]`. Tina may not be on the call at all; that's the point. |
+| `SessionMetadata.participants: Optional[list[str]]` (NEW, default `None`) | `transcripts/models.py` `SessionMetadata` + ingest-side stub | Explicit attendance list when known. v1 leaves this `None` (no connector yet); future Google Meet / Zoom / calendar connectors populate it. **Listeners are derived, not stored:** for any signal, `listeners = (participants or members) − said_by`. In v1 with no connector, "listeners" is an undercount because `members` only contains people who spoke; once attendance lands the count becomes accurate. The dashboard can show "spoken by Hang · listeners: 12 others · about: Tina, Andrew" without a per-signal field. See `BUILD_PLAN.md §6` for connector roadmap. |
+| `Entity.cohort_status: Literal["member", "external", "unknown"]` | `transcripts/models.py` `Entity` + `transcripts/enrich.py` `_dedup_entities` post-process (only for `type=person`) | Derived deterministically from `MOCK_DIRECTORY` (no LLM call) AFTER the dedup pass. `member` = matched roster; `external` = Person extracted but not in roster (Kevin, Alex from Flashbots, Hang); `unknown` = ambiguous parenthetical that didn't resolve. Powers dashboard chip styling (green / amber / grey) without runtime lookups. |
+| `Entity.affiliation: Optional[str]` | `transcripts/models.py` `Entity` + `transcripts/identity.py` parenthetical handling + `_dedup_entities` | Captured from parenthetical labels ("Alex (flashbots?)" → `affiliation="flashbots"`) when the base name doesn't resolve to the roster. Useful for the dashboard: "external — flashbots". |
+| `Derived.topics: Optional[list[str]]` | `transcripts/models.py` `Derived` + prompt extracts 3-6 per chunk + `transcripts/enrich._reduce` deterministic dedup (no LLM) | Separate from entities — topics are themes/areas ("attestation", "context management", "RAG"), entities are named things ("Phala", "Conclave"). Distinct in nature AND in dashboard role: topics filter the meeting list; entities populate chips on a meeting card. Reduce step: concat → lowercase → dedup → cap at 8. |
+
+**Schema seam preserved.** All additions live in the JSON `metadata` / `derived` columns. The Phase-1.5 `visibility` / `owner` fields (already present per §D) are unaffected. The bi-temporal / graph-edge shapes flagged in `../METHODOLOGY_SURVEY.md §9` for Phase 2 are NOT added in v1.
+
+### 4. Prompt overhaul
+
+The current `transcripts/prompts.py` has good security and language guards but is zero-shot and loose on counts. v1 tightens:
+
+- **Few-shot examples per signal kind.** 4 examples in `CHUNK_SYSTEM` covering decision / action_item / open_question / insight with the SAME speaker pattern so the model learns the CONTRAST, not just the labels. Comes from the `<extraction_examples>` block in the team context XML.
+- **Decision-led summary style example.** Replace the current generic "what was actually discussed and decided" guidance with one concrete contrast — show one good summary ("Team decided to switch from RATLS to ATLS; agreed to use EZTE for reproducible builds; open question on Kubernetes migration") vs. one bland summary ("The conversation covered various topics including X, Y, Z") and label the latter as the anti-pattern to avoid.
+- **Anti-hallucination rule.** Explicit: "If you are not confident about a person's name, term, or attribution, OMIT the entire item rather than guess. Never emit placeholder text like `<NAME>` or invent names not present in the transcript." Kills the observed `<NAME> (person)` placeholder in `dstack-hangout` and invented entities like `Tita (person)` and `near credits (person)`.
+- **Transcription-fix policy.** "Only correct an obvious transcription error (e.g. 'Optus 4.0' → 'Opus 4.0') if the corrected term appears in `<known_technologies>` or `<known_projects>`. Otherwise preserve the surface form as-is." Avoids the model freelancing corrections.
+- **One-line semantic definitions per entity type.** In the prompt:
+  - `person` — an individual human
+  - `project` — a named ongoing effort (codebase, product, initiative)
+  - `technology` — a tool / library / protocol / standard / framework
+  - `org` — a company or organization
+  - `concept` — anything else (use sparingly)
+- **Tighter signal-count guidance.** "Emit AT MOST 6 signals per chunk; prefer fewer high-quality ones over many bland ones."
+- **Source-quote requirement on every signal.** "Every signal MUST include a `source_quote` field containing the verbatim text span (≤120 chars) from the chunk that the signal is extracted from. If you can't point to a specific span, don't emit the signal."
+- **Said-by vs about-person rule.** "`said_by` is the verbatim speaker label(s) at the turn the signal is anchored to. `about_person` is filled ONLY when the signal is clearly about someone distinct from the speaker (an addressee, a mentioned person, a third party). For most signals `about_person` is `[]`."
+
+`REDUCE_SYSTEM` stays simple — summary-only merge as today, no change.
+
+### 5. Identity layer fixes
+
+`transcripts/identity.py` currently resolves only verbatim or simple-normalized matches against `MOCK_DIRECTORY`. Observed failures: Alex (flashbots?) → missed; Hang → missed; Wiki → missed; "Andrew Hang" (an invented merge of "Andrew Miller" + "Hang") → not caught downstream.
+
+Three fixes:
+
+- **Parenthetical handling.** `_normalize_name` strips parentheticals BEFORE roster lookup ("Alex (flashbots?)" → "Alex" → try roster). If no match on the base name, the parenthetical content is retained as an **affiliation hint** stored on the resulting Person entity (`affiliation="flashbots"`, see §3) so external mentions carry context.
+- **External-person tracking.** When the LLM extracts a Person whose name doesn't match the roster:
+  - Currently: silently kept in the entity list with no status.
+  - v1: stamped `cohort_status="external"` post-dedup. Affiliation preserved if available. The dashboard can render external mentions distinctly (grey chip vs. green).
+- **Speaker-label ↔ Person-entity linkage.** When a Person entity's name matches a session's speaker label (verbatim OR after `_normalize_name`), link them: populate `said_by` on signals where this Person appears as the subject, so the dashboard can chip-link "Alex said this" → speaker turn.
+
+`MOCK_DIRECTORY` loading from `external/shape-rotator-os/cohort-data/people/*.md` stays as-is (per §G2).
+
+### 6. Dedup tightening
+
+`transcripts/enrich.py` `_normalize_for_dedup` is currently `" ".join(s.lower().split())` — whitespace-collapse only. Observed failure: `Flashbots (org)` and `Flash Bots (org)` both stored, no merge.
+
+Extended normalization:
+
+- Lowercase + whitespace-collapse (current)
+- PLUS strip internal spaces ("Flash Bots" → "flashbots")
+- PLUS strip light punctuation (`.`, `,`, `'`, `"`)
+- Optional Levenshtein-1 merge gated behind `STRICT_DEDUP=false` env (off by default to avoid surprise merges of legitimate distinct entities like "Sam" / "Sami")
+
+When duplicates collapse, the `evidence` strings from all surface forms are joined with `"; "` (current behavior, kept).
+
+When `cohort_status` differs across duplicates (e.g., one says `external`, another says `unknown`), the more specific value wins (`member` > `external` > `unknown`).
+
+### 7. Versioning + backfill
+
+- **Bump `ENRICH_PROMPT_VERSION`** in `transcripts/prompts.py`: `"v1"` → `"v2"`. `enrich_pending` already keys backfill off this field via `store.list_pending(current_prompt_version)` (per §G7). All previously-enriched sessions are now considered stale and will be re-enriched on the next `enrich --all` or `enrich --pending` run.
+- **New `metadata.team_context_version: Optional[str]`** in `transcripts/models.py` `SessionMetadata`. Stamped by `enrich_session` with a short SHA-256 prefix (first 8 chars) of the loaded team_context XML body. Lets us A/B different XML versions across enrichment runs without conflating with prompt changes.
+- **Re-run.** Once v2 prompts + XML are in place: `transcripts.cli enrich --all` over the existing 12 stored sessions to populate v2 derived. (Or `enrich --pending` if `only_stale=True` is sufficient.)
+
+**v1 is model-agnostic; no further backend swap planned within v1.** Current production default is `redpill/google/gemma-3-27b-it` (per `36e1feb`); the local-dev default is `qwen2.5:7b` (per `cf40f73`). v1 improvements apply to both — the diagnosis is at the prompt + schema layer, not the model layer. If after re-enrichment quality still feels small on a specific backend, model swap is the next axis to explore, but ON the new prompt + schema baseline so we can measure the delta cleanly.
+
+### 8. Verification (no formal eval)
+
+Per the **no-mass-annotation constraint** (1-2 transcripts max for ground truth) from `../DECISION_INPUTS.md §C` and `§H`. v1 ships without an F1 eval set. Verification is side-by-side spot-check across the existing `enriched-output*/` variants and a walk-through with the cohort organizer.
+
+Current variants on disk:
+
+```
+enriched-output/                     ← qwen-7B local (baseline)
+enriched-output-gemma3/              ← Gemma 6K (default chunk budget)
+enriched-output-gemma3-12k/          ← Gemma 12K experiment
+```
+
+Procedure:
+
+1. **Re-enrich** all 12 stored sessions with `transcripts.cli enrich --all` on the current default backend (Gemma 3 27B via RedPill).
+2. **Dump** outputs to a new sibling folder, e.g. `enriched-output-gemma3-v1-<chunkbudget>/`, so the v1 run sits next to the prior variants for organizer-eyeball comparison.
+3. **Side-by-side compare** old-vs-new on 3 representative outputs (already in the variant folders):
+   - `dstack-hangout-alex-shaw-lsdan-andrew.txt` — small / 1-chunk / discussion
+   - `tee-dstack-easytee-phala-transcript.txt` — medium / 4-chunk / technical
+   - `project-intros-agents-day-3-transcript-may-21.txt` — large / 5-chunk / project intros
+4. **Pass/fail signals** (qualitative, all on the 3 above):
+   - Signal `kind` distribution diversifies — not every signal is `insight`. Concrete target: at least 2 distinct kinds per session.
+   - `Entity.type=technology` is populated for TDX / SGX / RATLS / similar tech terms.
+   - `Entity.cohort_status` is populated for every Person entity.
+   - No `<NAME>` placeholder, no invented entities like `Tita` or `near credits`.
+   - No `Flashbots`/`Flash Bots` (or other same-name-different-spacing) duplicate pairs in entities.
+   - `Signal.source_quote` is populated and anchors to actual transcript text.
+   - `Signal.said_by` vs `Signal.about_person` are visibly distinct on attribution-shifted signals — the `tee-dstack-easytee-phala` "Hang said it but it's about Alex+Kevin" case in particular.
+   - `Derived.topics` is populated with 2-6 sensible topic tags.
+5. **Dashboard visual check.** Re-run `transcripts.cli serve` and confirm the dashboard renders the new fields cleanly — cohort_status as chips, topics as tags, source_quote inline next to signals, said_by + about_person as distinct attribution lines.
+6. **Walk through with the cohort organizer.** Show the 3 reference transcripts (v1 alongside the prior variants) and confirm the schema additions look right on real cohort content.
+7. **Regression net.** `CONCLAVE_DISABLE_SCHEDULER=1 .venv/bin/python -m pytest -q --ignore=external --ignore=tests/test_interview_reflection_mcp.py` stays green. In particular:
+   - The (now updated) `tests/test_transcript_pipeline.py` 7 legacy tests still pass — the `speakers` → `said_by` rename propagates through them as part of v1.
+   - `tests/test_api_transcripts.py` raw-leak guard still passes — `raw_diarization` remains the only field stripped; `source_quote` is intentionally served.
+
+If all checks pass: v1 ships. The qwen-7B baseline run can be re-done in a follow-up to validate that v1 also lifts the lighter local model — useful for the model-agnostic claim but not gating.
+
+### 9. What's deliberately OUT of v1
+
+Reaffirms anti-scope from §L plus this round's specific deferrals:
+
+- **sqlite-vec, FTS5 retrieval, graph tables** — Phase 2. v1 doesn't add a single SQL table.
+- **Cross-meeting entity dedup, entity canonicalization across sessions** — Phase 2. v1 dedups WITHIN a session only.
+- **Real connector for `team_context.xml`.** v1 mocks the file. The future connector (cohort-OS export → XML) is a separate feature on the Connector roadmap (`BUILD_PLAN.md §6`).
+- **Real connector for meeting attendance.** `SessionMetadata.participants` is reserved in the schema but stays `None` in v1. The future Google Meet / Zoom / Matrix / calendar connector lives on the same connector roadmap and will populate it. Until then, listeners-by-default fall back to `members` (transcript-derived speakers only — an undercount when audience members didn't speak).
+- **The future evidence-store separation.** Forward-declared, NOT built in v1:
+  - **Shape:** raw-transcript references (and possibly `source_quote` if the privacy posture changes) move out of `Signal` (inline today) into a separate store, linked by unique ID. Probably a new `signal_evidence(signal_id, source_quote, raw_segment_ids[], retained_until)` table once we get there.
+  - **Time-bound retention:** evidence rows carry a `retained_until` timestamp; a sweeper expires them on a configurable window.
+  - **Migration plan, not a v1 design driver:** v1 schemas stay tight and inline.
+- **Per-meeting-type variation in `team_context.xml`.** v1 uses ONE XML for the team across all meeting types (project-intros, workshops, 1-on-1s, hangouts). Split only if quality differs sharply by type after §8 verification.
+- **Multi-pass extraction.** Deferred per §2.5.
+- **Auto-promotion of frequently-seen new entities into the XML.** Hand-maintained for v1. Auto-promotion risks teaching the model its own past mistakes; defer until there's a clean eval loop.
