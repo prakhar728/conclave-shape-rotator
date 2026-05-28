@@ -65,6 +65,10 @@ async def cors_middleware(request: Request, call_next):
 
 app.include_router(router)
 
+# C10: transcripts read API (derived-only projection; raw never serialized).
+from api.transcripts_routes import router as transcripts_router
+app.include_router(transcripts_router)
+
 # Mount the interview_reflection MCP plugin surface at /mcp (Step 9).
 # The MCP sub-app speaks Streamable HTTP — the same transport Claude Code /
 # Desktop / Cursor use in production. Auth is handled by middleware inside the
