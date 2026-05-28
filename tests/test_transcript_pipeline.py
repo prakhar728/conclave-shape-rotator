@@ -205,6 +205,79 @@ def test_store_roundtrip_and_listing(tmp_db):
     assert store.list_sessions(date_from="2026-06-01") == []  # out of range
 
 
+def test_new_metadata_fields_round_trip(tmp_db):
+    """C3: visibility/owner/model_id/enrich_prompt_version/chunk_count persist."""
+    session = parse_transcript(_voxterm_raw())
+    session.metadata.visibility = "owner-only"
+    session.metadata.owner = "person-shaw"
+    session.metadata.model_id = "qwen2.5:14b-instruct"
+    session.metadata.enrich_prompt_version = "v1"
+    session.metadata.chunk_count = 3
+    store.save_session(session)
+
+    loaded = store.load_session(session.session_id)
+    assert loaded.metadata.visibility == "owner-only"
+    assert loaded.metadata.owner == "person-shaw"
+    assert loaded.metadata.model_id == "qwen2.5:14b-instruct"
+    assert loaded.metadata.enrich_prompt_version == "v1"
+    assert loaded.metadata.chunk_count == 3
+
+
+def test_metadata_defaults_are_phase_1_friendly():
+    session = parse_transcript(_voxterm_raw())
+    # Default visibility = cohort-wide (everyone-sees-all until 1.5).
+    assert session.metadata.visibility == "cohort"
+    assert session.metadata.owner is None
+    assert session.metadata.model_id is None
+    assert session.metadata.enrich_prompt_version is None
+    assert session.metadata.chunk_count is None
+
+
+def test_list_pending_returns_only_derived_empty_or_stale(tmp_db):
+    s1 = parse_transcript(_voxterm_raw(), session_id="s1")
+    s2 = parse_transcript(_voxterm_raw(), session_id="s2")
+    store.save_session(s1)  # derived empty
+    enrich_session(s2, llm=FakeLLM({"summary": "done", "signals": [], "entities": []}))
+    s2.metadata.enrich_prompt_version = "v1"
+    store.save_session(s2)
+
+    # No version arg → only derived-empty pending.
+    pending_ids = {s.session_id for s in store.list_pending()}
+    assert pending_ids == {"s1"}
+
+    # Bump current prompt → s2 becomes stale and pending too.
+    pending_ids = {s.session_id for s in store.list_pending("v2")}
+    assert pending_ids == {"s1", "s2"}
+
+    # Same version → s2 not stale; only s1 pending.
+    pending_ids = {s.session_id for s in store.list_pending("v1")}
+    assert pending_ids == {"s1"}
+
+
+def test_replace_session_force_path_swaps_raw(tmp_db):
+    s1 = parse_transcript(_voxterm_raw(), session_id="r1")
+    store.save_session(s1)
+    assert len(store.load_session("r1").raw_diarization) == 4
+
+    # Simulate a corrected transcript with different raw — `save_session` is
+    # raw-write-once, so we'd be stuck on the old raw without `replace_session`.
+    s1b = parse_transcript(_voxterm_raw(), session_id="r1")
+    s1b.raw_diarization = s1b.raw_diarization[:1]
+    store.replace_session(s1b)
+
+    reloaded = store.load_session("r1")
+    assert len(reloaded.raw_diarization) == 1  # raw IS replaced under --force
+
+
+def test_set_visibility_updates_metadata(tmp_db):
+    s = parse_transcript(_voxterm_raw(), session_id="vis1")
+    store.save_session(s)
+    store.set_visibility("vis1", "owner-only", owner="person-shaw")
+    loaded = store.load_session("vis1")
+    assert loaded.metadata.visibility == "owner-only"
+    assert loaded.metadata.owner == "person-shaw"
+
+
 def test_raw_diarization_is_immutable_across_resave(tmp_db):
     session = parse_transcript(_voxterm_raw())
     store.save_session(session)

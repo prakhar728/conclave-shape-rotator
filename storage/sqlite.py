@@ -571,3 +571,12 @@ def update_transcript_metadata(session_id: str, metadata: dict) -> None:
         "UPDATE transcript_sessions SET metadata = ?, updated_at = ? WHERE session_id = ?",
         (json.dumps(_to_jsonable(metadata)), _now(), session_id),
     )
+
+
+def delete_transcript_session(session_id: str) -> None:
+    """Hard-delete a session row. Only the `--force` replace path uses this;
+    the normal write path is `save_transcript_session` (raw-write-once)."""
+    _get_conn().execute(
+        "DELETE FROM transcript_sessions WHERE session_id = ?",
+        (session_id,),
+    )

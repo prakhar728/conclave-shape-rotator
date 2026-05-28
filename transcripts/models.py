@@ -44,6 +44,14 @@ class SessionMetadata(BaseModel):
     location: Optional[str] = None
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
+    # --- Permissions (defined now, enforced at 1.5; live in JSON metadata
+    # so no SQL migration is required — see IMPLEMENTATION_PLAN.md §D). ---
+    visibility: str = "cohort"  # "cohort" | "owner-only"
+    owner: Optional[str] = None  # record_id of the owner
+    # --- Enrichment provenance (set by enrich.enrich_pending). ---
+    model_id: Optional[str] = None
+    enrich_prompt_version: Optional[str] = None
+    chunk_count: Optional[int] = None
 
 
 class Signal(BaseModel):
