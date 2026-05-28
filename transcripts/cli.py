@@ -23,6 +23,7 @@ from typing import Optional
 
 from transcripts import store
 from transcripts.enrich import enrich_session
+from transcripts.identity import MOCK_DIRECTORY, link_identities
 from transcripts.ingest import ingest_path
 from transcripts.models import Session
 from transcripts.parse import parse_transcript
@@ -173,6 +174,13 @@ def _cmd_llm_smoke(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_link(args: argparse.Namespace) -> int:
+    """Re-run mock identity linkage over stored sessions (no LLM)."""
+    changed = link_identities(session_id=args.session)
+    print(f"link: directory_size={len(MOCK_DIRECTORY)} sessions_updated={changed}")
+    return 0
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Legacy single-file quick run — parse + (optional) enrich + (optional) store."""
     raw_text = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
@@ -215,6 +223,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi.add_argument("--dry-run", action="store_true", help="parse but do not write to the store")
     pi.add_argument("--tags", help="comma-separated tags attached to every ingested session")
     pi.set_defaults(func=_cmd_ingest)
+
+    pln = sub.add_parser("link", help="re-run mock identity linkage over stored sessions")
+    pln.add_argument("--session", help="limit to a single session_id")
+    pln.set_defaults(func=_cmd_link)
 
     pl = sub.add_parser("llm", help="inspect or flip the LLM backend (nearai ⇄ ollama)")
     psub = pl.add_subparsers(dest="llm_cmd")

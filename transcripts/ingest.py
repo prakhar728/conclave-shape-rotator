@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 from transcripts import store, sources
+from transcripts.identity import resolve_speakers
 from transcripts.parse import build_session
 
 
@@ -60,6 +61,10 @@ def ingest_path(
                 report.failed.append((str(fp), "no segments parsed"))
                 continue
             session = build_session(ni, tags=tags)
+            # C5: mock identity linkage. Deterministic, no LLM, no network.
+            # Unresolved labels (Speaker N, guests not in the roster) stay out
+            # of resolved_speakers — see identity.resolve_speakers.
+            session.metadata.resolved_speakers = resolve_speakers(session)
             if dry_run:
                 report.stored += 1
                 continue
