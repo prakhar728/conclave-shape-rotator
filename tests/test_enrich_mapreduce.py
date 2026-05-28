@@ -327,6 +327,34 @@ def test_stamp_cohort_status_leaves_non_person_alone(monkeypatch):
     assert all(e.cohort_status is None for e in out)
 
 
+def test_stamp_extracts_affiliation_from_parenthetical(monkeypatch):
+    """v5: Person entities with parenthetical hints get affiliation set
+    even when not in MOCK_DIRECTORY."""
+    from transcripts.enrich import _stamp_cohort_status
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {"shaw": "shaw-walters"})
+    out = _stamp_cohort_status([
+        Entity(name="Alex (flashbots?)", type="person"),
+        Entity(name="Hunter (tinycloud)", type="person"),
+    ])
+    assert out[0].cohort_status == "external"
+    assert out[0].affiliation == "flashbots"
+    assert out[1].cohort_status == "external"
+    assert out[1].affiliation == "tinycloud"
+
+
+def test_stamp_preserves_llm_provided_affiliation(monkeypatch):
+    """When the LLM already supplies an affiliation (e.g. inferred from
+    team_context), the parenthetical fallback doesn't override it."""
+    from transcripts.enrich import _stamp_cohort_status
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {})
+    out = _stamp_cohort_status([
+        Entity(name="Alex (flashbots?)", type="person", affiliation="anthropic"),
+    ])
+    assert out[0].affiliation == "anthropic"  # LLM-provided wins
+
+
 # ---------------------------------------------------------------------------
 # v4 — topics aggregation in _reduce (§G7)
 # ---------------------------------------------------------------------------

@@ -41,6 +41,9 @@ log = logging.getLogger(__name__)
 
 
 _PARENS_RE = re.compile(r"\s*\([^)]*\)")
+#: Captures parenthetical CONTENT (without the parens), e.g. the "flashbots?"
+#: in "Alex (flashbots?)". Used by ``extract_affiliation``.
+_PAREN_CONTENT_RE = re.compile(r"\(([^)]+)\)")
 _ANON_RE = re.compile(r"^(speaker\s+\d+|unknown\s+speaker)$", re.IGNORECASE)
 _WS_RE = re.compile(r"\s+")
 
@@ -66,6 +69,28 @@ def _normalize_name(s: str) -> str:
     n = _PARENS_RE.sub(" ", s)
     n = _WS_RE.sub(" ", n).strip().lower()
     return n
+
+
+def extract_affiliation(name: str) -> Optional[str]:
+    """v5: pull parenthetical content out as an affiliation hint.
+
+    ``"Alex (flashbots?)"`` → ``"flashbots"``.
+    ``"Hunter (tinycloud)"`` → ``"tinycloud"``.
+    ``"Sevenfloor (Xiaoting)"`` → ``"Xiaoting"``.
+    ``"Shaw"`` → ``None``.
+
+    Strips a trailing ``?`` from the hint (these come from transcription
+    uncertainty: "Alex (flashbots?)" = transcriber guessing the affiliation).
+    Used by ``enrich._stamp_person_metadata`` when the LLM didn't already
+    populate ``Entity.affiliation``.
+    """
+    if not name:
+        return None
+    m = _PAREN_CONTENT_RE.search(name)
+    if not m:
+        return None
+    hint = m.group(1).strip().rstrip("?").strip()
+    return hint or None
 
 
 def _is_anonymous(name: str) -> bool:

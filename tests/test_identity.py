@@ -26,6 +26,7 @@ from transcripts.identity import (
     MOCK_DIRECTORY,
     _load_mock_directory,
     _normalize_name,
+    extract_affiliation,
     link_identities,
     resolve_identity,
     resolve_speakers,
@@ -60,6 +61,35 @@ def test_normalize_strips_parenthetical_lowercases_and_collapses_whitespace():
     assert _normalize_name("  Shaw   Walters  ") == "shaw walters"
     assert _normalize_name("Hunter (tinycloud)") == "hunter"
     assert _normalize_name("") == ""
+
+
+# ---------------------------------------------------------------------------
+# v5 — extract_affiliation
+# ---------------------------------------------------------------------------
+
+def test_extract_affiliation_pulls_parenthetical_content():
+    assert extract_affiliation("Alex (flashbots?)") == "flashbots"
+    assert extract_affiliation("Hunter (tinycloud)") == "tinycloud"
+    assert extract_affiliation("Sevenfloor (Xiaoting)") == "Xiaoting"
+
+
+def test_extract_affiliation_returns_none_without_parenthetical():
+    assert extract_affiliation("Shaw") is None
+    assert extract_affiliation("Shaw Walters") is None
+    assert extract_affiliation("") is None
+
+
+def test_extract_affiliation_strips_trailing_question_mark():
+    """`(flashbots?)` from a transcriber's hedge → still cleanly 'flashbots'."""
+    assert extract_affiliation("Alex (flashbots?)") == "flashbots"
+    assert extract_affiliation("Someone (idk?)") == "idk"
+
+
+def test_extract_affiliation_handles_empty_parens():
+    """Edge: empty or whitespace-only parens → None, not empty string."""
+    assert extract_affiliation("Foo ()") is None
+    assert extract_affiliation("Foo (   )") is None
+    assert extract_affiliation("Foo (?)") is None
 
 
 # ---------------------------------------------------------------------------

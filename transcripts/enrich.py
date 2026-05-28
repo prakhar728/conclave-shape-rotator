@@ -498,18 +498,27 @@ def _dedup_topics(raw: list[str]) -> list[str]:
 
 
 def _stamp_cohort_status(entities: list[Entity]) -> list[Entity]:
-    """Post-process: set ``cohort_status`` on every Person entity from
-    ``MOCK_DIRECTORY`` (v4 §G7).
+    """Post-process: set ``cohort_status`` AND ``affiliation`` on Person
+    entities (v4 §G7 + v5 §5).
 
-    Authoritative — overrides any LLM-emitted value because the roster
-    match is deterministic. Non-person entities pass through unchanged
-    (``cohort_status`` doesn't apply).
+    - ``cohort_status``: from ``MOCK_DIRECTORY`` roster lookup.
+      Authoritative — overrides any LLM-emitted value because the match
+      is deterministic.
+    - ``affiliation``: from parenthetical hint in the surface name
+      (``"Alex (flashbots?)"`` → ``"flashbots"``). Only filled when the
+      LLM didn't already provide one; preserves trust in adopter-supplied
+      team_context anchoring.
 
+    Non-person entities pass through unchanged (neither field applies).
     Lazy import of ``identity`` to avoid a circular dep at module load.
     """
     if not entities:
         return entities
-    from transcripts.identity import MOCK_DIRECTORY, _normalize_name
+    from transcripts.identity import (
+        MOCK_DIRECTORY,
+        _normalize_name,
+        extract_affiliation,
+    )
     out: list[Entity] = []
     for e in entities:
         if e.type != "person":
@@ -522,7 +531,13 @@ def _stamp_cohort_status(entities: list[Entity]) -> list[Entity]:
             new_status = "member"
         else:
             new_status = "external"
-        out.append(e.model_copy(update={"cohort_status": new_status}))
+        # Affiliation: keep LLM-provided value if present; else extract
+        # from a parenthetical in the surface name.
+        new_affiliation = e.affiliation or extract_affiliation(e.name)
+        out.append(e.model_copy(update={
+            "cohort_status": new_status,
+            "affiliation": new_affiliation,
+        }))
     return out
 
 
