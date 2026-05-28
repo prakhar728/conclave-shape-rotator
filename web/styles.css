@@ -200,9 +200,54 @@ a { color: inherit; }
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 11px;
   color: rgba(255,255,255,0.75);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid transparent;
 }
 .entity-type {
   color: rgba(255,255,255,0.35);
+}
+/* v1 cohort_status chip styling */
+.entity-member   { border-color: rgba(201,255,91,0.35); color: #c9ff5b; }
+.entity-external { border-color: rgba(255,138,91,0.35); color: #ff8a5b; }
+.entity-unknown  { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.55); }
+
+/* v1 signal additions: source_quote + about_person */
+.signal-quote {
+  font-family: var(--font-display, "Fraunces", serif);
+  font-style: italic;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+  margin: 4px 0 0;
+  padding-left: 8px;
+  border-left: 2px solid rgba(255,255,255,0.12);
+}
+.signal-attribution {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+  display: block;
+  margin-top: 3px;
+}
+.signal-saidby { color: rgba(255,255,255,0.55); }
+.signal-about  { color: rgba(255,138,91,0.75); }
+
+/* v1 topics */
+.topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  margin-top: -4px;
+}
+.topic {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: lowercase;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(102,217,232,0.08);
+  color: rgba(102,217,232,0.9);
 }
 
 /* footer */

@@ -91,12 +91,66 @@ def test_card_shape_has_expected_fields(client):
     _store_session("demo")
     r = client.get("/transcripts/sessions")
     card = r.json()[0]
+    # Pre-v1 fields.
     for k in ("session_id", "date", "source", "summary",
               "signal_count", "entity_count", "chunk_count",
               "model_id", "enrich_prompt_version", "resolved_speakers", "seed"):
         assert k in card
+    # v1 additions.
+    for k in ("topics", "participants", "participants_count", "team_context_version"):
+        assert k in card
     assert card["seed"] == card["session_id"]
     assert card["resolved_speakers"]["Shaw"]["record_id"] == "shaw-walters"
+
+
+def test_card_includes_v1_topics_and_participants(client):
+    """v1: topics + participants_count flow through to the list endpoint."""
+    sess = _store_session("demo")
+    # Patch in a v1 derived shape with topics + participants set.
+    sess.derived.topics = ["attestation", "rag"]
+    sess.metadata.participants = ["Shaw", "Alex (flashbots?)", "LSDan", "Andrew Forman"]
+    store.save_session(sess)
+    card = client.get("/transcripts/sessions").json()[0]
+    assert card["topics"] == ["attestation", "rag"]
+    assert card["participants_count"] == 4
+    assert "Alex (flashbots?)" in card["participants"]
+
+
+def test_detail_view_includes_v1_signal_fields(client):
+    """v1 schema additions surface through the detail endpoint:
+    said_by/about_person/source_quote on signals; cohort_status/affiliation
+    on entities; topics on the session card."""
+    sess = _store_session("demo")
+    # Add a v1-shaped signal + entity to the existing fixture.
+    from transcripts.models import Entity as _Entity, Signal as _Signal
+    sess.derived.signals = [_Signal(
+        kind="action_item",
+        text="LSDan will reach out to Andrew",
+        said_by=["LSDan"],
+        about_person=["Andrew"],
+        source_quote="Yeah I'll reach out to Andrew this week",
+    )]
+    sess.derived.entities = [
+        _Entity(name="Andrew", type="person", cohort_status="member"),
+        _Entity(name="Alex (flashbots?)", type="person",
+                cohort_status="external", affiliation="flashbots"),
+    ]
+    sess.derived.topics = ["coordination"]
+    store.save_session(sess)
+
+    view = client.get("/transcripts/sessions/demo").json()
+    sig = view["signals"][0]
+    assert sig["said_by"] == ["LSDan"]
+    assert sig["about_person"] == ["Andrew"]
+    assert sig["source_quote"].startswith("Yeah I'll reach out")
+    # No legacy "speakers" key on the response — the rename is observable.
+    assert "speakers" not in sig
+
+    ent_by_name = {e["name"]: e for e in view["entities"]}
+    assert ent_by_name["Andrew"]["cohort_status"] == "member"
+    assert ent_by_name["Alex (flashbots?)"]["cohort_status"] == "external"
+    assert ent_by_name["Alex (flashbots?)"]["affiliation"] == "flashbots"
+    assert view["topics"] == ["coordination"]
 
 
 def test_detail_returns_signals_and_entities(client):
@@ -131,6 +185,22 @@ def test_raw_diarization_never_appears_in_detail_response(client):
     body = client.get("/transcripts/sessions/demo").text
     assert "raw_diarization" not in body
     assert _SECRET_RAW_TEXT not in body, "raw segment text leaked through the detail endpoint"
+
+
+def test_source_quote_is_intentionally_served(client):
+    """v1: ``source_quote`` is API-served alongside the rest of derived.
+
+    The privacy posture treats the TEE as the boundary, not field-level
+    stripping. ``raw_diarization`` remains the only stripped field. A 120-
+    char quote chip per signal is no more sensitive than ``signals[].text``
+    which is already returned.
+    """
+    sess = _store_session("demo")
+    sess.derived.signals[0].source_quote = "DELIBERATELY-SERVED-QUOTE-12345"
+    store.save_session(sess)
+    body = client.get("/transcripts/sessions/demo").text
+    assert "source_quote" in body
+    assert "DELIBERATELY-SERVED-QUOTE-12345" in body
 
 
 def test_to_card_and_to_view_helpers_omit_raw_directly():

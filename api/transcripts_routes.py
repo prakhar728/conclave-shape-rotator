@@ -52,19 +52,30 @@ def to_card(session: Session) -> dict:
     so the card can render real names + record_ids from C5 immediately.
     ``seed`` is a stable per-session string the shape-ui glyph uses so the
     same session always renders the same shape.
+
+    v1/v2 additions (post-PoC): ``topics`` for meeting-list filtering,
+    ``participants_count`` for the audience-size pill, plus provenance
+    (``team_context_version``) so dashboard URLs can be deep-linked to a
+    specific v2 enrichment baseline.
     """
     d = session.derived
+    m = session.metadata
+    participants = m.participants if m.participants else None
     return {
         "session_id": session.session_id,
-        "date": session.metadata.date,
-        "source": session.metadata.source,
+        "date": m.date,
+        "source": m.source,
         "summary": d.summary,
         "signal_count": len(d.signals or []),
         "entity_count": len(d.entities or []),
-        "chunk_count": session.metadata.chunk_count,
-        "model_id": session.metadata.model_id,
-        "enrich_prompt_version": session.metadata.enrich_prompt_version,
-        "resolved_speakers": dict(session.metadata.resolved_speakers or {}),
+        "chunk_count": m.chunk_count,
+        "model_id": m.model_id,
+        "enrich_prompt_version": m.enrich_prompt_version,
+        "team_context_version": m.team_context_version,
+        "resolved_speakers": dict(m.resolved_speakers or {}),
+        "topics": list(d.topics or []),
+        "participants": list(participants) if participants else None,
+        "participants_count": len(participants) if participants else None,
         "seed": session.session_id,
     }
 
@@ -75,6 +86,14 @@ def to_view(session: Session) -> dict:
     Still no raw_diarization. The dashboard's per-session detail panel
     consumes this shape; signal/entity counts in ``to_card`` come straight
     from the lengths of these arrays so the two surfaces never disagree.
+
+    Signals carry the v1 schema additions (``said_by`` / ``about_person``
+    / ``source_quote``) and entities carry ``cohort_status`` /
+    ``affiliation`` — all surfaced via ``model_dump()`` so the JSON shape
+    tracks the model automatically. Raw transcript content
+    (``raw_diarization``) remains the only field stripped at the API
+    boundary; ``source_quote`` IS served (TEE is the privacy boundary,
+    not the API field surface — see IMPLEMENTATION_PLAN v1 §3).
     """
     card = to_card(session)
     d = session.derived

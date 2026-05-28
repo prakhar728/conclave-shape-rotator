@@ -52,6 +52,9 @@ function renderSpeakerChips(resolved) {
 }
 
 function renderSignal(s) {
+  // v1 renames: `speakers` → `said_by`; new `about_person` and `source_quote`.
+  const said_by = s.said_by || s.speakers || [];
+  const about = s.about_person || [];
   return el(
     "li",
     { class: "signal" },
@@ -60,8 +63,16 @@ function renderSignal(s) {
       "div",
       {},
       el("div", { class: "signal-text" }, s.text),
-      s.speakers && s.speakers.length
-        ? el("span", { class: "signal-speakers" }, s.speakers.join(" · "))
+      s.source_quote
+        ? el("blockquote", { class: "signal-quote", title: "verbatim source span" }, `“${s.source_quote}”`)
+        : null,
+      said_by.length || about.length
+        ? el(
+            "span",
+            { class: "signal-attribution" },
+            said_by.length ? el("span", { class: "signal-saidby" }, said_by.join(" · ")) : null,
+            about.length ? el("span", { class: "signal-about" }, ` → about: ${about.join(", ")}`) : null
+          )
         : null
     )
   );
@@ -69,18 +80,32 @@ function renderSignal(s) {
 
 function renderEntities(entities) {
   if (!entities || !entities.length) return null;
+  // v1 entity additions: cohort_status (member/external/unknown) drives chip
+  // styling; affiliation appears as a subtitle ("Alex (flashbots?)" → "ext · flashbots").
   return el(
     "div",
     { class: "entities" },
-    entities.map((e) =>
-      el(
+    entities.map((e) => {
+      const cs = e.cohort_status;
+      const chipClass = `entity${cs ? ` entity-${cs}` : ""}`;
+      const aff = e.affiliation ? ` · ${e.affiliation}` : "";
+      return el(
         "span",
-        { class: "entity", title: e.evidence || "" },
+        { class: chipClass, title: e.evidence || "" },
         e.name,
         " ",
-        el("span", { class: "entity-type" }, `(${e.type})`)
-      )
-    )
+        el("span", { class: "entity-type" }, `(${e.type}${aff})`)
+      );
+    })
+  );
+}
+
+function renderTopics(topics) {
+  if (!topics || !topics.length) return null;
+  return el(
+    "div",
+    { class: "topics" },
+    topics.map((t) => el("span", { class: "topic" }, t))
   );
 }
 
@@ -95,6 +120,7 @@ function renderCard(card, detail) {
     `source: ${card.source}`,
     card.chunk_count != null ? `${card.chunk_count} chunk${card.chunk_count === 1 ? "" : "s"}` : null,
     card.model_id ? `model: ${card.model_id}` : null,
+    card.participants_count ? `${card.participants_count} attendees` : null,
   ].filter(Boolean);
 
   const node = el(
@@ -112,6 +138,7 @@ function renderCard(card, detail) {
       glyph
     ),
     renderSpeakerChips(card.resolved_speakers),
+    renderTopics(card.topics),
     summary,
     detail && detail.signals && detail.signals.length
       ? el("ul", { class: "signals" }, detail.signals.map(renderSignal))
