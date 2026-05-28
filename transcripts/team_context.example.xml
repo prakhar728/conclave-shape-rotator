@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shape Rotator cohort team-context — example shipped with the repo so the
+  demo grounds out of the box. Adopters: COPY this file, edit for your team,
+  and point CONCLAVE_TEAM_CONTEXT at the copy. See transcripts/IMPLEMENTATION_PLAN.md
+  v1 §2 for the boundary commitment (what's OK to include vs. NOT OK).
+-->
+<team_context>
+  <team>
+    <name>Shape Rotator Cohort</name>
+    <domain>confidential AI infrastructure</domain>
+  </team>
+
+  <known_projects>
+    <project name="Conclave" aliases="conclave">
+      Cohort context intelligence layer running in TEE; this codebase.
+    </project>
+    <project name="Phala" aliases="phala network,phala">
+      Confidential compute network providing CVM (TEE) execution.
+    </project>
+    <project name="DStack" aliases="D-Stack,dstack">
+      Stack for running TDX workloads.
+    </project>
+    <project name="EZTE" aliases="easyTE,easy-te,easytv,EZTV">
+      Reproducible TEE image building, packaged as a Make-OSI-based SDK.
+    </project>
+    <project name="Make OSI" aliases="MK OSI,mkosi">
+      Tool for building custom Debian spin-off ISOs; used by EZTE.
+    </project>
+    <project name="Flashbox" aliases="flashbox">
+      Reproducible TEE infrastructure project from Flashbots.
+    </project>
+    <project name="VStack" aliases="v-stack">
+      VPN-stack TEE deployment platform.
+    </project>
+    <project name="tinycloud" aliases="tiny cloud">
+      Personalized data + identity surfacing app.
+    </project>
+    <project name="Elocute" aliases="elocute">
+      Articulation practice app with speech evaluation.
+    </project>
+    <project name="WikiGen" aliases="wikigen">
+      Biotech data-sharing platform for research collaboration.
+    </project>
+    <project name="Eliza OS" aliases="eliza,eliza os">
+      Agent operating system based on a Debian fork.
+    </project>
+  </known_projects>
+
+  <known_technologies>
+    <tech name="TDX" kind="standard">Intel Trust Domain Extensions</tech>
+    <tech name="SGX" kind="standard">Intel Software Guard Extensions</tech>
+    <tech name="TEE" kind="concept">Trusted Execution Environment</tech>
+    <tech name="CVM" kind="concept">Confidential Virtual Machine</tech>
+    <tech name="RATLS" kind="protocol">Remote Attestation TLS</tech>
+    <tech name="ATLS" kind="protocol">Attested TLS</tech>
+    <tech name="MCP" kind="protocol">Model Context Protocol</tech>
+    <tech name="TPM" kind="standard">Trusted Platform Module</tech>
+    <tech name="Tails" kind="tool">Privacy-focused Debian-based live OS</tech>
+    <tech name="Whisper" kind="tool">OpenAI's open-source speech-to-text model</tech>
+    <tech name="Opus 4.x" kind="tool">Anthropic Claude Opus model family</tech>
+    <tech name="Gemma 3" kind="tool">Google's open-weight LLM family</tech>
+    <tech name="qwen2.5" kind="tool">Alibaba's open-weight LLM family</tech>
+    <tech name="Matrix" kind="protocol">Decentralized chat / collaboration protocol</tech>
+    <tech name="llama.cpp" kind="tool">C++ runtime for running LLM models locally</tech>
+    <tech name="IPFS" kind="protocol">Interplanetary File System</tech>
+  </known_technologies>
+
+  <known_topics>
+    <topic>attestation</topic>
+    <topic>reproducible builds</topic>
+    <topic>context management</topic>
+    <topic>cohort programs</topic>
+    <topic>multi-agent systems</topic>
+    <topic>product-market fit</topic>
+    <topic>go-to-market</topic>
+    <topic>community building</topic>
+    <topic>autonomous DAOs</topic>
+    <topic>confidential compute</topic>
+    <topic>RAG</topic>
+    <topic>transcription</topic>
+  </known_topics>
+
+  <extraction_examples>
+    <example>
+      <chunk>
+[Hang] Yeah, we want to get rid of TPM.
+[Alex] OK, this also supports backwards compatibility for that.
+[Hang] Right, we should remove the TPM dependency from the GCP variant.
+      </chunk>
+      <expected>
+{
+  "summary": "Team decided to remove TPM dependency from the GCP variant, preserving backwards compatibility.",
+  "signals": [
+    {"kind": "decision",
+     "text": "Remove TPM dependency from the GCP variant",
+     "source_quote": "we should remove the TPM dependency from the GCP variant",
+     "said_by": ["Hang"],
+     "about_person": []}
+  ],
+  "entities": [
+    {"name": "TPM", "type": "technology", "evidence": "explicit removal target"},
+    {"name": "GCP", "type": "org", "evidence": "deployment target for the variant being modified"}
+  ],
+  "topics": ["attestation", "platform compatibility"]
+}
+      </expected>
+    </example>
+
+    <example>
+      <chunk>
+[Alex (flashbots?)] I will send you the link to the specific project. It's github.com/easy-te.
+[Shaw] easy te easy hyphen te,
+[Alex (flashbots?)] yeah, if you're forking tails, this will make your life a lot easier.
+      </chunk>
+      <expected>
+{
+  "summary": "Alex offered to share the EZTE GitHub link with Shaw for his Tails-forking work.",
+  "signals": [
+    {"kind": "action_item",
+     "text": "Alex will send Shaw the github.com/easy-te link",
+     "source_quote": "I will send you the link to the specific project. It's github.com/easy-te",
+     "said_by": ["Alex (flashbots?)"],
+     "about_person": ["Shaw"]}
+  ],
+  "entities": [
+    {"name": "EZTE", "type": "project", "evidence": "github.com/easy-te shared as the project link"},
+    {"name": "Tails", "type": "technology", "evidence": "Shaw is forking it"}
+  ],
+  "topics": ["reproducible builds"]
+}
+      </expected>
+    </example>
+
+    <example>
+      <chunk>
+[Speaker 1] How does the attestation flow work when you have multiple nested enclaves?
+[Speaker 2] That's a good question — I don't think we've figured out the nested case yet.
+      </chunk>
+      <expected>
+{
+  "summary": "Open question raised on attestation flow in nested-enclave deployments; no resolution within this chunk.",
+  "signals": [
+    {"kind": "open_question",
+     "text": "How does the attestation flow work for nested enclaves?",
+     "source_quote": "How does the attestation flow work when you have multiple nested enclaves?",
+     "said_by": ["Speaker 1"],
+     "about_person": []}
+  ],
+  "entities": [
+    {"name": "attestation", "type": "concept", "evidence": "central topic of the open question"}
+  ],
+  "topics": ["attestation"]
+}
+      </expected>
+    </example>
+
+    <example>
+      <chunk>
+[Shaw] Hang mentioned that Tina is working on the same problem space, you should sync with Andrew on it.
+[LSDan] Yeah I'll reach out to Andrew this week.
+      </chunk>
+      <expected>
+{
+  "summary": "LSDan agreed to reach out to Andrew about overlapping work that Tina is doing.",
+  "signals": [
+    {"kind": "action_item",
+     "text": "LSDan will reach out to Andrew to coordinate on Tina's overlapping work",
+     "source_quote": "Yeah I'll reach out to Andrew this week",
+     "said_by": ["LSDan"],
+     "about_person": ["Andrew", "Tina"]}
+  ],
+  "entities": [
+    {"name": "Tina", "type": "person", "evidence": "mentioned by Shaw as working on overlapping problem"},
+    {"name": "Andrew", "type": "person", "evidence": "named coordination target"}
+  ],
+  "topics": ["coordination"]
+}
+      </expected>
+    </example>
+  </extraction_examples>
+
+  <style_guide>
+    <kind name="decision">A course of action the group agreed on. Past or present tense ("we decided", "let's go with", "we should").</kind>
+    <kind name="action_item">A concrete next step someone agreed to do. Often "I'll send", "you handle", "can you", "let me reach out".</kind>
+    <kind name="open_question">A question raised in this chunk that is NOT answered within the same chunk.</kind>
+    <kind name="insight">A non-obvious observation or learning. Use sparingly — prefer a more specific kind when one fits.</kind>
+    <kind name="impactful_point">A consequential statement that doesn't fit decision/action/question but matters for prep. Use rarely.</kind>
+  </style_guide>
+
+  <open_world_note>
+    The lists above are NON-EXHAUSTIVE. New projects, technologies, people
+    (including guests joining a single meeting), and topics WILL appear in
+    transcripts and must be extracted faithfully even when not listed here.
+    Treat the lists as ANCHORS for known entities, not as a closed vocabulary.
+  </open_world_note>
+</team_context>
