@@ -18,7 +18,7 @@ import re
 import sys
 import urllib.error
 import urllib.request
-from pathlib import Path
+from pathlib import Path  # noqa: F401 — used by _cmd_eval
 from typing import Optional
 
 from transcripts import store
@@ -191,6 +191,35 @@ def _cmd_enrich(args: argparse.Namespace) -> int:
     return 0 if not report.failed else 1
 
 
+def _cmd_eval(args: argparse.Namespace) -> int:
+    """Score the current store against ``tests/fixtures/transcripts/*.expected.yaml``."""
+    from transcripts.eval import diff_baseline, run_eval, save_baseline
+
+    report = run_eval(enrich=not args.no_enrich)
+    print(f"eval: {len(report.sessions)} session(s) scored")
+    for s in report.sessions:
+        print(f"  {s.session_id}")
+        print(f"    signal_coverage={s.signal_coverage}  "
+              f"entity_p={s.entity_precision}  entity_r={s.entity_recall}  entity_f1={s.entity_f1}")
+    print()
+    print("aggregate:")
+    print(f"  avg_signal_coverage={report.avg_signal_coverage:.4f}")
+    print(f"  avg_entity_precision={report.avg_entity_precision:.4f}")
+    print(f"  avg_entity_recall={report.avg_entity_recall:.4f}")
+    print(f"  avg_entity_f1={report.avg_entity_f1:.4f}")
+
+    if args.baseline:
+        path = Path(args.baseline)
+        if args.save_baseline:
+            save_baseline(report, path)
+            print(f"\nbaseline saved → {path}")
+        elif path.exists():
+            print(f"\ndelta vs {path}:")
+            for k, v in diff_baseline(report, path).items():
+                print(f"  {k}: {v}")
+    return 0
+
+
 def _cmd_link(args: argparse.Namespace) -> int:
     """Re-run mock identity linkage over stored sessions (no LLM)."""
     changed = link_identities(session_id=args.session)
@@ -246,6 +275,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     pe.add_argument("--session", help="limit to a single session_id")
     pe.add_argument("--model", help="LLM model id override (default: backend default)")
     pe.set_defaults(func=_cmd_enrich)
+
+    pv = sub.add_parser("eval", help="score store sessions against golden YAML expectations")
+    pv.add_argument("--no-enrich", action="store_true", help="score current derived; skip re-enrichment")
+    pv.add_argument("--baseline", help="path to a baseline JSON for diff or save")
+    pv.add_argument("--save-baseline", action="store_true", help="write the current run as the baseline")
+    pv.set_defaults(func=_cmd_eval)
 
     pln = sub.add_parser("link", help="re-run mock identity linkage over stored sessions")
     pln.add_argument("--session", help="limit to a single session_id")
