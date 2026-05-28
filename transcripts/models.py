@@ -7,7 +7,7 @@ Layer-1 insert every `derived` field is None; enrichment fills `summary`,
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -52,23 +52,69 @@ class SessionMetadata(BaseModel):
     model_id: Optional[str] = None
     enrich_prompt_version: Optional[str] = None
     chunk_count: Optional[int] = None
+    # --- v1 ---
+    #: SHA-256 prefix (first 8 chars) of the loaded team_context XML body
+    #: at enrich time. Lets A/B-tests over the XML show up as a distinct
+    #: backfill key without conflating with prompt-version changes.
+    team_context_version: Optional[str] = None
+    #: Explicit attendance roster when known (Google Meet / Zoom / calendar
+    #: connector, future v1.1 work). When None, callers fall back to
+    #: deriving "who was in the room" from distinct speaker labels in
+    #: ``raw_diarization`` (an undercount when audience members never spoke).
+    #: Listeners per signal = (participants or members) − said_by.
+    participants: Optional[list[str]] = None
 
 
 class Signal(BaseModel):
-    """One notable moment extracted from the conversation."""
+    """One notable moment extracted from the conversation.
+
+    v1 splits the participant axis: ``said_by`` is the verbatim speaker
+    label(s) at the turn the signal was extracted from; ``about_person``
+    is the explicit subject(s) — which may or may not be in the room
+    (e.g. *"Hang mentioned Tina to Andrew"* → said_by=["Hang"],
+    about_person=["Tina", "Andrew"]; Tina may not be on the call at all).
+    """
 
     # decision | insight | impactful_point | action_item | open_question
     kind: str
     text: str
-    speakers: list[str] = Field(default_factory=list)  # diarized labels involved
+    #: Verbatim speaker label(s) at the turn this signal was anchored to.
+    #: Replaces the pre-v1 ``speakers`` field. (Old DB rows carry an unused
+    #: ``"speakers"`` key on the JSON until re-enriched under v2.)
+    said_by: list[str] = Field(default_factory=list)
+    #: Explicit subject(s) of the signal, distinct from the speaker.
+    #: Empty for most signals; populated only when the model is confident
+    #: about an addressee or a mentioned third party.
+    about_person: list[str] = Field(default_factory=list)
+    #: Verbatim quote (≤120 chars) anchoring the signal to a span in the
+    #: source chunk. API-served alongside the rest of ``derived``; the C10
+    #: raw-leak guard continues to protect ``raw_diarization`` (the bulk
+    #: transcript blob), not these per-signal highlights.
+    source_quote: Optional[str] = None
 
 
 class Entity(BaseModel):
-    """A person, project, or concept mentioned — a candidate graph-node match."""
+    """A person, project, technology, org, or concept mentioned — a candidate graph-node match."""
 
     name: str
-    type: str  # person | project | concept | org
+    #: person | project | technology | org | concept
+    #: "technology" was added in v1 to recover an entity class (TDX, SGX,
+    #: RATLS, Whisper, Matrix, MCP, ATLS…) previously dumped into "concept".
+    type: str
     evidence: str = ""  # short why-it-was-extracted note, for Layer-2 matching
+    # --- v1 ---
+    #: Roster status for Person entities. Set deterministically post-dedup
+    #: by ``enrich._dedup_entities`` (no LLM call). Stays ``None`` for
+    #: non-Person types where the concept doesn't apply.
+    #:   "member"   — name matched MOCK_DIRECTORY roster
+    #:   "external" — Person extracted but not in the roster (e.g. Alex (flashbots?))
+    #:   "unknown"  — ambiguous parenthetical that didn't normalize
+    cohort_status: Optional[Literal["member", "external", "unknown"]] = None
+    #: Parenthetical affiliation hint captured by identity.resolve_identity
+    #: ("Alex (flashbots?)" → affiliation="flashbots") when the base name
+    #: doesn't match the roster. Powers the dashboard's "external — flashbots"
+    #: chip subtitle.
+    affiliation: Optional[str] = None
 
 
 class Derived(BaseModel):
@@ -77,6 +123,11 @@ class Derived(BaseModel):
     summary: Optional[str] = None
     signals: Optional[list[Signal]] = None
     entities: Optional[list[Entity]] = None
+    #: v1: themes/areas (3-6 per chunk), deterministically dedup'd and
+    #: capped at 8 in the reduce step. Distinct from entities — topics are
+    #: themes ("attestation", "context management", "RAG"), entities are
+    #: named things ("Phala", "Conclave"). Filters the dashboard meeting list.
+    topics: Optional[list[str]] = None
     # Layer-2: ids of matched Shape Rotator OS nodes. Left None by Layer 1.
     graph_nodes: Optional[list[dict]] = None
 

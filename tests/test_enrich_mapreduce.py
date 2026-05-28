@@ -114,7 +114,7 @@ def test_single_chunk_uses_one_llm_call_and_stamps_provenance():
     sess = _short_session()
     fake = FakeLLM({
         "summary": "short meeting",
-        "signals": [{"kind": "decision", "text": "ship matching first", "speakers": ["Shaw"]}],
+        "signals": [{"kind": "decision", "text": "ship matching first", "said_by": ["Shaw"]}],
         "entities": [{"name": "matching", "type": "project", "evidence": "main topic"}],
     })
 
@@ -170,13 +170,13 @@ def test_multi_chunk_runs_map_then_reduce_with_summary_synth():
     for i in range(n_chunks):
         item = {
             "summary": f"chunk {i} talked about it",
-            "signals": [{"kind": "action_item", "text": f"do thing {i}", "speakers": [f"speaker_{i % 2}"]}],
+            "signals": [{"kind": "action_item", "text": f"do thing {i}", "said_by": [f"speaker_{i % 2}"]}],
             "entities": [{"name": "project-x" if i == 0 else f"thing-{i}",
                           "type": "project", "evidence": f"in chunk {i}"}],
         }
         # Sprinkle a duplicate decision into the first and last chunks.
         if i == 0 or i == n_chunks - 1:
-            item["signals"].append({"kind": "decision", "text": "ship matcher first", "speakers": []})
+            item["signals"].append({"kind": "decision", "text": "ship matcher first", "said_by": []})
         # Sprinkle a casing-only entity dup into the second chunk.
         if i == 1:
             item["entities"].append({"name": "Project-X", "type": "project", "evidence": "again in 1"})
@@ -209,7 +209,7 @@ def test_reduce_caps_signals_at_max_signals():
 
     partials = [
         {"summary": "s", "signals": [
-            {"kind": "decision", "text": f"sig-{i}-{j}", "speakers": []}
+            {"kind": "decision", "text": f"sig-{i}-{j}", "said_by": []}
             for j in range(MAX_SIGNALS)
         ]}
         for i in range(3)
@@ -245,8 +245,8 @@ def test_dedup_entities_merges_evidence_strings():
 
 def test_dedup_signals_keeps_first_occurrence():
     out = _dedup_signals([
-        {"kind": "decision", "text": "Ship the matcher", "speakers": ["s1"]},
-        {"kind": "decision", "text": "ship the matcher", "speakers": []},
+        {"kind": "decision", "text": "Ship the matcher", "said_by": ["s1"]},
+        {"kind": "decision", "text": "ship the matcher", "said_by": []},
         {"kind": "insight", "text": "different signal"},
     ])
     assert [s.text for s in out] == ["Ship the matcher", "different signal"]

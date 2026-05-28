@@ -41,7 +41,7 @@ log = logging.getLogger(__name__)
 
 
 _VALID_SIGNAL_KINDS = {"decision", "insight", "impactful_point", "action_item", "open_question"}
-_VALID_ENTITY_TYPES = {"person", "project", "concept", "org"}
+_VALID_ENTITY_TYPES = {"person", "project", "technology", "concept", "org"}
 
 
 # ---------------------------------------------------------------------------
@@ -243,8 +243,21 @@ def _to_derived(data: dict) -> Derived:
         kind = str(item.get("kind") or "insight").strip().lower()
         if kind not in _VALID_SIGNAL_KINDS:
             kind = "insight"
-        speakers = [str(s) for s in (item.get("speakers") or []) if s]
-        signals.append(Signal(kind=kind, text=text, speakers=speakers))
+        # v1: prefer the new `said_by` key, fall back to legacy `speakers`
+        # until V3 lands the prompt-contract change. Keeps the suite green
+        # against either shape during the v1→v2 transition.
+        said_by_raw = item.get("said_by")
+        if said_by_raw is None:
+            said_by_raw = item.get("speakers")
+        said_by = [str(s) for s in (said_by_raw or []) if s]
+        about_person = [str(s) for s in (item.get("about_person") or []) if s]
+        source_quote = item.get("source_quote")
+        source_quote = str(source_quote).strip() if source_quote else None
+        signals.append(Signal(
+            kind=kind, text=text,
+            said_by=said_by, about_person=about_person,
+            source_quote=source_quote or None,
+        ))
 
     entities: list[Entity] = []
     for item in data.get("entities") or []:
@@ -256,9 +269,38 @@ def _to_derived(data: dict) -> Derived:
         etype = str(item.get("type") or "concept").strip().lower()
         if etype not in _VALID_ENTITY_TYPES:
             etype = "concept"
-        entities.append(Entity(name=name, type=etype, evidence=str(item.get("evidence") or "").strip()))
+        entities.append(Entity(
+            name=name, type=etype,
+            evidence=str(item.get("evidence") or "").strip(),
+            cohort_status=_coerce_cohort_status(item.get("cohort_status")),
+            affiliation=(str(item.get("affiliation")).strip() or None)
+                        if item.get("affiliation") else None,
+        ))
 
-    return Derived(summary=summary, signals=signals, entities=entities, graph_nodes=None)
+    # v1: topics on the single-pass path. The reduce-step aggregation
+    # across multi-chunk partials lands in V4; for now, single-chunk
+    # enrichment can populate topics directly if the model emits them.
+    topics_raw = data.get("topics") or []
+    topics: Optional[list[str]] = (
+        [str(t).strip() for t in topics_raw if t and str(t).strip()]
+        if topics_raw else None
+    )
+
+    return Derived(summary=summary, signals=signals, entities=entities,
+                   topics=topics, graph_nodes=None)
+
+
+def _coerce_cohort_status(value: Any) -> Optional[str]:
+    """Defensive coercion of model-emitted ``cohort_status`` values.
+
+    V1 plumbs the field through; the real deterministic post-process
+    (matching against MOCK_DIRECTORY) lands in V4. Returns one of
+    ``{"member","external","unknown"}`` or ``None``.
+    """
+    if value is None:
+        return None
+    v = str(value).strip().lower()
+    return v if v in {"member", "external", "unknown"} else None
 
 
 # ---------------------------------------------------------------------------
@@ -279,13 +321,29 @@ def _dedup_signals(raw: list[dict]) -> list[Signal]:
         kind = str(item.get("kind") or "insight").strip().lower()
         if kind not in _VALID_SIGNAL_KINDS:
             kind = "insight"
-        speakers = [str(s) for s in (item.get("speakers") or []) if s]
-        out.append(Signal(kind=kind, text=text, speakers=speakers))
+        # v1: same backward-compat read pattern as ``_to_derived``.
+        said_by_raw = item.get("said_by")
+        if said_by_raw is None:
+            said_by_raw = item.get("speakers")
+        said_by = [str(s) for s in (said_by_raw or []) if s]
+        about_person = [str(s) for s in (item.get("about_person") or []) if s]
+        source_quote = item.get("source_quote")
+        source_quote = str(source_quote).strip() if source_quote else None
+        out.append(Signal(
+            kind=kind, text=text,
+            said_by=said_by, about_person=about_person,
+            source_quote=source_quote or None,
+        ))
     return out
 
 
 def _dedup_entities(raw: list[dict]) -> list[Entity]:
-    """Dedup by normalized name; join evidence strings on duplicates."""
+    """Dedup by normalized name; join evidence strings on duplicates.
+
+    v1 plumbs ``cohort_status`` and ``affiliation`` through the dedup —
+    the deterministic post-process that *populates* ``cohort_status`` from
+    MOCK_DIRECTORY lands in V4 along with the §6 normalization tightening.
+    """
     by_key: dict[str, dict] = {}
     order: list[str] = []
     for item in raw:
@@ -301,6 +359,9 @@ def _dedup_entities(raw: list[dict]) -> list[Entity]:
                 "name": name,
                 "type": etype,
                 "evidence": str(item.get("evidence") or "").strip(),
+                "cohort_status": _coerce_cohort_status(item.get("cohort_status")),
+                "affiliation": (str(item.get("affiliation")).strip() or None)
+                               if item.get("affiliation") else None,
             }
             order.append(key)
         else:
@@ -311,6 +372,14 @@ def _dedup_entities(raw: list[dict]) -> list[Entity]:
                     if by_key[key]["evidence"]
                     else extra
                 )
+            # cohort_status precedence on collapse: member > external > unknown > None.
+            _CS_RANK = {"member": 3, "external": 2, "unknown": 1, None: 0}
+            new_cs = _coerce_cohort_status(item.get("cohort_status"))
+            if _CS_RANK[new_cs] > _CS_RANK[by_key[key]["cohort_status"]]:
+                by_key[key]["cohort_status"] = new_cs
+            # affiliation: keep first non-empty.
+            if not by_key[key]["affiliation"] and item.get("affiliation"):
+                by_key[key]["affiliation"] = str(item.get("affiliation")).strip() or None
     return [Entity(**by_key[k]) for k in order]
 
 

@@ -47,8 +47,9 @@ def render_markdown(session: Session) -> str:
     if d.signals:
         lines.append("**Signals**")
         for s in d.signals:
-            who = f" ({', '.join(s.speakers)})" if s.speakers else ""
-            lines.append(f"- `{s.kind}`{who}: {s.text}")
+            who = f" ({', '.join(s.said_by)})" if s.said_by else ""
+            about = f" → about: {', '.join(s.about_person)}" if s.about_person else ""
+            lines.append(f"- `{s.kind}`{who}: {s.text}{about}")
         lines.append("")
     if d.entities:
         ents = ", ".join(f"{e.name} ({e.type})" for e in d.entities)

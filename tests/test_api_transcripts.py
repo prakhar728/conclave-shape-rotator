@@ -23,6 +23,7 @@ from api.transcripts_routes import router, to_card, to_view
 from storage import sqlite
 from transcripts import store
 from transcripts.models import Derived, Entity, RawSegment, Session, SessionMetadata, Signal
+from transcripts.prompts import ENRICH_PROMPT_VERSION
 
 
 @pytest.fixture()
@@ -54,12 +55,16 @@ def _store_session(sid: str = "demo", *, enriched: bool = True, date: str = "202
         date=date, source="otter",
         resolved_speakers={"Shaw": {"record_id": "shaw-walters", "name": "Shaw", "mock": True}},
         model_id="qwen2.5-conclave",
-        enrich_prompt_version="v1",
+        enrich_prompt_version=ENRICH_PROMPT_VERSION,
         chunk_count=1,
     )
     derived = Derived(
         summary="They locked the hybrid matcher.",
-        signals=[Signal(kind="decision", text="ship matcher", speakers=["Shaw"])],
+        signals=[Signal(
+            kind="decision", text="ship matcher",
+            said_by=["Shaw"], about_person=[],
+            source_quote="we should ship the matcher first",
+        )],
         entities=[Entity(name="matcher", type="project", evidence="main topic")],
     ) if enriched else Derived()
     sess = Session(session_id=sid, raw_diarization=raw, metadata=meta, derived=derived)

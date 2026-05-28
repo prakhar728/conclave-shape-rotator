@@ -10,6 +10,7 @@ from transcripts import store
 from transcripts.enrich import enrich_session, transcript_text
 from transcripts.models import PIPELINE_VERSION
 from transcripts.parse import build_session, parse_transcript
+from transcripts.prompts import ENRICH_PROMPT_VERSION
 from transcripts.sources import NormalizedInput, read_obj
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "voxterm_session.json")
@@ -149,12 +150,16 @@ def test_parse_transcript_routes_through_sources_read_obj():
 
 def test_enrich_fills_derived_with_typed_signals():
     session = parse_transcript(_voxterm_raw())
+    # v1: signal payload uses ``said_by`` (the post-rename canonical key).
+    # The backward-compat path that reads legacy ``speakers`` is exercised
+    # by real-model output during the v1→v2 transition (the v1 prompt
+    # still asks for "speakers"; V3 changes it).
     fake = FakeLLM({
         "summary": "The team locked the hybrid matcher as v1.",
         "signals": [
-            {"kind": "decision", "text": "Ship tag-based matching first.", "speakers": ["speaker_1"]},
-            {"kind": "action_item", "text": "Wire VoxTerm transcripts in by Friday.", "speakers": ["speaker_1"]},
-            {"kind": "bogus_kind", "text": "Coerced to insight.", "speakers": []},
+            {"kind": "decision", "text": "Ship tag-based matching first.", "said_by": ["speaker_1"]},
+            {"kind": "action_item", "text": "Wire VoxTerm transcripts in by Friday.", "said_by": ["speaker_1"]},
+            {"kind": "bogus_kind", "text": "Coerced to insight.", "said_by": []},
             {"kind": "insight", "text": ""},
         ],
         "entities": [
@@ -171,9 +176,16 @@ def test_enrich_fills_derived_with_typed_signals():
     # blank-text signal dropped; bad kind coerced to "insight".
     assert len(d.signals) == 3
     assert {s.kind for s in d.signals} == {"decision", "action_item", "insight"}
+    # speaker labels stay verbatim on the new said_by field.
+    assert d.signals[0].said_by == ["speaker_1"]
+    assert d.signals[0].about_person == []
+    assert d.signals[0].source_quote is None
     # blank-name entity dropped; bad type coerced to "concept".
     assert len(d.entities) == 2
     assert any(e.name == "VoxTerm" and e.type == "concept" for e in d.entities)
+    # v1 new entity fields default to None until V4 wires the post-process.
+    assert all(e.cohort_status is None for e in d.entities)
+    assert all(e.affiliation is None for e in d.entities)
 
     # The transcript was actually passed to the model, wrapped as data.
     human = fake.last_messages[-1].content
@@ -206,21 +218,29 @@ def test_store_roundtrip_and_listing(tmp_db):
 
 
 def test_new_metadata_fields_round_trip(tmp_db):
-    """C3: visibility/owner/model_id/enrich_prompt_version/chunk_count persist."""
+    """C3: visibility/owner/model_id/enrich_prompt_version/chunk_count persist.
+
+    v1: also exercises the new ``team_context_version`` and ``participants``
+    fields added under §3.
+    """
     session = parse_transcript(_voxterm_raw())
     session.metadata.visibility = "owner-only"
     session.metadata.owner = "person-shaw"
     session.metadata.model_id = "qwen2.5:14b-instruct"
-    session.metadata.enrich_prompt_version = "v1"
+    session.metadata.enrich_prompt_version = ENRICH_PROMPT_VERSION
     session.metadata.chunk_count = 3
+    session.metadata.team_context_version = "abc12345"
+    session.metadata.participants = ["Shaw", "Alex (flashbots?)", "LSDan"]
     store.save_session(session)
 
     loaded = store.load_session(session.session_id)
     assert loaded.metadata.visibility == "owner-only"
     assert loaded.metadata.owner == "person-shaw"
     assert loaded.metadata.model_id == "qwen2.5:14b-instruct"
-    assert loaded.metadata.enrich_prompt_version == "v1"
+    assert loaded.metadata.enrich_prompt_version == ENRICH_PROMPT_VERSION
     assert loaded.metadata.chunk_count == 3
+    assert loaded.metadata.team_context_version == "abc12345"
+    assert loaded.metadata.participants == ["Shaw", "Alex (flashbots?)", "LSDan"]
 
 
 def test_metadata_defaults_are_phase_1_friendly():
@@ -231,14 +251,22 @@ def test_metadata_defaults_are_phase_1_friendly():
     assert session.metadata.model_id is None
     assert session.metadata.enrich_prompt_version is None
     assert session.metadata.chunk_count is None
+    # v1 new metadata fields default to None (no connector yet).
+    assert session.metadata.team_context_version is None
+    assert session.metadata.participants is None
 
 
 def test_list_pending_returns_only_derived_empty_or_stale(tmp_db):
+    """Uses internal sentinels for stored / "newer" / "current" versions so
+    bumping ``ENRICH_PROMPT_VERSION`` doesn't shift the test's intent."""
+    _STORED_VERSION = "test-stored-version"
+    _NEWER_VERSION = "test-newer-version"
+
     s1 = parse_transcript(_voxterm_raw(), session_id="s1")
     s2 = parse_transcript(_voxterm_raw(), session_id="s2")
     store.save_session(s1)  # derived empty
     enrich_session(s2, llm=FakeLLM({"summary": "done", "signals": [], "entities": []}))
-    s2.metadata.enrich_prompt_version = "v1"
+    s2.metadata.enrich_prompt_version = _STORED_VERSION
     store.save_session(s2)
 
     # No version arg → only derived-empty pending.
@@ -246,11 +274,11 @@ def test_list_pending_returns_only_derived_empty_or_stale(tmp_db):
     assert pending_ids == {"s1"}
 
     # Bump current prompt → s2 becomes stale and pending too.
-    pending_ids = {s.session_id for s in store.list_pending("v2")}
+    pending_ids = {s.session_id for s in store.list_pending(_NEWER_VERSION)}
     assert pending_ids == {"s1", "s2"}
 
     # Same version → s2 not stale; only s1 pending.
-    pending_ids = {s.session_id for s in store.list_pending("v1")}
+    pending_ids = {s.session_id for s in store.list_pending(_STORED_VERSION)}
     assert pending_ids == {"s1"}
 
 
