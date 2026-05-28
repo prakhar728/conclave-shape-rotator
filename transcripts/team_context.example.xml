@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Shape Rotator cohort team-context — example shipped with the repo so the
-  demo grounds out of the box. Adopters: COPY this file, edit for your team,
-  and point CONCLAVE_TEAM_CONTEXT at the copy. See transcripts/IMPLEMENTATION_PLAN.md
-  v1 §2 for the boundary commitment (what's OK to include vs. NOT OK).
+  Shape Rotator cohort team-context — compiled from external/shape-rotator-os/cohort-data.
+  Regenerate with /tmp/build_team_context_from_cohort.py when the cohort roster changes.
+  Adopters: COPY this file, edit for your team, point CONCLAVE_TEAM_CONTEXT at the copy.
+  See transcripts/IMPLEMENTATION_PLAN.md v1 §2 for the boundary commitment.
 -->
 <team_context>
   <team>
@@ -12,38 +12,83 @@
   </team>
 
   <known_projects>
-    <project name="Conclave" aliases="conclave">
-      Cohort context intelligence layer running in TEE; this codebase.
+    <project name="Abra">
+      formal verification · dstack TEE Postgres
     </project>
-    <project name="Phala" aliases="phala network,phala">
-      Confidential compute network providing CVM (TEE) execution.
+    <project name="Bitrouter">
+      P2P LLM router
     </project>
-    <project name="DStack" aliases="D-Stack,dstack">
-      Stack for running TDX workloads.
+    <project name="Conclave">
+      NDAI framework · skills runtime
     </project>
-    <project name="EZTE" aliases="easyTE,easy-te,easytv,EZTV">
-      Reproducible TEE image building, packaged as a Make-OSI-based SDK.
+    <project name="Contexto">
+      agent context engine
     </project>
-    <project name="Make OSI" aliases="MK OSI,mkosi">
-      Tool for building custom Debian spin-off ISOs; used by EZTE.
+    <project name="Crossroads">
+      Liquefaction-built wallet
     </project>
-    <project name="Flashbox" aliases="flashbox">
-      Reproducible TEE infrastructure project from Flashbots.
+    <project name="Daedalus">
+      prediction market microstructure research
     </project>
-    <project name="VStack" aliases="v-stack">
-      VPN-stack TEE deployment platform.
+    <project name="DCNet">
+      dining-cryptographer-style anonymity network
     </project>
-    <project name="tinycloud" aliases="tiny cloud">
-      Personalized data + identity surfacing app.
+    <project name="DealProof">
+      TEE · PQ · dual-agent contracts
     </project>
-    <project name="Elocute" aliases="elocute">
-      Articulation practice app with speech evaluation.
+    <project name="DealProof">
+      TEE · PQ · dual-agent contracts
     </project>
-    <project name="WikiGen" aliases="wikigen">
-      Biotech data-sharing platform for research collaboration.
+    <project name="elizaOS">
+      agentic fullstack operating system · local-first AI agents
     </project>
-    <project name="Eliza OS" aliases="eliza,eliza os">
-      Agent operating system based on a Debian fork.
+    <project name="Elocute">
+      AI speaking practice · solo reps with scored feedback
+    </project>
+    <project name="Enclave">
+      TEE-enabled medical data sharing
+    </project>
+    <project name="Etherea">
+      generative live-stage system
+    </project>
+    <project name="Feedling">
+      information-diet interventions for short-form video · TEE-delegated watch history
+    </project>
+    <project name="JJHub">
+      agentic coding platform
+    </project>
+    <project name="Pramaana">
+      lattice / PQ crypto, ZK proofs
+    </project>
+    <project name="Prova">
+      healthcare AI agents · EHR pilot
+    </project>
+    <project name="searxng-wth-frnds">
+      LAN-first peer search daemon
+    </project>
+    <project name="Shake">
+      Shake is a social network app that connects people when they shake their phones together.
+    </project>
+    <project name="SignalStack">
+      TEE + LLM into Signal
+    </project>
+    <project name="TeeSQL">
+      TEE Postgres on dstack
+    </project>
+    <project name="Teleport Router" aliases="teleport-router">
+      cross-network routing
+    </project>
+    <project name="Tinycloud">
+      user-owned cloud, dstack TEEs
+    </project>
+    <project name="Trustless TEE" aliases="trustless-tee">
+      trustless trusted-execution
+    </project>
+    <project name="TvEE RL" aliases="tvee-rl">
+      attested reinforcement learning workflows
+    </project>
+    <project name="WikiGen">
+      bio-eng cryptography · curation
     </project>
   </known_projects>
 
@@ -56,7 +101,11 @@
     <tech name="ATLS" kind="protocol">Attested TLS</tech>
     <tech name="MCP" kind="protocol">Model Context Protocol</tech>
     <tech name="TPM" kind="standard">Trusted Platform Module</tech>
+    <tech name="KMS" kind="concept">Key Management Service</tech>
+    <tech name="compose hash" kind="concept">DStack's content-addressed code identifier</tech>
+    <tech name="app ID" kind="concept">DStack's workload identifier (alternative to compose hash)</tech>
     <tech name="Tails" kind="tool">Privacy-focused Debian-based live OS</tech>
+    <tech name="Debian" kind="tool">Linux distribution base for several cohort projects</tech>
     <tech name="Whisper" kind="tool">OpenAI's open-source speech-to-text model</tech>
     <tech name="Opus 4.x" kind="tool">Anthropic Claude Opus model family</tech>
     <tech name="Gemma 3" kind="tool">Google's open-weight LLM family</tech>
@@ -64,6 +113,14 @@
     <tech name="Matrix" kind="protocol">Decentralized chat / collaboration protocol</tech>
     <tech name="llama.cpp" kind="tool">C++ runtime for running LLM models locally</tech>
     <tech name="IPFS" kind="protocol">Interplanetary File System</tech>
+    <tech name="LangGraph" kind="tool">LangChain's graph orchestration library</tech>
+    <tech name="Phala" kind="tool">Confidential compute network providing CVM execution</tech>
+    <tech name="Base Sepolia" kind="tool">Base L2 testnet</tech>
+    <tech name="Ethereum testnet" kind="tool">Ethereum's test network</tech>
+    <tech name="Otter.ai" kind="tool">Speech-to-text and transcription service</tech>
+    <tech name="NDAI" kind="concept">Network of Decentralized AI Agreements</tech>
+    <tech name="PQ crypto" kind="concept">Post-quantum cryptography</tech>
+    <tech name="ZK proofs" kind="concept">Zero-knowledge proofs</tech>
   </known_technologies>
 
   <known_topics>
@@ -79,22 +136,28 @@
     <topic>confidential compute</topic>
     <topic>RAG</topic>
     <topic>transcription</topic>
+    <topic>TEE Postgres</topic>
+    <topic>agent coordination</topic>
+    <topic>service mesh</topic>
+    <topic>deployment</topic>
+    <topic>cross-chain</topic>
+    <topic>remote attestation</topic>
+    <topic>data sharing</topic>
+    <topic>speaking practice</topic>
+    <topic>human routing</topic>
+    <topic>agentic coding + memory infrastructure</topic>
+    <topic>agent runtime</topic>
+    <topic>attestable LLM agents inside TEEs</topic>
+    <topic>data procurement + attestation</topic>
+    <topic>crypto / identity research</topic>
+    <topic>dstack / TEE-postgres</topic>
+    <topic>NDAI lineage</topic>
+    <topic>voice-to-output generative stage</topic>
+    <topic>healthcare / regulated</topic>
   </known_topics>
 
-  <!--
-    Extraction examples — drawn from REAL cohort transcripts at
-    tests/fixtures/transcripts/. Each pairs a verbatim chunk with the
-    expected JSON output. Covers the patterns we observed bleeding in the
-    PoC: decisions defaulting to "insight", missing technology entities,
-    confused said_by vs about_person, weak open-question detection,
-    rambling product-pitch summaries.
-
-    The chunks are short transcript slices, not full conversations — the
-    model should learn the per-chunk extraction shape, NOT to extract
-    everything. Reducer merges them into a session-level summary later.
-  -->
+  <!-- Real-grounded extraction examples — preserved from prior hand-curation, NOT auto-generated. -->
   <extraction_examples>
-
     <!--
       EXAMPLE 1 — DECISION + technology entities + cohort member speaker.
       Source: Dstack Intro Salon Session Transcript_May_20 @ 1:36:29.

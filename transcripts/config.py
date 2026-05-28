@@ -17,12 +17,24 @@ from pathlib import Path
 
 # --- Chunking --------------------------------------------------------------
 
-#: Per-chunk input budget, in (heuristic) tokens. MUST be ≤ model num_ctx.
-CHUNK_MAX_TOKENS: int = 6000
+#: Per-chunk input budget, in (heuristic) tokens. MUST be ≤ model num_ctx
+#: minus the system prompt overhead (team_context + rules + JSON contract).
+#:
+#: **v1 default sized for hosted Gemma 3 27B (54K context):**
+#:   priming (team_context ~5.7K + system+rules+contract ~1.5K) ≈ 7.2K
+#:   + 18K chunk + ~2K completion = ~27K — comfortable inside 54K.
+#:
+#: **Local Ollama (qwen2.5:7b @ num_ctx=8192) does NOT fit this budget.**
+#: Adopters running locally should either (a) pass ``max_chunk_tokens=4000``
+#: to ``enrich_session``, (b) point ``CONCLAVE_TEAM_CONTEXT`` at a leaner XML,
+#: or (c) rebuild the Modelfile with ``num_ctx 32768``. See
+#: ``ollama/Modelfile.qwen-conclave`` for the current local cap.
+CHUNK_MAX_TOKENS: int = 18000
 
-#: Trailing-context overlap between adjacent chunks. Keeps the reducer
-#: from missing a signal that straddles a chunk boundary.
-CHUNK_OVERLAP_TOKENS: int = 400
+#: Trailing-context overlap between adjacent chunks. Scaled with the
+#: larger chunk default so per-chunk boundary protection stays meaningful
+#: as a percentage of chunk size (overlap / max ≈ 5.5%).
+CHUNK_OVERLAP_TOKENS: int = 1000
 
 #: Chars-per-token heuristic. English averages ~4 chars/token; we use the
 #: inverse here so ``estimate_tokens(text) = len(text) * TOKENS_PER_CHAR``.

@@ -27,20 +27,29 @@ from transcripts.team_context import ENV_VAR, TeamContext, load
 
 def test_example_xml_loads_and_parses():
     """The shipped example file must parse cleanly so the demo works
-    out of the box for fresh checkouts."""
+    out of the box for fresh checkouts.
+
+    The v1 XML is compiled from ``external/shape-rotator-os/cohort-data``
+    (26 cohort teams as ``<known_projects>``), so the assertions here
+    check for cohort-data-sourced projects rather than the curated set
+    in the original hand-written XML.
+    """
     ctx = load()  # default path → transcripts/team_context.example.xml
     assert ctx is not None
     assert ctx.team_name == "Shape Rotator Cohort"
     assert ctx.domain == "confidential AI infrastructure"
-    # Some known projects present.
+    # Cohort-data-sourced projects present (26 teams).
     project_names = {p["name"] for p in ctx.known_projects}
     assert "Conclave" in project_names
-    assert "Phala" in project_names
-    # Some known technologies present.
+    assert "Elocute" in project_names           # Albiona's project
+    assert "Crossroads" in project_names         # Chloe's project
+    assert len(project_names) >= 20              # we expect ~26 teams
+    # Curated technologies still present.
     tech_names = {t["name"] for t in ctx.known_technologies}
     assert "TDX" in tech_names
     assert "TEE" in tech_names
-    # Topics list populated.
+    assert "Phala" in tech_names                 # Phala is a tech, not a team
+    # Topics list populated (curated + cluster labels).
     assert "attestation" in ctx.known_topics
     # Style guide covers every signal kind in _VALID_SIGNAL_KINDS.
     from transcripts.enrich import _VALID_SIGNAL_KINDS

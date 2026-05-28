@@ -93,11 +93,17 @@ def _short_session() -> Session:
 
 
 def _long_session() -> Session:
-    """Forces multi-chunk path: many large segments above the chunk budget."""
-    body = "word " * 2400  # ~3000 tokens each — three of these blow past 6000
+    """Forces multi-chunk path: many large segments above the chunk budget.
+
+    Sized against the v1 ``CHUNK_MAX_TOKENS=18000`` default (each segment
+    is ~5K tokens; 10 of them blow past 18K, so the session splits to ≥2
+    chunks deterministically). Bumping the constant means re-tuning the
+    multiplier here.
+    """
+    body = "word " * 4000  # ~5000 tokens each → 10 of them exceed 18K
     segs = [
         RawSegment(speaker=f"speaker_{i % 2}", text=f"{i}: {body}", start=float(i))
-        for i in range(5)
+        for i in range(10)
     ]
     return Session(
         session_id="long",
