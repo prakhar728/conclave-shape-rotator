@@ -9,7 +9,8 @@ import pytest
 from transcripts import store
 from transcripts.enrich import enrich_session, transcript_text
 from transcripts.models import PIPELINE_VERSION
-from transcripts.parse import parse_transcript
+from transcripts.parse import build_session, parse_transcript
+from transcripts.sources import NormalizedInput, read_obj
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "voxterm_session.json")
 
@@ -95,6 +96,53 @@ def test_parse_multiple_batches_concatenate_in_order():
     session = parse_transcript(raw)
     assert session.session_id == "r1"
     assert [s.text for s in session.raw_diarization] == ["first", "second"]
+
+
+# --- build_session (post-C2 generic normalizer) ---
+
+def test_build_session_uses_provenance_session_id_then_falls_back_to_hash():
+    # provenance.session_id present → used verbatim.
+    ni = NormalizedInput(
+        segments=[{"speaker": "Shaw", "text": "hi", "start": 0.0, "end": None}],
+        provenance={"source": "otter", "session_id": "my-meeting", "date": "2026-05-20"},
+        source="otter",
+    )
+    s = build_session(ni)
+    assert s.session_id == "my-meeting"
+    assert s.metadata.date == "2026-05-20"
+    assert s.metadata.source == "otter"
+
+    # No provenance.session_id → deterministic content hash, prefixed by date+source.
+    ni2 = NormalizedInput(
+        segments=[{"speaker": "Shaw", "text": "hi", "start": 0.0, "end": None}],
+        provenance={"source": "otter", "date": "2026-05-20"},
+        source="otter",
+    )
+    s2 = build_session(ni2)
+    assert s2.session_id.startswith("2026-05-20-otter-")
+
+
+def test_build_session_drops_blank_segments_and_sorts_by_start():
+    ni = NormalizedInput(
+        segments=[
+            {"speaker": "B", "text": "second", "start": 2.0, "end": None},
+            {"speaker": "A", "text": "first", "start": 1.0, "end": None},
+            {"speaker": "C", "text": "   ", "start": 3.0, "end": None},
+        ],
+        provenance={"source": "otter", "session_id": "x", "date": "2026-05-20"},
+        source="otter",
+    )
+    s = build_session(ni)
+    assert [seg.text for seg in s.raw_diarization] == ["first", "second"]
+
+
+def test_parse_transcript_routes_through_sources_read_obj():
+    """The historical entry point still works because it now dispatches to sources."""
+    raw = {"segments": [{"t": 0.0, "speaker": "speaker_1", "text": "hello"}],
+           "record_id": "abc", "origin_device": "dev"}
+    s = parse_transcript(raw)
+    assert s.session_id == "abc"
+    assert s.metadata.source == "voxterm"
 
 
 # --- enrichment ---
