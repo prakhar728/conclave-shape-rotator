@@ -58,14 +58,21 @@ def enrich_session(
     *,
     llm: Any = None,
     model: Optional[str] = None,
+    max_chunk_tokens: Optional[int] = None,
 ) -> Session:
     """Run enrichment and return the session with ``derived`` filled.
 
     Mutates ``session.derived`` and ``session.metadata`` (provenance stamps)
     only; ``raw_diarization`` is untouched. Pass ``llm`` to inject a fake
     in tests; otherwise the configured backend is used.
+
+    ``max_chunk_tokens`` overrides ``CHUNK_MAX_TOKENS`` for this call only —
+    useful when the backend supports a larger context than the default
+    (e.g. hosted Gemma at 54K vs local Ollama capped at the Modelfile's
+    ``num_ctx=8192``). Pass ``None`` (default) to use the config constant.
     """
-    chunks = chunk_segments(session.raw_diarization)
+    chunker_kwargs = {"max_tokens": max_chunk_tokens} if max_chunk_tokens is not None else {}
+    chunks = chunk_segments(session.raw_diarization, **chunker_kwargs)
     chunk_count = max(1, len(chunks))
 
     if len(chunks) <= 1:

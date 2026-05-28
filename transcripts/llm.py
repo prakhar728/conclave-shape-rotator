@@ -137,6 +137,25 @@ def _is_unavailable(exc: BaseException) -> bool:
     return any(hint in msg for hint in _UNAVAILABLE_HINTS) or isinstance(exc, ConnectionError)
 
 
+def _is_bad_request(exc: BaseException) -> bool:
+    """A 400-class rejection — the provider refused this specific request.
+
+    Common causes: prompt + completion budget exceeds the model's effective
+    context window (this happens on repair retries when the echoed bad
+    output bloats the input), content-filter trip, or malformed payload.
+    Treated as ``LLMOutputError`` so ``enrich_pending`` skips the session
+    rather than crashing the whole batch.
+    """
+    try:
+        from openai import BadRequestError
+        if isinstance(exc, BadRequestError):
+            return True
+    except ImportError:
+        pass
+    msg = str(exc).lower()
+    return "400" in msg and ("bad request" in msg or "upstream" in msg or "context" in msg)
+
+
 def _get_llm(model: Optional[str] = None):
     """Construct the configured chat model, mapping construction errors.
 
@@ -191,6 +210,8 @@ def invoke_json(
     except Exception as exc:  # noqa: BLE001 — provider can throw anything
         if _is_unavailable(exc):
             raise LLMUnavailable(str(exc)) from exc
+        if _is_bad_request(exc):
+            raise LLMOutputError(f"provider rejected the request (400): {exc}") from exc
         raise
 
     raw = _response_text(response)
@@ -212,6 +233,11 @@ def invoke_json(
     except Exception as exc:  # noqa: BLE001
         if _is_unavailable(exc):
             raise LLMUnavailable(str(exc)) from exc
+        if _is_bad_request(exc):
+            # Repair retries echo the bad output back as a HumanMessage,
+            # which can push the combined input past the model's effective
+            # ctx. Surface as output error so the session is skipped.
+            raise LLMOutputError(f"provider rejected the repair retry (400): {exc}") from exc
         raise
 
     raw2 = _response_text(response2)
