@@ -29,14 +29,45 @@ def pytest_configure(config):
         "markers",
         "live: mark test as requiring a real NearAI API key (skipped in CI)",
     )
+    config.addinivalue_line(
+        "markers",
+        "requires_ollama: mark test as requiring a reachable local Ollama daemon "
+        "with the configured CONCLAVE_OLLAMA_MODEL pulled. Auto-skipped otherwise.",
+    )
+
+
+def _ollama_ready() -> tuple[bool, str]:
+    """Return (ready, reason). Used both by the marker hook and by tests
+    that want to assert the local model is the one they expect."""
+    try:
+        import json as _json
+        import urllib.request as _urllib
+        from config import settings as _s
+        root = _s.ollama_base_url.rstrip("/")
+        if root.endswith("/v1"):
+            root = root[: -len("/v1")]
+        with _urllib.urlopen(f"{root}/api/tags", timeout=2) as r:
+            tags = [m.get("name", "") for m in _json.load(r).get("models", [])]
+        wanted = _s.ollama_model if ":" in _s.ollama_model else f"{_s.ollama_model}:latest"
+        if wanted in tags or _s.ollama_model in tags:
+            return True, ""
+        return False, f"Ollama reachable but model {_s.ollama_model!r} not pulled"
+    except Exception as exc:  # noqa: BLE001 — any failure means "not ready"
+        return False, f"Ollama not reachable: {type(exc).__name__}: {exc}"
 
 
 def pytest_collection_modifyitems(config, items):
     api_key = os.environ.get("CONCLAVE_NEARAI_API_KEY", "").strip()
     skip_live = pytest.mark.skip(reason="CONCLAVE_NEARAI_API_KEY not set — live tests skipped")
+
+    ollama_ready, ollama_reason = _ollama_ready()
+    skip_ollama = pytest.mark.skip(reason=f"requires_ollama: {ollama_reason}")
+
     for item in items:
         if "live" in item.keywords and not api_key:
             item.add_marker(skip_live)
+        if "requires_ollama" in item.keywords and not ollama_ready:
+            item.add_marker(skip_ollama)
 
 
 # ---------------------------------------------------------------------------
