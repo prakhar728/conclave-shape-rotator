@@ -903,3 +903,44 @@ Reaffirms anti-scope from §L plus this round's specific deferrals:
 - **Per-meeting-type variation in `team_context.xml`.** v1 uses ONE XML for the team across all meeting types (project-intros, workshops, 1-on-1s, hangouts). Split only if quality differs sharply by type after §8 verification.
 - **Multi-pass extraction.** Deferred per §2.5.
 - **Auto-promotion of frequently-seen new entities into the XML.** Hand-maintained for v1. Auto-promotion risks teaching the model its own past mistakes; defer until there's a clean eval loop.
+
+### 10. Test impact
+
+The schema changes (§3), prompt-version bump (§7), and identity/dedup tightening (§5–§6) propagate into the existing test suite. The implementation is gated on the full suite staying green per step (same anti-domino rule as C1–C11). This section is the checklist.
+
+**Audit result:** 3 existing test files require updates, 1 file extended, 1 new file added, 7 files untouched. The C10 raw-leak guard (`test_api_transcripts.py`) extends to assert `source_quote` IS served and only `raw_diarization` is stripped.
+
+| Test file | Status | What changes | Why |
+|---|---|---|---|
+| `tests/test_transcript_pipeline.py` | **modify** | (a) `"speakers"` → `"said_by"` in FakeLLM signal responses (lines ~155–157); (b) literal `"v1"` → `ENRICH_PROMPT_VERSION` constant in 4 places (lines ~214, 222, 241, 253) so the bump to `"v2"` doesn't break the legacy 7 tests; (c) new default-field assertions on `SessionMetadata.participants` (None), `Derived.topics` (None until populated), `Entity.cohort_status` (defaults), `Entity.affiliation` (None), `Signal.about_person` ([]) | speakers rename, prompt-version bump, new optional fields' defaults |
+| `tests/test_enrich_mapreduce.py` | **modify** | (a) `"speakers"` → `"said_by"` in FakeLLM signal responses in 6 places (lines ~117, 173, 179, 212, 248, 249); (b) `_dedup_signals` test (line ~246) extended for `said_by`/`about_person` carry-through; (c) `_dedup_entities` test extended to verify cohort_status precedence (`member > external > unknown`) and the new strip-spaces/punct normalisation (e.g. "Flashbots" / "Flash Bots" → single merged entity); (d) `ENRICH_PROMPT_VERSION` constant continues to drive backfill assertions — no string-literal updates needed | speakers rename + dedup tests need new field structure + tightened normalisation |
+| `tests/test_api_transcripts.py` | **modify + extend** | (a) `Signal(... speakers=...)` constructor → `Signal(... said_by=...)` (line ~62); (b) literal `"v1"` → `ENRICH_PROMPT_VERSION` constant (line ~57); (c) extend `card_shape_has_expected_fields` to include the new keys (`topics`, `cohort_status` chips, `affiliation`, `participants`); (d) **extend raw-leak guard:** add explicit assertions that `source_quote` IS present in responses (the privacy posture deliberately serves it; only `raw_diarization` is stripped) and that the new `participants` and `topics` fields flow through | Schema rename + new fields surface + raw-leak guard scope clarified |
+| `tests/test_identity.py` | **extend** | No changes for the speakers rename (this file references `metadata.resolved_speakers`, not `Signal.speakers`). NEW tests added: (a) parenthetical → affiliation hint extraction (`"Alex (flashbots?)"` → `affiliation="flashbots"` when base name doesn't match roster); (b) `cohort_status` post-process — Person entities matching `MOCK_DIRECTORY` get `member`, non-matching get `external` (with affiliation if available), ambiguous get `unknown`; (c) speaker-label ↔ Person-entity linkage populating `said_by` on signals where applicable | new identity-layer behaviours (§5) |
+| `tests/test_team_context.py` | **new file** | Tests: (a) XML loader round-trips example → priming string; (b) missing file → graceful empty fallback + warning log (`MOCK_DIRECTORY` posture); (c) malformed XML → empty fallback, no crash; (d) `team_context_version` SHA-256 prefix stamping is deterministic and changes when XML body changes | new module (§2.2) |
+| `tests/test_sources.py` | untouched | References speaker labels on `RawSegment`, not `Signal.speakers` | — |
+| `tests/test_chunk.py` | untouched | Operates on `RawSegment` only | — |
+| `tests/test_llm.py` | untouched | Provider-error mapping is orthogonal to schema | — |
+| `tests/test_eval.py` | untouched **in v1** | Deterministic metric math operates on `Derived`. The fields it scores against (`signals[].text`, `entities[].name`) keep their semantics. Golden-set YAMLs are still future work — when they land, that's a separate test pass. | v1 punts formal eval; metric code unchanged |
+| `tests/test_ingest.py` | untouched | Ingest path doesn't touch `Signal` schema — only `RawSegment`s + `SessionMetadata.resolved_speakers` | — |
+| `tests/test_dashboard_smoke.py` | untouched (automated); **manual check** at V8 | Smoke hits static-mount + API shape; the actual signal/entity rendering with new fields is visually verified in the V8 dashboard check | mechanical asset-load still passes; visual rendering covered by the §8 verification |
+
+**Net test counts.**
+- Existing modifications: 3 files (`test_transcript_pipeline.py`, `test_enrich_mapreduce.py`, `test_api_transcripts.py`)
+- Existing extensions: 1 file (`test_identity.py`)
+- New: 1 file (`test_team_context.py`)
+- Untouched: 6 files
+
+**Sequencing — which step touches which tests.**
+
+| Step | Production code | Tests touched |
+|---|---|---|
+| V1 (models.py) | `transcripts/models.py` | `test_transcript_pipeline.py` (defaults), `test_enrich_mapreduce.py` (kept compiling), `test_api_transcripts.py` (constructor + literal "v1") |
+| V2 (team_context.py) | NEW `transcripts/team_context.py` + example XML + config wiring | NEW `test_team_context.py` |
+| V3 (prompts.py) | `transcripts/prompts.py` + version bump | the `ENRICH_PROMPT_VERSION` constant references in `test_enrich_mapreduce.py` & `test_api_transcripts.py` auto-pick up the bump |
+| V4 (enrich.py) | `transcripts/enrich.py` `_to_derived` + `_reduce` + `_dedup_*` | `test_enrich_mapreduce.py` (FakeLLM payload schema + dedup), `test_transcript_pipeline.py` (FakeLLM payload schema) |
+| V5 (identity.py) | `transcripts/identity.py` | `test_identity.py` extensions |
+| V6 (cli + api + dashboard) | `transcripts/cli.py`, `api/transcripts_routes.py`, `web/app.js` | `test_api_transcripts.py` (card/view shape + raw-leak guard extension) |
+
+**Anti-domino rule.** Each Vn commits with its tests in the same change. Suite stays green at every commit. If V1's `Signal.speakers → said_by` rename breaks the FakeLLM payload tests, those tests are updated *in the same commit* — not deferred to V4.
+
+**One gotcha.** The DB already has 12 sessions stored with the old `"speakers"` JSON shape on signals. When V3 lands the prompt-version bump, `enrich_pending` will treat all 12 as stale and re-enrich them under v2 — at which point the new `said_by` shape gets written. There's no read-side migration needed: `Signal(**data)` will ignore unknown JSON keys (Pydantic default), and the old `"speakers"` keys on the existing rows just go unused after re-enrichment. If someone wants to inspect the pre-v1 rows before re-enrichment, they keep the old shape until re-enriched. Documented behaviour, not a migration task.
