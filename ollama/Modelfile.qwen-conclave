@@ -1,14 +1,20 @@
-# Conclave's local enrichment model — Qwen2.5-14B-Instruct with the context
+# Conclave's local enrichment model — Qwen2.5-7B-Instruct with the context
 # window bumped above CHUNK_MAX_TOKENS so long transcripts don't silently
 # truncate (the gotcha called out in transcripts/IMPLEMENTATION_PLAN.md §F).
 #
+# 7B chosen over 14B for headroom on a 24GB M4 Pro: ~5–6 GB resident vs.
+# ~10–11 GB. Quality is solid for our task (chunk → summary + signals +
+# entities JSON); escalate to 14B by changing the FROM line below if a
+# specific run needs it.
+#
 # Build with:
+#   ollama pull qwen2.5:7b-instruct
 #   ollama create qwen2.5-conclave -f ollama/Modelfile.qwen-conclave
 #
 # Then set CONCLAVE_OLLAMA_MODEL=qwen2.5-conclave (this is the default in
 # config.py when CONCLAVE_LLM_BACKEND=ollama).
 
-FROM qwen2.5:14b-instruct
+FROM qwen2.5:7b-instruct
 
 # CHUNK_MAX_TOKENS = 6000 (transcripts/config.py, lands in C7). 8192 gives
 # headroom for prompt scaffolding + the JSON response on top of the chunk.
