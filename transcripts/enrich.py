@@ -28,16 +28,42 @@ from transcripts.config import MAX_ENTITIES, MAX_SIGNALS
 from transcripts.llm import LLMOutputError, LLMUnavailable, invoke_json
 from transcripts.models import Derived, Entity, RawSegment, Session, Signal
 from transcripts.prompts import (
-    CHUNK_SYSTEM,
     CHUNK_USER,
     ENRICH_PROMPT_VERSION,
     REDUCE_SYSTEM,
     REDUCE_USER,
-    SINGLE_SYSTEM,
     SINGLE_USER,
+    chunk_system,
+    single_system,
 )
 
 log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Team-context cache — v2
+# ---------------------------------------------------------------------------
+# Loaded once per process. ``enrich_pending`` doesn't re-read the XML per
+# session. Tests that want to assert the no-grounding code path can
+# monkeypatch ``_get_team_context`` to return ``None``.
+
+_TEAM_CONTEXT_LOADED = False
+_TEAM_CONTEXT_CACHE: Any = None
+
+
+def _get_team_context():
+    """Lazy module-level cache around ``team_context.load()``.
+
+    Returns the loaded ``TeamContext`` (with ``.to_prompt_fragment()`` +
+    ``.version`` accessors), or ``None`` when the file is missing/malformed
+    — the prompt path degrades to "no team context" gracefully.
+    """
+    global _TEAM_CONTEXT_LOADED, _TEAM_CONTEXT_CACHE
+    if not _TEAM_CONTEXT_LOADED:
+        from transcripts import team_context as _tc
+        _TEAM_CONTEXT_CACHE = _tc.load()
+        _TEAM_CONTEXT_LOADED = True
+    return _TEAM_CONTEXT_CACHE
 
 
 _VALID_SIGNAL_KINDS = {"decision", "insight", "impactful_point", "action_item", "open_question"}
@@ -75,15 +101,26 @@ def enrich_session(
     chunks = chunk_segments(session.raw_diarization, **chunker_kwargs)
     chunk_count = max(1, len(chunks))
 
+    # v2: team-context priming is spliced into the system prompt before the
+    # chunk. Loaded once per process; absent/malformed → empty fragment +
+    # no version stamp (no grounding, but extraction still runs).
+    team_ctx = _get_team_context()
+    tc_fragment = team_ctx.to_prompt_fragment() if team_ctx is not None else ""
+    tc_version = team_ctx.version if team_ctx is not None else None
+
     if len(chunks) <= 1:
         derived = _enrich_single(
             _segments_to_text(chunks[0] if chunks else session.raw_diarization),
             llm=llm,
             model=model,
+            team_context_fragment=tc_fragment,
         )
     else:
         partials = [
-            _enrich_chunk(_segments_to_text(c), index=i, total=len(chunks), llm=llm, model=model)
+            _enrich_chunk(
+                _segments_to_text(c), index=i, total=len(chunks),
+                llm=llm, model=model, team_context_fragment=tc_fragment,
+            )
             for i, c in enumerate(chunks)
         ]
         derived = _reduce(partials, llm=llm, model=model)
@@ -92,6 +129,7 @@ def enrich_session(
     session.metadata.model_id = _model_id(llm, model)
     session.metadata.enrich_prompt_version = ENRICH_PROMPT_VERSION
     session.metadata.chunk_count = chunk_count
+    session.metadata.team_context_version = tc_version
     return session
 
 
@@ -149,9 +187,15 @@ def enrich_pending(
 # Map + reduce
 # ---------------------------------------------------------------------------
 
-def _enrich_single(body: str, *, llm: Any, model: Optional[str]) -> Derived:
+def _enrich_single(
+    body: str, *, llm: Any, model: Optional[str],
+    team_context_fragment: str = "",
+) -> Derived:
     data = invoke_json(
-        [SystemMessage(content=SINGLE_SYSTEM), HumanMessage(content=SINGLE_USER(body))],
+        [
+            SystemMessage(content=single_system(team_context_fragment)),
+            HumanMessage(content=SINGLE_USER(body)),
+        ],
         llm=llm,
         model=model,
         required_keys=("summary",),
@@ -159,11 +203,17 @@ def _enrich_single(body: str, *, llm: Any, model: Optional[str]) -> Derived:
     return _to_derived(data)
 
 
-def _enrich_chunk(body: str, *, index: int, total: int, llm: Any, model: Optional[str]) -> dict:
+def _enrich_chunk(
+    body: str, *, index: int, total: int, llm: Any, model: Optional[str],
+    team_context_fragment: str = "",
+) -> dict:
     """One LLM call per chunk → partial. Returns the raw parsed dict so
     ``_reduce`` can dedupe entities and cap signals deterministically."""
     return invoke_json(
-        [SystemMessage(content=CHUNK_SYSTEM), HumanMessage(content=CHUNK_USER(body, index, total))],
+        [
+            SystemMessage(content=chunk_system(team_context_fragment)),
+            HumanMessage(content=CHUNK_USER(body, index, total)),
+        ],
         llm=llm,
         model=model,
         required_keys=("summary",),
