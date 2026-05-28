@@ -131,8 +131,11 @@ def _cmd_llm_status(args: argparse.Namespace) -> int:
         reachable, tags = _ollama_reachable(s.ollama_base_url)
         print(f"ollama daemon:  {'✓ reachable' if reachable else '✗ unreachable'}")
         if reachable:
-            present = s.ollama_model in tags
-            print(f"model present:  {'✓' if present else '✗ — run: ollama pull qwen2.5:14b-instruct && ollama create '+s.ollama_model+' -f ollama/Modelfile.qwen-conclave'}")
+            # Ollama lists tags as `name:tag` (`:latest` when unspecified);
+            # accept either form so `qwen2.5-conclave` matches `qwen2.5-conclave:latest`.
+            wanted = s.ollama_model if ":" in s.ollama_model else f"{s.ollama_model}:latest"
+            present = wanted in tags or s.ollama_model in tags
+            print(f"model present:  {'✓' if present else '✗ — run: ollama pull qwen2.5:7b-instruct && ollama create '+s.ollama_model+' -f ollama/Modelfile.qwen-conclave'}")
             if tags:
                 print(f"installed tags: {', '.join(tags)}")
     else:
