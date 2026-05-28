@@ -139,17 +139,27 @@ def _cmd_llm_status(args: argparse.Namespace) -> int:
             print(f"model present:  {'✓' if present else '✗ — run: ollama pull qwen2.5:7b-instruct && ollama create '+s.ollama_model+' -f ollama/Modelfile.qwen-conclave'}")
             if tags:
                 print(f"installed tags: {', '.join(tags)}")
-    else:
+    elif s.llm_backend == "redpill":
+        print(f"redpill_model:  {s.redpill_model}")
+        print(f"redpill_url:    {s.redpill_base_url}")
+        print(f"api key:        {'set' if s.redpill_api_key else 'MISSING — set CONCLAVE_REDPILL_API_KEY'}")
+    else:  # nearai
         print(f"nearai_model:   {s.default_model}")
         print(f"nearai_url:     {s.nearai_base_url}")
         print(f"api key:        {'set' if s.nearai_api_key else 'MISSING — set CONCLAVE_NEARAI_API_KEY'}")
     return 0
 
 
+_VALID_BACKENDS = {"redpill", "nearai", "ollama"}
+
+
 def _cmd_llm_use(args: argparse.Namespace) -> int:
     target = args.backend.lower()
-    if target not in {"ollama", "nearai"}:
-        print(f"error: backend must be 'ollama' or 'nearai' (got {args.backend!r})", file=sys.stderr)
+    if target not in _VALID_BACKENDS:
+        print(
+            f"error: backend must be one of {sorted(_VALID_BACKENDS)} (got {args.backend!r})",
+            file=sys.stderr,
+        )
         return 2
     _write_backend(target)
     print(f"wrote CONCLAVE_LLM_BACKEND={target} to {_ENV_PATH}")
