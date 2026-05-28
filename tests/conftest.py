@@ -6,16 +6,43 @@ Provides:
   - base_df            — session-scoped fraud-like DataFrame (~800 rows)
   - matrix_results     — session-scoped list; tests append rows, teardown
                          prints two tables and saves tests/demo_matrix.json
+
+**Safety**: routes every test through an isolated temp SQLite DB so no
+test (including unscoped `storage.reset_all()` calls in test_e2e /
+test_scheduler / test_attestation / interview_reflection fixtures) can
+ever wipe the user's real `data/conclave.db`. Set at module-import time
+so the env var lands before any test file does `import storage`.
 """
 from __future__ import annotations
 
 import datetime
 import json
 import os
+import tempfile
 from typing import Generator
 
 import pandas as pd
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# DB ISOLATION (loaded before any test module — keep at top of conftest)
+# ---------------------------------------------------------------------------
+# `storage/sqlite.py` reads CONCLAVE_DB_PATH at module-import time. Setting
+# it here, in conftest, means by the time pytest collects any test file
+# (which is where `import storage` happens) the env already points at a
+# temp DB. Belt: we *also* force-overwrite sqlite._DB_PATH right after the
+# first import, in case some module was eagerly imported before conftest.
+_TEST_DB_DIR = tempfile.mkdtemp(prefix="conclave-tests-")
+_TEST_DB_PATH = os.path.join(_TEST_DB_DIR, "test.db")
+os.environ["CONCLAVE_DB_PATH"] = _TEST_DB_PATH
+
+try:
+    from storage import sqlite as _sqlite
+    _sqlite._DB_PATH = _TEST_DB_PATH
+    _sqlite._conn = None
+except Exception:  # noqa: BLE001 — if storage isn't importable, nothing to protect
+    pass
 
 DEMO_JSON_PATH = os.path.join(os.path.dirname(__file__), "demo_matrix.json")
 
