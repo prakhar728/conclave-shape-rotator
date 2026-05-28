@@ -22,7 +22,7 @@ from pathlib import Path
 from typing import Optional
 
 from transcripts import store
-from transcripts.enrich import enrich_session
+from transcripts.enrich import enrich_pending, enrich_session
 from transcripts.identity import MOCK_DIRECTORY, link_identities
 from transcripts.ingest import ingest_path
 from transcripts.models import Session
@@ -174,6 +174,23 @@ def _cmd_llm_smoke(args: argparse.Namespace) -> int:
         return 1
 
 
+def _cmd_enrich(args: argparse.Namespace) -> int:
+    """Run map-reduce enrichment over pending (or stale) stored sessions."""
+    report = enrich_pending(
+        only_stale=not args.all,
+        session_id=args.session,
+        model=args.model,
+    )
+    print(
+        f"enrich: enriched={report.enriched} "
+        f"skipped_unavailable={report.skipped_unavailable} "
+        f"skipped_output_error={report.skipped_output_error}"
+    )
+    for sid, err in report.failed:
+        print(f"  ! {sid}: {err}", file=sys.stderr)
+    return 0 if not report.failed else 1
+
+
 def _cmd_link(args: argparse.Namespace) -> int:
     """Re-run mock identity linkage over stored sessions (no LLM)."""
     changed = link_identities(session_id=args.session)
@@ -223,6 +240,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi.add_argument("--dry-run", action="store_true", help="parse but do not write to the store")
     pi.add_argument("--tags", help="comma-separated tags attached to every ingested session")
     pi.set_defaults(func=_cmd_ingest)
+
+    pe = sub.add_parser("enrich", help="map-reduce enrichment over pending sessions (uses the LLM)")
+    pe.add_argument("--all", action="store_true", help="enrich every session, not just pending/stale")
+    pe.add_argument("--session", help="limit to a single session_id")
+    pe.add_argument("--model", help="LLM model id override (default: backend default)")
+    pe.set_defaults(func=_cmd_enrich)
 
     pln = sub.add_parser("link", help="re-run mock identity linkage over stored sessions")
     pln.add_argument("--session", help="limit to a single session_id")
