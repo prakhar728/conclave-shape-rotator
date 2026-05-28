@@ -81,100 +81,274 @@
     <topic>transcription</topic>
   </known_topics>
 
+  <!--
+    Extraction examples — drawn from REAL cohort transcripts at
+    tests/fixtures/transcripts/. Each pairs a verbatim chunk with the
+    expected JSON output. Covers the patterns we observed bleeding in the
+    PoC: decisions defaulting to "insight", missing technology entities,
+    confused said_by vs about_person, weak open-question detection,
+    rambling product-pitch summaries.
+
+    The chunks are short transcript slices, not full conversations — the
+    model should learn the per-chunk extraction shape, NOT to extract
+    everything. Reducer merges them into a session-level summary later.
+  -->
   <extraction_examples>
+
+    <!--
+      EXAMPLE 1 — DECISION + technology entities + cohort member speaker.
+      Source: Dstack Intro Salon Session Transcript_May_20 @ 1:36:29.
+      Pattern coverage:
+        - REAL decision (Hang Yin chose compose hash over app ID for
+          service mesh policy in DStack)
+        - "technology" entity type (compose hash, app ID, KMS)
+        - "project" entity type (DStack, service mesh)
+        - said_by = cohort member (no parenthetical)
+        - about_person = [] (decision is about systems, not people)
+        - topics = areas/themes, distinct from entity names
+    -->
     <example>
       <chunk>
-[Hang] Yeah, we want to get rid of TPM.
-[Alex] OK, this also supports backwards compatibility for that.
-[Hang] Right, we should remove the TPM dependency from the GCP variant.
+[Hang Yin] when I was working on the service mesh, there is decision I need to make. So, how should we define the policy? One way is that we verify the exact code running in each CVM, so eventually it become we define a few compose hash, and we have a white list of the compose hash, then if the compose hashes match, we allow them to join this service mesh. And another way is we can verify the app ID, because the app ID is the unit you define the workload in DStack. But app ID, I didn't go with app ID, because that will make the deployment a little bit harder. I have to define the app ID first, then define the policy and wire everything together. With compose hash, I can pre calculate all the measurements before the deployment, and then just deploy it once.
       </chunk>
       <expected>
 {
-  "summary": "Team decided to remove TPM dependency from the GCP variant, preserving backwards compatibility.",
+  "summary": "Hang Yin chose compose-hash-based policy over app-ID-based policy for the DStack service mesh; compose-hash lets measurements be pre-calculated and the deployment ships in one step instead of needing to wire app ID, policy, and code together.",
   "signals": [
     {"kind": "decision",
-     "text": "Remove TPM dependency from the GCP variant",
-     "source_quote": "we should remove the TPM dependency from the GCP variant",
-     "said_by": ["Hang"],
+     "text": "Use compose-hash whitelisting (not app-ID whitelisting) for the DStack service mesh policy",
+     "source_quote": "I didn't go with app ID, because that will make the deployment a little bit harder",
+     "said_by": ["Hang Yin"],
+     "about_person": []},
+    {"kind": "insight",
+     "text": "Compose-hash whitelisting lets all measurements be pre-calculated before deployment, so the policy ships in a single deploy step",
+     "source_quote": "I can pre calculate all the measurements before the deployment, and then just deploy it once",
+     "said_by": ["Hang Yin"],
      "about_person": []}
   ],
   "entities": [
-    {"name": "TPM", "type": "technology", "evidence": "explicit removal target"},
-    {"name": "GCP", "type": "org", "evidence": "deployment target for the variant being modified"}
+    {"name": "DStack", "type": "project", "evidence": "the service mesh he's defining policy for"},
+    {"name": "service mesh", "type": "concept", "evidence": "the system whose policy is being defined"},
+    {"name": "compose hash", "type": "technology", "evidence": "the chosen whitelisting key"},
+    {"name": "app ID", "type": "technology", "evidence": "the rejected alternative whitelisting key"},
+    {"name": "CVM", "type": "technology", "evidence": "the unit each compose hash measures"},
+    {"name": "KMS", "type": "technology", "evidence": "guarantee app ID would have provided automatically"}
   ],
-  "topics": ["attestation", "platform compatibility"]
+  "topics": ["attestation", "service mesh", "deployment"]
 }
       </expected>
     </example>
 
+    <!--
+      EXAMPLE 2 — ACTION_ITEM with said_by ≠ about_person + EXTERNAL person + affiliation.
+      Source: dstack hangout Alex Shaw Lsdan Andrew @ ~0:33.
+      Pattern coverage:
+        - REAL action_item (Alex offering to send Shaw a github link)
+        - said_by ≠ about_person (Alex acts, Shaw is recipient)
+        - external speaker with parenthetical affiliation hint
+          ("Alex (flashbots?)" → affiliation="flashbots", cohort_status="external")
+        - cohort member as about_person ("Shaw" → cohort_status="member")
+        - "project" entity (EZTE, the github project being shared)
+    -->
     <example>
       <chunk>
-[Alex (flashbots?)] I will send you the link to the specific project. It's github.com/easy-te.
+[Alex (flashbots?)] I will send you the link to the specific project. It's github.com/easy te
 [Shaw] easy te easy hyphen te,
-[Alex (flashbots?)] yeah, if you're forking tails, this will make your life a lot easier.
+[Alex (flashbots?)] yeah, if you're forking tails, this will make your life a lot easier, because I consider forking tails, and I went down that rabbit hole for like three months
       </chunk>
       <expected>
 {
-  "summary": "Alex offered to share the EZTE GitHub link with Shaw for his Tails-forking work.",
+  "summary": "Alex (Flashbots) offered to share the EZTE GitHub link with Shaw, after Shaw mentioned he is forking Tails for his agent OS work.",
   "signals": [
     {"kind": "action_item",
      "text": "Alex will send Shaw the github.com/easy-te link",
-     "source_quote": "I will send you the link to the specific project. It's github.com/easy-te",
+     "source_quote": "I will send you the link to the specific project. It's github.com/easy te",
      "said_by": ["Alex (flashbots?)"],
-     "about_person": ["Shaw"]}
-  ],
-  "entities": [
-    {"name": "EZTE", "type": "project", "evidence": "github.com/easy-te shared as the project link"},
-    {"name": "Tails", "type": "technology", "evidence": "Shaw is forking it"}
-  ],
-  "topics": ["reproducible builds"]
-}
-      </expected>
-    </example>
-
-    <example>
-      <chunk>
-[Speaker 1] How does the attestation flow work when you have multiple nested enclaves?
-[Speaker 2] That's a good question — I don't think we've figured out the nested case yet.
-      </chunk>
-      <expected>
-{
-  "summary": "Open question raised on attestation flow in nested-enclave deployments; no resolution within this chunk.",
-  "signals": [
-    {"kind": "open_question",
-     "text": "How does the attestation flow work for nested enclaves?",
-     "source_quote": "How does the attestation flow work when you have multiple nested enclaves?",
-     "said_by": ["Speaker 1"],
+     "about_person": ["Shaw"]},
+    {"kind": "insight",
+     "text": "Tails forking is a 3-month rabbit hole; EZTE compresses that to a simpler workflow",
+     "source_quote": "I went down that rabbit hole for like three months",
+     "said_by": ["Alex (flashbots?)"],
      "about_person": []}
   ],
   "entities": [
-    {"name": "attestation", "type": "concept", "evidence": "central topic of the open question"}
+    {"name": "EZTE", "type": "project", "evidence": "github.com/easy-te shared as the project link"},
+    {"name": "Tails", "type": "technology", "evidence": "the Debian-based live OS Shaw is forking"},
+    {"name": "Alex (flashbots?)", "type": "person", "evidence": "speaker offering the link", "affiliation": "flashbots"},
+    {"name": "Shaw", "type": "person", "evidence": "recipient of the link, forking Tails"}
   ],
-  "topics": ["attestation"]
+  "topics": ["reproducible builds", "agent operating systems"]
 }
       </expected>
     </example>
 
+    <!--
+      EXAMPLE 3 — OPEN_QUESTION with named addressee + person mentioned but not present.
+      Source: May 26, wikigen, crossroads @ 10:02.
+      Pattern coverage:
+        - REAL open question (Andrew Miller asking the room about cross-chain
+          bridges + transactions from a TEE; no resolution within the chunk)
+        - said_by = cohort member (Andrew Miller)
+        - about_person = [] (room-wide question, no specific addressee)
+        - Tina mentioned as not-yet-present person → Person entity
+          extracted but NOT a session participant
+        - Multiple technology entities: TEE, cross-chain bridges
+    -->
     <example>
       <chunk>
-[Shaw] Hang mentioned that Tina is working on the same problem space, you should sync with Andrew on it.
-[LSDan] Yeah I'll reach out to Andrew this week.
+[Andrew Miller] Does anyone here done anything interesting with cross-chain bridges? How about sending any transactions from a tee? Oh, yeah, Demers has a hy Tina
+[Andrew Miller] Tina. Also, I think is in New York already, just quite here in person.
       </chunk>
       <expected>
 {
-  "summary": "LSDan agreed to reach out to Andrew about overlapping work that Tina is doing.",
+  "summary": "Andrew Miller asked the room for experience with cross-chain bridges and TEE-originated transactions; question left open within this chunk. He also noted Tina is in New York but not yet physically present.",
   "signals": [
-    {"kind": "action_item",
-     "text": "LSDan will reach out to Andrew to coordinate on Tina's overlapping work",
-     "source_quote": "Yeah I'll reach out to Andrew this week",
-     "said_by": ["LSDan"],
-     "about_person": ["Andrew", "Tina"]}
+    {"kind": "open_question",
+     "text": "Has anyone done interesting work with cross-chain bridges or sending transactions from a TEE?",
+     "source_quote": "Does anyone here done anything interesting with cross-chain bridges? How about sending any transactions from a tee?",
+     "said_by": ["Andrew Miller"],
+     "about_person": []},
+    {"kind": "impactful_point",
+     "text": "Tina is in New York already but not yet physically present at the meeting",
+     "source_quote": "Tina. Also, I think is in New York already, just quite here in person",
+     "said_by": ["Andrew Miller"],
+     "about_person": ["Tina"]}
   ],
   "entities": [
-    {"name": "Tina", "type": "person", "evidence": "mentioned by Shaw as working on overlapping problem"},
-    {"name": "Andrew", "type": "person", "evidence": "named coordination target"}
+    {"name": "cross-chain bridges", "type": "technology", "evidence": "subject of the open question"},
+    {"name": "TEE", "type": "technology", "evidence": "subject of the open question"},
+    {"name": "Andrew Miller", "type": "person", "evidence": "asked the open question"},
+    {"name": "Tina", "type": "person", "evidence": "mentioned as in New York but not present at the meeting"}
   ],
-  "topics": ["coordination"]
+  "topics": ["cross-chain", "confidential compute"]
+}
+      </expected>
+    </example>
+
+    <!--
+      EXAMPLE 4 — Product pitch with multiple decisions; decision-led summary.
+      Source: Elocute Transcript May 26 (Albiona's pitch).
+      Pattern coverage:
+        - REAL product pitch (Albiona Hoti presenting Elocute)
+        - Decision-led summary (lead with what was decided/shipped, not
+          "she talked about everything")
+        - Multiple decisions in one chunk (added content evaluation,
+          articulation score metric)
+        - "project" entity (Elocute) + "concept" entity (articulation)
+        - User-count signal as impactful_point (concrete fact)
+        - Topics describe product domain not literal title
+    -->
+    <example>
+      <chunk>
+[Albiona Hoti] The actual user journey is basically get on the app, you select the different themes of topics that you want to talk about, and the depth, and then you read for one to two minutes, and you record yourself on the app speaking about it. The app used to give you only an overview of basically the awards, closet structure, pace and time, and the delivery on organization, security, language, all of these little details, but then now added another session where we evaluate also the content of what we're speaking, because people were saying like saying a bunch of other things the content itself, and I didn't check that in the beginning, and now it also checks the content itself. For now I have 524 users, out of which our users are hundreds of things, or I think people who have done more density sessions.
+      </chunk>
+      <expected>
+{
+  "summary": "Albiona shipped a content-quality evaluation pass on Elocute on top of the existing delivery-quality metrics (pace, structure, organization, language); the app now scores both how you say it AND what you said. Currently has 524 users.",
+  "signals": [
+    {"kind": "decision",
+     "text": "Added a content-evaluation pass to Elocute on top of the existing delivery-evaluation metrics",
+     "source_quote": "now added another session where we evaluate also the content of what we're speaking",
+     "said_by": ["Albiona Hoti"],
+     "about_person": []},
+    {"kind": "insight",
+     "text": "Users were unhappy with delivery-only scoring because they could game it by talking a lot without saying much",
+     "source_quote": "people were saying like saying a bunch of other things the content itself",
+     "said_by": ["Albiona Hoti"],
+     "about_person": []},
+    {"kind": "impactful_point",
+     "text": "Elocute has reached 524 users, with a denser power-user segment doing repeated sessions",
+     "source_quote": "For now I have 524 users",
+     "said_by": ["Albiona Hoti"],
+     "about_person": []}
+  ],
+  "entities": [
+    {"name": "Elocute", "type": "project", "evidence": "the app being presented"},
+    {"name": "Albiona Hoti", "type": "person", "evidence": "the presenter"},
+    {"name": "articulation", "type": "concept", "evidence": "the core skill the app trains"}
+  ],
+  "topics": ["product evolution", "articulation", "speaking practice"]
+}
+      </expected>
+    </example>
+
+    <!--
+      EXAMPLE 5 — Person mentioned externally (not in meeting) as positive
+      exemplar; said_by ≠ about_person; insight + impactful_point.
+      Source: Project Intros Agents Day 3 Transcript_May_21 (Andrew Miller
+      presenting the Router project).
+      Pattern coverage:
+        - said_by = cohort member (Andrew Miller)
+        - about_person = Tita (mentioned, not present)
+        - Person entity with cohort_status = "external" + role hint
+        - "concept" entity ("human water cooler" — a metaphor he coined)
+        - Demonstrates the model SHOULD extract a person mentioned as
+          exemplar even when they're not in the meeting
+    -->
+    <example>
+      <chunk>
+[Andrew Miller] The last problem that this solves is just like I now appreciate the importance of human water coolers, or people who act as health connections. My exemplar for this is Tita, who you'll get to meet later tonight or tomorrow. She's been my entrepreneurship mentor since I dropped out of university to work on TV-based with Chevy, and the mode at which she works — she's like your most effective human router that anyone who knows her has seen. This is someone who makes it their job to pick up context about everyone that they can in their orbit, often through just like very effective prompting.
+      </chunk>
+      <expected>
+{
+  "summary": "Andrew framed the Router project around the 'human water cooler' role — people who absorb and route context across a community — using Tita, his entrepreneurship mentor, as the canonical exemplar.",
+  "signals": [
+    {"kind": "insight",
+     "text": "The 'human water cooler' archetype — someone who absorbs and effectively routes context across a community — is what the Router project is trying to instrument with software",
+     "source_quote": "I now appreciate the importance of human water coolers, or people who act as health connections",
+     "said_by": ["Andrew Miller"],
+     "about_person": []},
+    {"kind": "impactful_point",
+     "text": "Tita is the canonical example of a high-effectiveness human router; she will be at the cohort tonight or tomorrow",
+     "source_quote": "My exemplar for this is Tita, who you'll get to meet later tonight or tomorrow",
+     "said_by": ["Andrew Miller"],
+     "about_person": ["Tita"]}
+  ],
+  "entities": [
+    {"name": "Router", "type": "project", "evidence": "the project being motivated"},
+    {"name": "Tita", "type": "person", "evidence": "named exemplar of a human-router role; Andrew's entrepreneurship mentor"},
+    {"name": "Andrew Miller", "type": "person", "evidence": "the speaker/presenter"},
+    {"name": "human water cooler", "type": "concept", "evidence": "Andrew's framing for the archetype the Router project targets"}
+  ],
+  "topics": ["context routing", "community building"]
+}
+      </expected>
+    </example>
+
+    <!--
+      EXAMPLE 6 — Speaker N anonymous label + Q&A revealing project status.
+      Source: May 26, wikigen, crossroads (Chloe Wang Q&A after the pitch).
+      Pattern coverage:
+        - Speaker N anonymous label preserved verbatim in said_by
+        - Cohort member as addressee (Chloe Wang answering)
+        - impactful_point (project deployment status — important for prep
+          even though the question itself wasn't open at the chunk level)
+        - "project" entity (Crossroads) + "technology" entity (Ethereum testnet)
+        - Demonstrates the model should NOT promote anonymous Speaker N to
+          a real name, even when context could let it guess
+    -->
+    <example>
+      <chunk>
+[Andrew Miller] Do you have on the demo that you said, do you have, like, an up and running service version of this? Like, is this something that runs on, like, an Ethereum testnet or something?
+[Chloe Wang] No, it's currently not deployed, it's only running local.
+      </chunk>
+      <expected>
+{
+  "summary": "Andrew asked whether Crossroads is deployed on an Ethereum testnet or running as a hosted service; Chloe confirmed it is only running locally, not yet deployed.",
+  "signals": [
+    {"kind": "impactful_point",
+     "text": "Crossroads is not yet deployed to a testnet; it only runs locally",
+     "source_quote": "No, it's currently not deployed, it's only running local",
+     "said_by": ["Chloe Wang"],
+     "about_person": []}
+  ],
+  "entities": [
+    {"name": "Crossroads", "type": "project", "evidence": "the subject of the deployment-state question"},
+    {"name": "Ethereum testnet", "type": "technology", "evidence": "the hypothetical deployment target Andrew asked about"},
+    {"name": "Chloe Wang", "type": "person", "evidence": "answering for the project"},
+    {"name": "Andrew Miller", "type": "person", "evidence": "asking about deployment state"}
+  ],
+  "topics": ["project status", "deployment"]
 }
       </expected>
     </example>
