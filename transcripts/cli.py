@@ -1,7 +1,8 @@
 """Transcripts CLI — subcommand dispatcher.
 
     python -m transcripts.cli ingest <path> [--force] [--dry-run] [--tags ...]
-    python -m transcripts.cli run <file>   # legacy: parse + enrich + store one file
+    python -m transcripts.cli llm status|use|smoke   # flip / inspect the LLM backend
+    python -m transcripts.cli run <file>             # legacy: parse + enrich + store one file
 
 `ingest` is the C4 path: scan a file/directory, read with `sources.read_file`,
 build sessions, save raw to the store. **No LLM ever constructed in this path**
@@ -12,7 +13,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import re
 import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
 from typing import Optional
 
 from transcripts import store
@@ -67,6 +73,103 @@ def _cmd_ingest(args: argparse.Namespace) -> int:
     return 0 if not report.failed else 1
 
 
+# ---------------------------------------------------------------------------
+# `llm` subcommand — flip / inspect the backend switch
+# ---------------------------------------------------------------------------
+
+_ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+_BACKEND_RE = re.compile(r"^CONCLAVE_LLM_BACKEND\s*=", re.MULTILINE)
+
+
+def _read_env() -> str:
+    return _ENV_PATH.read_text(encoding="utf-8") if _ENV_PATH.exists() else ""
+
+
+def _write_backend(value: str) -> None:
+    """Persist `CONCLAVE_LLM_BACKEND=<value>` to .env (idempotent)."""
+    text = _read_env()
+    if _BACKEND_RE.search(text):
+        text = _BACKEND_RE.sub(f"CONCLAVE_LLM_BACKEND=", text)  # normalize prefix
+        text = re.sub(
+            r"^CONCLAVE_LLM_BACKEND=.*$",
+            f"CONCLAVE_LLM_BACKEND={value}",
+            text,
+            flags=re.MULTILINE,
+        )
+    else:
+        if text and not text.endswith("\n"):
+            text += "\n"
+        text += f"\n# LLM backend switch (nearai = production TEE; ollama = local dev)\nCONCLAVE_LLM_BACKEND={value}\n"
+    _ENV_PATH.write_text(text, encoding="utf-8")
+
+
+def _ollama_reachable(base_url: str) -> tuple[bool, list[str]]:
+    """Probe the Ollama daemon. Returns (reachable, installed_model_tags)."""
+    # base_url ends with /v1 (OpenAI-compat); the tags endpoint is on the root.
+    root = base_url.rstrip("/")
+    if root.endswith("/v1"):
+        root = root[: -len("/v1")]
+    try:
+        with urllib.request.urlopen(f"{root}/api/tags", timeout=2) as r:
+            payload = json.loads(r.read().decode("utf-8"))
+        return True, [m.get("name", "") for m in payload.get("models", [])]
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ConnectionError):
+        return False, []
+
+
+def _cmd_llm_status(args: argparse.Namespace) -> int:
+    # Re-read settings here so the output reflects the live .env, not a snapshot.
+    from importlib import reload
+    import config as _config
+    reload(_config)
+    s = _config.settings
+
+    print(f"backend:        {s.llm_backend}")
+    if s.llm_backend == "ollama":
+        print(f"ollama_model:   {s.ollama_model}")
+        print(f"ollama_url:     {s.ollama_base_url}")
+        reachable, tags = _ollama_reachable(s.ollama_base_url)
+        print(f"ollama daemon:  {'✓ reachable' if reachable else '✗ unreachable'}")
+        if reachable:
+            present = s.ollama_model in tags
+            print(f"model present:  {'✓' if present else '✗ — run: ollama pull qwen2.5:14b-instruct && ollama create '+s.ollama_model+' -f ollama/Modelfile.qwen-conclave'}")
+            if tags:
+                print(f"installed tags: {', '.join(tags)}")
+    else:
+        print(f"nearai_model:   {s.default_model}")
+        print(f"nearai_url:     {s.nearai_base_url}")
+        print(f"api key:        {'set' if s.nearai_api_key else 'MISSING — set CONCLAVE_NEARAI_API_KEY'}")
+    return 0
+
+
+def _cmd_llm_use(args: argparse.Namespace) -> int:
+    target = args.backend.lower()
+    if target not in {"ollama", "nearai"}:
+        print(f"error: backend must be 'ollama' or 'nearai' (got {args.backend!r})", file=sys.stderr)
+        return 2
+    _write_backend(target)
+    print(f"wrote CONCLAVE_LLM_BACKEND={target} to {_ENV_PATH}")
+    print("(new shells / processes will pick this up; current process keeps its old setting)")
+    return _cmd_llm_status(args)
+
+
+def _cmd_llm_smoke(args: argparse.Namespace) -> int:
+    """One round-trip through `config.get_llm` — proves the wiring end-to-end."""
+    from importlib import reload
+    import config as _config
+    reload(_config)
+    llm = _config.get_llm()
+    print(f"invoking {_config.settings.llm_backend} backend…")
+    try:
+        resp = llm.invoke([{"role": "user", "content": "Reply with the single word: pong"}])
+        content = getattr(resp, "content", str(resp)).strip()
+        print(f"response: {content[:200]}")
+        return 0
+    except Exception as exc:  # noqa: BLE001 — smoke test surfaces all failures
+        print(f"FAILED: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 1
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Legacy single-file quick run — parse + (optional) enrich + (optional) store."""
     raw_text = sys.stdin.read() if args.input == "-" else open(args.input, encoding="utf-8").read()
@@ -109,6 +212,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi.add_argument("--dry-run", action="store_true", help="parse but do not write to the store")
     pi.add_argument("--tags", help="comma-separated tags attached to every ingested session")
     pi.set_defaults(func=_cmd_ingest)
+
+    pl = sub.add_parser("llm", help="inspect or flip the LLM backend (nearai ⇄ ollama)")
+    psub = pl.add_subparsers(dest="llm_cmd")
+    pls = psub.add_parser("status", help="show current backend + reachability")
+    pls.set_defaults(func=_cmd_llm_status)
+    plu = psub.add_parser("use", help="persist a backend to .env (ollama|nearai)")
+    plu.add_argument("backend", help="ollama or nearai")
+    plu.set_defaults(func=_cmd_llm_use)
+    plk = psub.add_parser("smoke", help="one round-trip through get_llm to prove wiring")
+    plk.set_defaults(func=_cmd_llm_smoke)
+    pl.set_defaults(func=lambda a: (pl.print_help() or 2))
 
     pr = sub.add_parser("run", help="legacy: parse + enrich + store one file, print markdown")
     pr.add_argument("input", help="path to a transcript file, or '-' for stdin")

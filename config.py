@@ -12,9 +12,12 @@ class Settings(BaseSettings):
     nearai_base_url: str = "https://cloud-api.near.ai/v1"
     default_model: str = "deepseek-ai/DeepSeek-V3.1"
 
-    # Ollama (local dev) — only used when llm_backend == "ollama"
+    # Ollama (local dev) — only used when llm_backend == "ollama".
+    # Default is the Conclave-tuned qwen2.5:14b-instruct variant
+    # (num_ctx=8192 baked in — see ollama/Modelfile.qwen-conclave).
+    # Build it once with: ollama create qwen2.5-conclave -f ollama/Modelfile.qwen-conclave
     ollama_base_url: str = "http://localhost:11434/v1"
-    ollama_model: str = "llama3.1:8b"
+    ollama_model: str = "qwen2.5-conclave"
 
     # Embedding (unchanged)
     embedding_model: str = "all-MiniLM-L6-v2"

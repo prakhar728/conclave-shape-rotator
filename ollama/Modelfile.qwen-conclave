@@ -1,0 +1,21 @@
+# Conclave's local enrichment model — Qwen2.5-14B-Instruct with the context
+# window bumped above CHUNK_MAX_TOKENS so long transcripts don't silently
+# truncate (the gotcha called out in transcripts/IMPLEMENTATION_PLAN.md §F).
+#
+# Build with:
+#   ollama create qwen2.5-conclave -f ollama/Modelfile.qwen-conclave
+#
+# Then set CONCLAVE_OLLAMA_MODEL=qwen2.5-conclave (this is the default in
+# config.py when CONCLAVE_LLM_BACKEND=ollama).
+
+FROM qwen2.5:14b-instruct
+
+# CHUNK_MAX_TOKENS = 6000 (transcripts/config.py, lands in C7). 8192 gives
+# headroom for prompt scaffolding + the JSON response on top of the chunk.
+PARAMETER num_ctx 8192
+
+# Sampling: structured JSON extraction wants near-deterministic output.
+# llm.invoke_json (C6) does one repair retry on malformed JSON; lower temp
+# = fewer retries = faster batch runs.
+PARAMETER temperature 0.2
+PARAMETER top_p 0.9
