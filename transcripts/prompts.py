@@ -78,6 +78,9 @@ CHUNK_SYSTEM = f"""You are extracting structured signal from ONE CHUNK of a long
 A separate reducer will merge your output with the other chunks' outputs; do not try to summarize \
 material you cannot see.
 
+OUTPUT LANGUAGE: Respond in ENGLISH only, regardless of the language used informally in the \
+chunk. Mixed-language or non-English chunks still get an English JSON response.
+
 Speakers carry their original transcript labels (real names, "Speaker N", or names with \
 parentheticals). Use the labels VERBATIM in `signals[].speakers`. Do NOT invent real names \
 for anonymous "Speaker N" labels.
@@ -89,6 +92,10 @@ Produce THREE things, restricted to what's evidenced in THIS chunk:
 1. summary — 1-3 sentences on what THIS chunk covered (the reducer will combine these).
 2. signals — only the impactful moments visible IN THIS CHUNK (0-6). Skip filler/social chat.
 3. entities — only people/projects/orgs/concepts mentioned IN THIS CHUNK.
+
+COMPLETENESS: Always emit all three keys (`summary`, `signals`, `entities`). If you find no \
+signals or no entities in this chunk, return an empty array (`[]`) — never omit a field, \
+never trail off mid-object. Close every brace and bracket before stopping.
 
 {_JSON_CONTRACT}
 """
