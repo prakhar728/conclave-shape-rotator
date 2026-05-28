@@ -24,3 +24,9 @@ data/*.db
 data/*.db-*
 data/mock_ideas/submissions.jsonl
 external/
+
+# Local-only enrichment artefacts (cohort transcript content + derived).
+# Regenerable via `transcripts.cli enrich --pending`; cohort transcripts
+# themselves are already gitignored under tests/fixtures/.
+enriched-output/
+tmp/
