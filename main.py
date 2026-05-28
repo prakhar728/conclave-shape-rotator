@@ -69,10 +69,28 @@ app.include_router(router)
 from api.transcripts_routes import router as transcripts_router
 app.include_router(transcripts_router)
 
+# C11: stylized cohort-context dashboard. Static page served at /dashboard;
+# the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
+from fastapi.staticfiles import StaticFiles
+import os as _os
+_web_dir = _os.path.join(_os.path.dirname(__file__), "web")
+if _os.path.isdir(_web_dir):
+    app.mount("/dashboard", StaticFiles(directory=_web_dir, html=True), name="dashboard")
+
 # Mount the interview_reflection MCP plugin surface at /mcp (Step 9).
 # The MCP sub-app speaks Streamable HTTP — the same transport Claude Code /
 # Desktop / Cursor use in production. Auth is handled by middleware inside the
 # sub-app (X-Instance-Token or Authorization: Bearer <token>).
-from skills.interview_reflection.mcp_server import build_mcp_app
-
-app.mount("/mcp", build_mcp_app())
+#
+# Optional: the `mcp` Python package isn't always present in dev envs (the
+# transcripts dashboard, for instance, doesn't need it). Degrade gracefully
+# so `transcripts.cli serve` boots without the MCP package installed.
+try:
+    from skills.interview_reflection.mcp_server import build_mcp_app
+    app.mount("/mcp", build_mcp_app())
+except ImportError as _mcp_exc:
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "main: skipping /mcp mount — %s (install the `mcp` package to enable it)",
+        _mcp_exc,
+    )

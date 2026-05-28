@@ -191,6 +191,21 @@ def _cmd_enrich(args: argparse.Namespace) -> int:
     return 0 if not report.failed else 1
 
 
+def _cmd_serve(args: argparse.Namespace) -> int:
+    """Boot the FastAPI app for the dashboard (uvicorn).
+
+    The dashboard lives at ``/dashboard`` (vendored shape-ui under
+    ``/dashboard/shape-ui``); the JSON API at ``/transcripts/sessions``.
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        print("error: uvicorn not installed — pip install uvicorn", file=sys.stderr)
+        return 2
+    uvicorn.run("main:app", host=args.host, port=args.port, reload=args.reload)
+    return 0
+
+
 def _cmd_eval(args: argparse.Namespace) -> int:
     """Score the current store against ``tests/fixtures/transcripts/*.expected.yaml``."""
     from transcripts.eval import diff_baseline, run_eval, save_baseline
@@ -275,6 +290,12 @@ def main(argv: Optional[list[str]] = None) -> int:
     pe.add_argument("--session", help="limit to a single session_id")
     pe.add_argument("--model", help="LLM model id override (default: backend default)")
     pe.set_defaults(func=_cmd_enrich)
+
+    ps = sub.add_parser("serve", help="boot the dashboard (FastAPI + static /dashboard)")
+    ps.add_argument("--host", default="127.0.0.1")
+    ps.add_argument("--port", type=int, default=8000)
+    ps.add_argument("--reload", action="store_true", help="uvicorn auto-reload (dev)")
+    ps.set_defaults(func=_cmd_serve)
 
     pv = sub.add_parser("eval", help="score store sessions against golden YAML expectations")
     pv.add_argument("--no-enrich", action="store_true", help="score current derived; skip re-enrichment")
