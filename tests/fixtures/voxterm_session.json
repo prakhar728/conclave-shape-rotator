@@ -1,0 +1,14 @@
+{
+  "record_id": "transcript-2026-05-27-1430-voxterm",
+  "batch_index": 0,
+  "started_at": "2026-05-27T14:30:00Z",
+  "ended_at": "2026-05-27T14:33:00Z",
+  "origin_device": "b0c1d2e3-4f56-4789-a0b1-c2d3e4f56789",
+  "location": "cohort-room-2",
+  "segments": [
+    {"t": 2.1, "speaker": "speaker_1", "text": "So for the matching engine, I think we should ship the tag-based pass first and add embeddings later."},
+    {"t": 11.8, "speaker": "speaker_2", "text": "Agreed. Let's lock the hybrid matcher as the v1 design and not block on the embedding model."},
+    {"t": 24.0, "speaker": "speaker_1", "text": "I'll wire VoxTerm transcripts into the pipeline by Friday so we have real data."},
+    {"t": 40.5, "speaker": "speaker_2", "text": "One open question is whether Conclave's graph should own speaker identity or the pipeline does."}
+  ]
+}
