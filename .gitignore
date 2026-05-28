@@ -17,6 +17,7 @@ eval_results/
 scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
+!tests/fixtures/voxterm_session.json
 .agents/
 skills-lock.json
 data/*.db

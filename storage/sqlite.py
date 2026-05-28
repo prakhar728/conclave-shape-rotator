@@ -104,6 +104,27 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             data TEXT,
             PRIMARY KEY (instance_id, report_hash)
         );
+
+        -- Transcript pipeline (Layer 1). One row per diarized session.
+        -- `raw_diarization` is written once and never mutated; every future
+        -- pipeline stage (speaker resolution, graph matching, cross-transcript
+        -- relations) reads here and writes back only to `metadata`/`derived`.
+        -- `source` and `session_date` are typed columns so Layer-2 organizer
+        -- queries can filter by source / date range without parsing JSON.
+        CREATE TABLE IF NOT EXISTS transcript_sessions (
+            session_id      TEXT PRIMARY KEY,
+            source          TEXT NOT NULL,   -- 'voxterm', 'whisper', 'assemblyai', ...
+            session_date    TEXT NOT NULL,   -- ISO date (YYYY-MM-DD) for range queries
+            raw_diarization TEXT NOT NULL,   -- JSON array — IMMUTABLE after first insert
+            metadata        TEXT NOT NULL,   -- JSON: resolved_speakers, tags, pipeline_version, provenance
+            derived         TEXT NOT NULL,   -- JSON: {summary, signals, entities, graph_nodes}
+            created_at      TEXT NOT NULL,
+            updated_at      TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_transcript_sessions_date
+            ON transcript_sessions (session_date);
+        CREATE INDEX IF NOT EXISTS idx_transcript_sessions_source
+            ON transcript_sessions (source);
         """
     )
 
@@ -125,6 +146,7 @@ def reset_all() -> None:
         DELETE FROM registrations;
         DELETE FROM evaluation_runs;
         DELETE FROM attestations;
+        DELETE FROM transcript_sessions;
         """
     )
 
@@ -430,3 +452,122 @@ def list_attestations(instance_id: str) -> list[dict]:
             **extras,
         })
     return out
+
+
+# --- Transcript sessions (Layer 1 pipeline) ---
+
+def save_transcript_session(
+    session_id: str,
+    source: str,
+    session_date: str,
+    raw_diarization: list,
+    metadata: dict,
+    derived: dict,
+) -> None:
+    """Insert a session, or update only its `metadata`/`derived` if it exists.
+
+    Enforces the pipeline's core invariant: `raw_diarization` (and the
+    `source`/`session_date` provenance) are written once on first insert and
+    are never overwritten on re-save. Re-running enrichment, speaker
+    resolution, or graph matching updates `metadata`/`derived` only.
+    """
+    now = _now()
+    _get_conn().execute(
+        """
+        INSERT INTO transcript_sessions
+            (session_id, source, session_date, raw_diarization, metadata, derived, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+            metadata = excluded.metadata,
+            derived = excluded.derived,
+            updated_at = excluded.updated_at
+        """,
+        (
+            session_id,
+            source,
+            session_date,
+            json.dumps(_to_jsonable(raw_diarization)),
+            json.dumps(_to_jsonable(metadata)),
+            json.dumps(_to_jsonable(derived)),
+            now,
+            now,
+        ),
+    )
+
+
+def get_transcript_session(session_id: str) -> dict | None:
+    row = _get_conn().execute(
+        "SELECT session_id, source, session_date, raw_diarization, metadata, derived, "
+        "created_at, updated_at FROM transcript_sessions WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "session_id": row["session_id"],
+        "source": row["source"],
+        "session_date": row["session_date"],
+        "raw_diarization": json.loads(row["raw_diarization"]),
+        "metadata": json.loads(row["metadata"]),
+        "derived": json.loads(row["derived"]),
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
+
+
+def list_transcript_sessions(
+    source: str | None = None,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict]:
+    """List sessions, newest-first, optionally filtered by source / date range.
+
+    `date_from` / `date_to` are inclusive ISO dates (YYYY-MM-DD). This is the
+    query surface Layer-2 organizer prompts fan out over.
+    """
+    clauses, params = [], []
+    if source is not None:
+        clauses.append("source = ?")
+        params.append(source)
+    if date_from is not None:
+        clauses.append("session_date >= ?")
+        params.append(date_from)
+    if date_to is not None:
+        clauses.append("session_date <= ?")
+        params.append(date_to)
+    where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+    rows = _get_conn().execute(
+        "SELECT session_id, source, session_date, raw_diarization, metadata, derived, "
+        f"created_at, updated_at FROM transcript_sessions{where} "
+        "ORDER BY session_date DESC, created_at DESC",
+        tuple(params),
+    ).fetchall()
+    out = []
+    for row in rows:
+        out.append({
+            "session_id": row["session_id"],
+            "source": row["source"],
+            "session_date": row["session_date"],
+            "raw_diarization": json.loads(row["raw_diarization"]),
+            "metadata": json.loads(row["metadata"]),
+            "derived": json.loads(row["derived"]),
+            "created_at": row["created_at"],
+            "updated_at": row["updated_at"],
+        })
+    return out
+
+
+def update_transcript_derived(session_id: str, derived: dict) -> None:
+    """Replace the `derived` block for a session (raw stays untouched)."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET derived = ?, updated_at = ? WHERE session_id = ?",
+        (json.dumps(_to_jsonable(derived)), _now(), session_id),
+    )
+
+
+def update_transcript_metadata(session_id: str, metadata: dict) -> None:
+    """Replace the `metadata` block for a session (raw stays untouched)."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET metadata = ?, updated_at = ? WHERE session_id = ?",
+        (json.dumps(_to_jsonable(metadata)), _now(), session_id),
+    )
