@@ -5,6 +5,14 @@
 // the per-card `mountShape(canvas, opts)` path, not the shared overlay
 // — keeps each card self-contained and lets the renderer scale to
 // however many sessions the cohort produces.
+//
+// F2 (§D.3): two views, hash-routed in one SPA:
+//   - `` (no hash)            → grid of mini-preview cards
+//   - `#/sessions/<id>`       → full per-meeting detail page
+// Cards on the grid are themselves the link — clicking anywhere on the
+// card pushes the hash. Detail view re-uses the same `signals_by_kind`
+// section rendering as the (now removed) full-card view so there's a
+// single helper to maintain.
 
 import { mountShape } from "/dashboard/shape-ui/shape-canvas.js";
 
@@ -38,6 +46,8 @@ function el(tag, props = {}, ...children) {
   }
   return node;
 }
+
+// ── shared renderers ───────────────────────────────────────────────────
 
 function renderSpeakerChips(resolved) {
   const entries = Object.entries(resolved || {});
@@ -155,23 +165,99 @@ function renderTopics(topics) {
   );
 }
 
-function renderCard(card, detail) {
-  const glyph = el("div", { class: "card-glyph" }, el("canvas"));
-  const summary = card.summary
-    ? el("p", { class: "card-summary" }, card.summary)
-    : el("p", { class: "card-summary empty" }, "(not yet enriched)");
+// ── F2: card preview vs detail view ────────────────────────────────────
 
-  const meta = [
+// Importance rule (§D.3): pick the top 2-3 signals to show in the card
+// preview. Decisions first, then action items, then fall back to
+// impactful points, then insights. Open questions are skipped from the
+// preview (less actionable at a glance) but always present in detail.
+const _PREVIEW_KIND_ORDER = ["decisions", "action_items", "impactful_points", "insights"];
+const _PREVIEW_MAX = 3;
+
+function pickTopSignals(detail) {
+  const sbk = (detail && detail.signals_by_kind) || {};
+  const picked = [];
+  for (const plural of _PREVIEW_KIND_ORDER) {
+    for (const s of sbk[plural] || []) {
+      picked.push({ kind_plural: plural, signal: s });
+      if (picked.length >= _PREVIEW_MAX) return picked;
+    }
+  }
+  return picked;
+}
+
+function renderPreviewSignal({ kind_plural, signal }) {
+  const kind = _SECTION_KIND[kind_plural] || "";
+  return el(
+    "li",
+    { class: "preview-signal" },
+    el(
+      "span",
+      { class: `preview-signal-kind signal-kind ${kind}` },
+      (_SECTION_LABELS[kind_plural] || kind).split(" ")[0] // short tag
+    ),
+    el("span", { class: "preview-signal-text" }, signal.text)
+  );
+}
+
+function renderPreviewSignals(detail) {
+  const top = pickTopSignals(detail);
+  if (!top.length) return null;
+  return el("ul", { class: "preview-signals" }, top.map(renderPreviewSignal));
+}
+
+function buildMeta(card) {
+  return [
     card.date,
     `source: ${card.source}`,
     card.chunk_count != null ? `${card.chunk_count} chunk${card.chunk_count === 1 ? "" : "s"}` : null,
     card.model_id ? `model: ${card.model_id}` : null,
     card.participants_count ? `${card.participants_count} attendees` : null,
   ].filter(Boolean);
+}
+
+function mountGlyph(glyph, seed, sessionId) {
+  requestAnimationFrame(() => {
+    try {
+      mountShape(glyph.querySelector("canvas"), { seed, palette: "auto" });
+    } catch (err) {
+      // The glyph is decoration — if shape-ui fails (very rare), the card
+      // is still useful. Log instead of poisoning the whole grid.
+      console.warn("shape mount failed for", sessionId, err);
+    }
+  });
+}
+
+// Mini-preview card for the grid. Clicking anywhere on the card
+// navigates to the detail page via the hash router.
+function renderCardPreview(card, detail) {
+  const glyph = el("div", { class: "card-glyph" }, el("canvas"));
+  const summary = card.summary
+    ? el("p", { class: "card-summary" }, card.summary)
+    : el("p", { class: "card-summary empty" }, "(not yet enriched)");
+
+  const counts = [
+    `${card.signal_count || 0} signal${card.signal_count === 1 ? "" : "s"}`,
+    `${card.entity_count || 0} entit${card.entity_count === 1 ? "y" : "ies"}`,
+    card.topics && card.topics.length ? `${card.topics.length} topic${card.topics.length === 1 ? "" : "s"}` : null,
+  ].filter(Boolean).join(" · ");
 
   const node = el(
     "article",
-    { class: "card", "data-session-id": card.session_id },
+    {
+      class: "card card-preview",
+      "data-session-id": card.session_id,
+      role: "link",
+      tabindex: "0",
+      "aria-label": `Open ${card.session_id}`,
+      onclick: () => navigateToDetail(card.session_id),
+      onkeydown: (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          navigateToDetail(card.session_id);
+        }
+      },
+    },
     el(
       "div",
       { class: "card-head" },
@@ -179,31 +265,93 @@ function renderCard(card, detail) {
         "div",
         {},
         el("h2", { class: "card-title" }, card.session_id.replace(/-/g, " · ")),
-        el("div", { class: "card-meta" }, meta.map((m) => el("span", {}, m)))
+        el("div", { class: "card-meta" }, buildMeta(card).map((m) => el("span", {}, m)))
       ),
       glyph
     ),
     renderSpeakerChips(card.resolved_speakers),
     renderTopics(card.topics),
     summary,
-    // F1: signals grouped into ordered sections via signals_by_kind.
+    renderPreviewSignals(detail),
+    el("div", { class: "card-counts" }, counts),
+    el("div", { class: "card-cta" }, "view detail →")
+  );
+
+  mountGlyph(glyph, card.seed, card.session_id);
+  return node;
+}
+
+// Detail page: everything in depth — full ordered signal sections,
+// all entities, all topics, back-link.
+function renderDetail(card, detail) {
+  const glyph = el("div", { class: "card-glyph card-glyph-large" }, el("canvas"));
+  const summary = card.summary
+    ? el("p", { class: "card-summary" }, card.summary)
+    : el("p", { class: "card-summary empty" }, "(not yet enriched)");
+
+  const back = el(
+    "a",
+    {
+      class: "detail-back",
+      href: "#",
+      onclick: (e) => {
+        e.preventDefault();
+        navigateToGrid();
+      },
+    },
+    "← back to grid"
+  );
+
+  const node = el(
+    "article",
+    { class: "detail-view", "data-session-id": card.session_id },
+    back,
+    el(
+      "div",
+      { class: "detail-head" },
+      el(
+        "div",
+        {},
+        el("h1", { class: "detail-title" }, card.session_id.replace(/-/g, " · ")),
+        el("div", { class: "card-meta" }, buildMeta(card).map((m) => el("span", {}, m)))
+      ),
+      glyph
+    ),
+    renderSpeakerChips(card.resolved_speakers),
+    renderTopics(card.topics),
+    summary,
     renderSignalSections(detail),
     renderEntities(detail && detail.entities)
   );
 
-  // Per-card glyph mount. Seed = session_id → same session, same shape.
-  requestAnimationFrame(() => {
-    try {
-      mountShape(glyph.querySelector("canvas"), { seed: card.seed, palette: "auto" });
-    } catch (err) {
-      // The glyph is decoration — if shape-ui fails (very rare), the card
-      // is still useful. Log instead of poisoning the whole grid.
-      console.warn("shape mount failed for", card.session_id, err);
-    }
-  });
-
+  mountGlyph(glyph, card.seed, card.session_id);
   return node;
 }
+
+// ── hash router ────────────────────────────────────────────────────────
+
+const _DETAIL_HASH_RE = /^#\/sessions\/([^/]+)$/;
+
+function parseRoute() {
+  const m = _DETAIL_HASH_RE.exec(location.hash || "");
+  if (m) return { name: "detail", session_id: decodeURIComponent(m[1]) };
+  return { name: "grid" };
+}
+
+function navigateToDetail(sessionId) {
+  location.hash = `#/sessions/${encodeURIComponent(sessionId)}`;
+}
+
+function navigateToGrid() {
+  // history.back if there's something to go back to, else clear hash.
+  if (history.length > 1 && document.referrer && location.hash) {
+    history.back();
+  } else {
+    location.hash = "";
+  }
+}
+
+// ── grid + detail render dispatch ──────────────────────────────────────
 
 function updateCounts(cards) {
   const sig = cards.reduce((n, c) => n + (c.signal_count || 0), 0);
@@ -230,12 +378,30 @@ function renderEmpty(root) {
   );
 }
 
-async function render() {
+// Module-level cache so navigating between grid and detail doesn't
+// refetch every time. The dashboard data is small enough that one
+// fetch on first load is plenty.
+let _cardsCache = null;
+let _detailsCache = {}; // session_id → detail | null
+
+async function ensureCards() {
+  if (_cardsCache) return _cardsCache;
+  _cardsCache = await loadSessions();
+  // Hydrate all details in parallel; cheap, all local.
+  const details = await Promise.all(
+    _cardsCache.map((c) => loadDetail(c.session_id).catch(() => null))
+  );
+  _cardsCache.forEach((c, i) => { _detailsCache[c.session_id] = details[i]; });
+  return _cardsCache;
+}
+
+async function renderGrid() {
   const root = document.getElementById("cards");
+  root.className = "grid";
   root.innerHTML = "";
   let cards;
   try {
-    cards = await loadSessions();
+    cards = await ensureCards();
   } catch (err) {
     root.appendChild(el("div", { class: "empty-state" }, `API error: ${err.message}`));
     return;
@@ -246,13 +412,50 @@ async function render() {
     return;
   }
   updateCounts(cards);
-
-  // Hydrate signals/entities per-card from the detail endpoint. Cheap
-  // (all local) and keeps the list endpoint's payload small.
-  const details = await Promise.all(
-    cards.map((c) => loadDetail(c.session_id).catch(() => null))
+  cards.forEach((c) =>
+    root.appendChild(renderCardPreview(c, _detailsCache[c.session_id]))
   );
-  cards.forEach((c, i) => root.appendChild(renderCard(c, details[i])));
 }
 
-render();
+async function renderDetailRoute(sessionId) {
+  const root = document.getElementById("cards");
+  root.className = "detail";
+  root.innerHTML = "";
+  let cards;
+  try {
+    cards = await ensureCards();
+  } catch (err) {
+    root.appendChild(el("div", { class: "empty-state" }, `API error: ${err.message}`));
+    return;
+  }
+  const card = cards.find((c) => c.session_id === sessionId);
+  if (!card) {
+    root.appendChild(
+      el(
+        "div",
+        { class: "empty-state" },
+        `Session ${sessionId} not found. `,
+        el("a", { href: "#", onclick: (e) => { e.preventDefault(); navigateToGrid(); } }, "← back to grid")
+      )
+    );
+    return;
+  }
+  // Counts header reflects the single-session detail context.
+  document.getElementById("counts").textContent =
+    `${card.signal_count || 0} signal${card.signal_count === 1 ? "" : "s"} · ${card.entity_count || 0} entit${card.entity_count === 1 ? "y" : "ies"}`;
+  root.appendChild(renderDetail(card, _detailsCache[sessionId]));
+  // Scroll detail into view if user navigated mid-scroll on grid.
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
+async function routeToCurrentHash() {
+  const route = parseRoute();
+  if (route.name === "detail") {
+    await renderDetailRoute(route.session_id);
+  } else {
+    await renderGrid();
+  }
+}
+
+window.addEventListener("hashchange", routeToCurrentHash);
+routeToCurrentHash();

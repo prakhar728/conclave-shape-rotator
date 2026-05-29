@@ -291,6 +291,115 @@ a { color: inherit; }
   border-top: 1px solid rgba(255,255,255,0.05);
 }
 
+/* ── F2 preview + detail ─────────────────────────────────────────── */
+
+/* Mini preview card: whole card is clickable; cursor + lift on hover so
+   the affordance is unambiguous. */
+.card.card-preview {
+  cursor: pointer;
+  user-select: none;
+}
+.card.card-preview:focus-visible {
+  outline: 2px solid var(--accent, #c9ff5b);
+  outline-offset: 3px;
+}
+
+.preview-signals {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preview-signal {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.preview-signal-kind {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.preview-signal-text {
+  color: rgba(255,255,255,0.9);
+}
+
+.card-counts {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  letter-spacing: 0.04em;
+}
+
+.card-cta {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.4);
+  text-align: right;
+  margin-top: -4px;
+}
+.card.card-preview:hover .card-cta {
+  color: var(--accent, #c9ff5b);
+}
+
+/* Detail view: single-column, wider than a card; reuses all the
+   section/entity/topic styling so we don't duplicate rules. */
+#cards.detail {
+  display: block;
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 40px 80px;
+}
+
+.detail-view {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.detail-back {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: rgba(255,255,255,0.55);
+  text-decoration: none;
+  align-self: flex-start;
+  padding: 6px 0;
+}
+.detail-back:hover { color: var(--accent, #c9ff5b); }
+
+.detail-head {
+  display: flex;
+  gap: 24px;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.detail-title {
+  font-family: var(--font-display, "Fraunces", serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.15;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+
+.card-glyph-large {
+  width: 120px;
+  height: 120px;
+  flex: 0 0 120px;
+  border-radius: 12px;
+}
+
 /* empty state */
 .empty-state {
   grid-column: 1 / -1;
