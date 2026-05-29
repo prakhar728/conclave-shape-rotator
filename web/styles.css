@@ -151,6 +151,23 @@ a { color: inherit; }
   font-style: italic;
 }
 
+/* v1.1: signal sections (decisions / action_items / open_questions / etc.) */
+.signal-section {
+  margin-top: 14px;
+}
+.signal-section:first-of-type {
+  margin-top: 4px;
+}
+.signal-section-head {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin: 0 0 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
 /* signals */
 .signals { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
 .signal {

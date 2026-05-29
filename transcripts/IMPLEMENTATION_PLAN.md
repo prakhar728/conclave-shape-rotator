@@ -904,6 +904,108 @@ Reaffirms anti-scope from §L plus this round's specific deferrals:
 - **Multi-pass extraction.** Deferred per §2.5.
 - **Auto-promotion of frequently-seen new entities into the XML.** Hand-maintained for v1. Auto-promotion risks teaching the model its own past mistakes; defer until there's a clean eval loop.
 
+---
+
+## Demo Iteration — Planned Frontend + Backend Changes
+
+> **Source:** Live walkthrough of the v1.1 dashboard before the cohort demo.
+> Tag every item below as `demo-related` in the commit message. None of
+> this changes the v1 product surface; it's the user-facing layer on top
+> of the schema we already shipped.
+
+### D.1 Demo-only permission layer (hardcoded, no new branch)
+
+Phase 1.5 in `BUILD_PLAN.md §5` calls for a real `can_see(viewer, session)` + an `auth.py` module. For the demo we **shortcut** that:
+
+- **Mock identity picker** at `/dashboard/` entry — dropdown of cohort `record_id`s from `MOCK_DIRECTORY`. Stored in `localStorage`; no auth backend.
+- **Permission rule (hardcoded):** a viewer sees a session if any of:
+  - `metadata.visibility == "cohort"` (default — public to the cohort)
+  - `viewer == metadata.owner` (owner sees their own private sessions)
+  - `viewer` matches a `record_id` in `metadata.resolved_speakers` (you see meetings you spoke in)
+- **`SessionMetadata.owner`** stays optional. Demo defaults it to the first
+  resolved speaker on ingest (opt-in via env var, no test impact).
+- **"Hide from cohort" toggle** on cards you own → `POST /transcripts/sessions/{id}/visibility` flips `visibility: "cohort" ⇄ "owner-only"`. Auth check is `viewer_id == owner`.
+- **Personal action-items view** at `/dashboard/me`: filters all visible sessions' `signals[]` where `kind == "action_item"` AND (`viewer in said_by` OR `viewer in about_person`, matching either by speaker label or by `resolved_speakers` lookup).
+
+**No new branch.** Lands on `transcripts-phase1` alongside v1.1, tagged
+`demo-related` so future Phase-1.5 work can rebase or supersede without
+confusion. Test impact: 1 existing test rewrite (`test_can_see_stub_returns_true_for_everyone` — intentional), all other changes additive.
+
+### D.2 Shape-UI isolation (keep cohort-specific styling out of the product)
+
+The vendored `web/shape-ui/` carries the **Shape Rotator cohort's specific
+shape vocabulary** (torus / hex / prism / meridian / scaffold / plate) and
+maps domains→shapes in a way that's only meaningful for this cohort. For
+the **product** layer (when this ships generically to other teams), this
+visual layer must be optional and replaceable:
+
+- **Demo:** keeps the per-card `mountShape({seed: card.session_id})` glyph as-is.
+- **Product / Phase 3 extraction:** the dashboard accepts a `glyph` config —
+  default is `null` (no glyph) or a generic placeholder. The Shape-Rotator
+  glyph becomes one adapter among many (cohort-specific theme pack).
+- **Boundary commitment:** shape-ui must NOT leak cohort-specific identifiers
+  into Core API responses. The current `seed: card.session_id` field is
+  generic enough; no change needed beyond making the rendering optional.
+
+### D.3 Card expansion / preview pattern (low urgency)
+
+Current behaviour: every card renders FULL content (summary + ordered signal sections + entities + topics). For dense corpora this gets visually heavy.
+
+**Planned:** cards default to a compressed preview — title, date, topic
+chips, 1-line summary, signal-count badges. **On click**, expand inline
+or navigate to a per-session detail page. Likely implementation:
+
+- Add `?compressed=true` (or default) state on cards
+- Click → toggle inline expansion (no route change) OR
+- Click → navigate to `/dashboard/sessions/<id>` (a dedicated detail page)
+
+**Low urgency** for the demo; current full-card render is acceptable.
+
+### D.4 Signal section ordering (LANDED in v1.1 dashboard JS)
+
+Signals now render in deterministic priority sections, driven by the
+v1.1 `signals_by_kind` server-side grouping:
+
+```
+DECISIONS (n)            ← decision-led, lands first
+ACTION ITEMS (n)         ← commitments, second
+OPEN QUESTIONS (n)       ← unresolved threads, third
+IMPACTFUL POINTS (n)     ← consequential facts, fourth
+INSIGHTS (n)             ← non-obvious observations, last
+```
+
+Empty sections are not rendered (no "Insights (0)" clutter). Already
+committed alongside the v1.1 prompt + the `signals_by_kind` API field.
+
+### D.5 LAN access / tunneling for the demo (operational)
+
+The dashboard binds to `0.0.0.0:8000` and is reachable on the same WiFi
+LAN — **but** many venue / corporate / guest WiFi networks have
+**client-isolation** enabled that blocks device-to-device traffic.
+
+- **Workaround for tomorrow:** `ngrok http 8000` (pre-installed). Produces
+  a public HTTPS URL anyone can hit from any network, sidestepping all
+  WiFi setup. Free tier is sufficient.
+- **Long-term:** when the product ships, it'll run inside a Phala CVM
+  (TEE) and serve over its public endpoint; no LAN exposure needed.
+
+### D.6 Cosmetic / provenance fixes
+
+- **`model_id` provenance bug.** `enrich._model_id` falls back to
+  `settings.default_model` (NearAI's deepseek) when no `llm` is passed,
+  even when the actual backend is RedPill/Gemma. Fix: check
+  `settings.llm_backend` first, return the backend-specific model id.
+  5-line fix + patch existing DB rows in place. Demo-blocking only if you
+  show the model badge; cosmetic otherwise.
+
+### Discipline
+
+- **All D.* changes go on `transcripts-phase1`** alongside v1.1 (per D.1).
+- Commit-message tag: `demo —` prefix or `(demo)` suffix.
+- Real Phase 1.5 (per `BUILD_PLAN.md §5`) supersedes D.1 when it lands;
+  the demo hardcoded permissions are a stepping stone, not the contract.
+- Every D.* change keeps the full test suite green.
+
 ### 10. Test impact
 
 The schema changes (§3), prompt-version bump (§7), and identity/dedup tightening (§5–§6) propagate into the existing test suite. The implementation is gated on the full suite staying green per step (same anti-domino rule as C1–C11). This section is the checklist.

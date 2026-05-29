@@ -78,6 +78,38 @@ function renderSignal(s) {
   );
 }
 
+// v1.1: render signals as ordered sections by kind. Priority is decisions
+// → action_items → open_questions → impactful_points → insights so the most
+// prep-relevant items lead. Uses the `signals_by_kind` server-side grouping
+// from `to_view()` when present; falls back to filtering the flat array.
+const SIGNAL_KIND_ORDER = [
+  { plural: "decisions",        kind: "decision",        label: "Decisions" },
+  { plural: "action_items",     kind: "action_item",     label: "Action items" },
+  { plural: "open_questions",   kind: "open_question",   label: "Open questions" },
+  { plural: "impactful_points", kind: "impactful_point", label: "Impactful points" },
+  { plural: "insights",         kind: "insight",         label: "Insights" },
+];
+
+function renderSignalSections(detail) {
+  if (!detail) return null;
+  const grouped = detail.signals_by_kind || null;
+  const sections = SIGNAL_KIND_ORDER.map(({ plural, kind, label }) => {
+    const items = grouped
+      ? grouped[plural] || []
+      : (detail.signals || []).filter((s) => s.kind === kind);
+    if (!items.length) return null;
+    return el(
+      "section",
+      { class: `signal-section signal-section-${kind}` },
+      el("h3", { class: `signal-section-head signal-kind ${kind}` },
+         `${label} (${items.length})`),
+      el("ul", { class: "signals" }, items.map(renderSignal))
+    );
+  }).filter(Boolean);
+  return sections.length ? sections : null;
+}
+
+
 function renderEntities(entities) {
   if (!entities || !entities.length) return null;
   // v1 entity additions: cohort_status (member/external/unknown) drives chip
@@ -140,9 +172,7 @@ function renderCard(card, detail) {
     renderSpeakerChips(card.resolved_speakers),
     renderTopics(card.topics),
     summary,
-    detail && detail.signals && detail.signals.length
-      ? el("ul", { class: "signals" }, detail.signals.map(renderSignal))
-      : null,
+    renderSignalSections(detail),
     renderEntities(detail && detail.entities)
   );
 
