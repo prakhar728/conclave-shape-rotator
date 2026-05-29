@@ -80,6 +80,19 @@ def to_card(session: Session) -> dict:
     }
 
 
+#: Signal kinds in the order we want them rendered on the dashboard
+#: (decision-led, then commitments, then opens, then color-coded context).
+#: Keys are the JSON-friendly pluralised names served under
+#: ``signals_by_kind``; values are the matching ``Signal.kind`` strings.
+_SIGNAL_KIND_GROUPS: list[tuple[str, str]] = [
+    ("decisions",        "decision"),
+    ("action_items",     "action_item"),
+    ("open_questions",   "open_question"),
+    ("insights",         "insight"),
+    ("impactful_points", "impactful_point"),
+]
+
+
 def to_view(session: Session) -> dict:
     """Detail view — card payload + the full derived signals & entities.
 
@@ -94,11 +107,23 @@ def to_view(session: Session) -> dict:
     (``raw_diarization``) remains the only field stripped at the API
     boundary; ``source_quote`` IS served (TEE is the privacy boundary,
     not the API field surface — see IMPLEMENTATION_PLAN v1 §3).
+
+    v1.1: ``signals_by_kind`` is a convenience server-side grouping so the
+    dashboard can render distinct sections ("DECISIONS", "ACTION ITEMS",
+    "OPEN QUESTIONS"…) without re-filtering ``signals[]`` client-side.
+    The flat ``signals[]`` array is also still served, in original model
+    order, for callers that want it.
     """
     card = to_card(session)
     d = session.derived
+    flat_signals = [s.model_dump() for s in (d.signals or [])]
+    signals_by_kind = {
+        plural: [s for s in flat_signals if s.get("kind") == kind]
+        for plural, kind in _SIGNAL_KIND_GROUPS
+    }
     card.update({
-        "signals": [s.model_dump() for s in (d.signals or [])],
+        "signals": flat_signals,
+        "signals_by_kind": signals_by_kind,
         "entities": [e.model_dump() for e in (d.entities or [])],
         # Derived's `graph_nodes` field is Phase-2 territory but listing
         # it here keeps the response shape stable across phases.

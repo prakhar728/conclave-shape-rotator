@@ -116,6 +116,50 @@ def test_card_includes_v1_topics_and_participants(client):
     assert "Alex (flashbots?)" in card["participants"]
 
 
+def test_detail_view_groups_signals_by_kind(client):
+    """v1.1: ``signals_by_kind`` is a server-side convenience grouping so
+    the dashboard can render distinct DECISIONS / ACTION ITEMS / OPEN
+    QUESTIONS / INSIGHTS / IMPACTFUL POINTS sections without re-filtering
+    the flat ``signals[]`` array. The flat array is still served too — both
+    shapes coexist."""
+    from transcripts.models import Signal as _Signal
+    sess = _store_session("demo")
+    sess.derived.signals = [
+        _Signal(kind="decision", text="ship matcher", said_by=["Shaw"]),
+        _Signal(kind="action_item", text="send link", said_by=["Alex"], about_person=["Shaw"]),
+        _Signal(kind="action_item", text="give email IF needed", said_by=["Alex"], about_person=["Shaw"]),
+        _Signal(kind="open_question", text="how does X work?", said_by=["Speaker 1"]),
+        _Signal(kind="insight", text="Y is hard", said_by=["Shaw"]),
+        _Signal(kind="impactful_point", text="Z happens", said_by=["Shaw"]),
+    ]
+    store.save_session(sess)
+
+    view = client.get("/transcripts/sessions/demo").json()
+
+    # Flat list still served.
+    assert "signals" in view
+    assert len(view["signals"]) == 6
+
+    # Grouping under a stable set of pluralized keys.
+    grouped = view["signals_by_kind"]
+    assert set(grouped) == {"decisions", "action_items", "open_questions", "insights", "impactful_points"}
+    assert len(grouped["decisions"]) == 1
+    assert len(grouped["action_items"]) == 2
+    assert len(grouped["open_questions"]) == 1
+    assert len(grouped["insights"]) == 1
+    assert len(grouped["impactful_points"]) == 1
+    # Each grouped signal preserves the v1 schema fields.
+    assert grouped["action_items"][0]["text"] == "send link"
+    assert grouped["action_items"][0]["said_by"] == ["Alex"]
+    assert grouped["action_items"][0]["about_person"] == ["Shaw"]
+    # An empty group is an empty list, not missing — frontend can iterate safely.
+    sess.derived.signals = [_Signal(kind="insight", text="only insight")]
+    store.save_session(sess)
+    view2 = client.get("/transcripts/sessions/demo").json()
+    assert view2["signals_by_kind"]["decisions"] == []
+    assert view2["signals_by_kind"]["open_questions"] == []
+
+
 def test_detail_view_includes_v1_signal_fields(client):
     """v1 schema additions surface through the detail endpoint:
     said_by/about_person/source_quote on signals; cohort_status/affiliation
