@@ -60,6 +60,15 @@ async def cors_middleware(request: Request, call_next):
         return response
     response = await call_next(request)
     response.headers["Access-Control-Allow-Origin"] = "*"
+    # Dashboard iteration: we're actively editing JS/CSS during the demo
+    # build, and stale browser caches on remote laptops have bitten us
+    # (reverts not visible after server-side change). Disable HTTP caching
+    # for anything under /dashboard so every reload revalidates. Cheap —
+    # everything served there is small static text.
+    if request.url.path.startswith("/dashboard"):
+        response.headers["Cache-Control"] = "no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 
