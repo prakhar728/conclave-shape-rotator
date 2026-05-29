@@ -183,7 +183,7 @@
 {
   "summary": "Hang Yin chose compose-hash-based policy over app-ID-based policy for the DStack service mesh; compose-hash lets measurements be pre-calculated and the deployment ships in one step instead of needing to wire app ID, policy, and code together.",
   "signals": [
-    {"kind": "decision",
+    {"kind": "action_item",
      "text": "Use compose-hash whitelisting (not app-ID whitelisting) for the DStack service mesh policy",
      "source_quote": "I didn't go with app ID, because that will make the deployment a little bit harder",
      "said_by": ["Hang Yin"],
@@ -206,9 +206,9 @@
 }
       </expected>
       <lessons>
-        - When a speaker walks through a decision they personally made, that's a "decision" signal — DO NOT default it to "insight." The trigger phrases ("there is decision I need to make", "I didn't go with X because Y") are explicit decision markers.
+        - v2.2: When a speaker walks through a decision they personally made, that's an "action_item" signal (which absorbed the old "decision" kind). The trigger phrases ("there is decision I need to make", "I didn't go with X because Y") are explicit action_item markers — DO NOT default them to "insight."
         - Multiple distinct entity types in one chunk: project (DStack, service mesh), technology (compose hash, app ID, CVM, KMS). Don't lump everything into "concept" — extract the specific type each time.
-        - Two related signals (the decision AND the reasoning) can come from one chunk. The reasoning is its own "insight" — don't merge them into one diluted signal.
+        - Two related signals (the action_item AND the reasoning) can come from one chunk. The reasoning is its own "insight" — don't merge them into one diluted signal.
       </lessons>
     </example>
 
@@ -286,7 +286,7 @@
      "source_quote": "Does anyone here done anything interesting with cross-chain bridges? How about sending any transactions from a tee?",
      "said_by": ["Andrew Miller"],
      "about_person": []},
-    {"kind": "impactful_point",
+    {"kind": "insight",
      "text": "Tina is in New York already but not yet physically present at the meeting",
      "source_quote": "Tina. Also, I think is in New York already, just quite here in person",
      "said_by": ["Andrew Miller"],
@@ -303,8 +303,8 @@
       </expected>
       <lessons>
         - A question is an "open_question" ONLY when it's NOT answered in the same chunk. If the speaker self-answers, it's an insight, not an open_question.
-        - Cross-cohort references (Tina being "in New York") generate an "impactful_point" with the mentioned person in about_person — even when Tina isn't speaking. The chunk is asserting a logistical fact about her, so she's the subject.
-        - Multi-clause chunks can carry two signals from one speaker: the open question + a separate impactful_point. Don't artificially limit to one signal per speaker.
+        - Cross-cohort references (Tina being "in New York") generate an "insight" with the mentioned person in about_person — even when Tina isn't speaking. The chunk is asserting a logistical fact about her, so she's the subject.
+        - Multi-clause chunks can carry two signals from one speaker: the open question + a separate insight. Don't artificially limit to one signal per speaker.
       </lessons>
     </example>
 
@@ -318,7 +318,7 @@
         - Multiple decisions in one chunk (added content evaluation,
           articulation score metric)
         - "project" entity (Elocute) + "concept" entity (articulation)
-        - User-count signal as impactful_point (concrete fact)
+        - User-count signal as insight (concrete fact)
         - Topics describe product domain not literal title
     -->
     <example>
@@ -329,7 +329,7 @@
 {
   "summary": "Albiona shipped a content-quality evaluation pass on Elocute on top of the existing delivery-quality metrics (pace, structure, organization, language); the app now scores both how you say it AND what you said. Currently has 524 users.",
   "signals": [
-    {"kind": "decision",
+    {"kind": "action_item",
      "text": "Added a content-evaluation pass to Elocute on top of the existing delivery-evaluation metrics",
      "source_quote": "now added another session where we evaluate also the content of what we're speaking",
      "said_by": ["Albiona Hoti"],
@@ -339,7 +339,7 @@
      "source_quote": "people were saying like saying a bunch of other things the content itself",
      "said_by": ["Albiona Hoti"],
      "about_person": []},
-    {"kind": "impactful_point",
+    {"kind": "insight",
      "text": "Elocute has reached 524 users, with a denser power-user segment doing repeated sessions",
      "source_quote": "For now I have 524 users",
      "said_by": ["Albiona Hoti"],
@@ -355,14 +355,14 @@
       </expected>
       <lessons>
         - Even in a long pitch monologue, a single chunk can yield multiple distinct signals (a decision + the insight motivating it + a metric milestone). Don't collapse them into one bland summary.
-        - Concrete numbers ("524 users") become "impactful_point" signals — they're not decisions, not actions, but they're the kind of fact someone preparing for a follow-up meeting needs.
+        - Concrete numbers ("524 users") become "insight" signals — they're not decisions, not actions, but they're the kind of fact someone preparing for a follow-up meeting needs.
         - Summary should LEAD with what was shipped/decided, not "Albiona talked about Elocute." The DO/DON'T contrast in the prompt applies to summaries inside chunks too.
       </lessons>
     </example>
 
     <!--
       EXAMPLE 5 — Person mentioned externally (not in meeting) as positive
-      exemplar; said_by ≠ about_person; insight + impactful_point.
+      exemplar; said_by ≠ about_person; insight + insight.
       Source: Project Intros Agents Day 3 Transcript_May_21 (Andrew Miller
       presenting the Router project).
       Pattern coverage:
@@ -386,7 +386,7 @@
      "source_quote": "I now appreciate the importance of human water coolers, or people who act as health connections",
      "said_by": ["Andrew Miller"],
      "about_person": []},
-    {"kind": "impactful_point",
+    {"kind": "insight",
      "text": "Tita is the canonical example of a high-effectiveness human router; she will be at the cohort tonight or tomorrow",
      "source_quote": "My exemplar for this is Tita, who you'll get to meet later tonight or tomorrow",
      "said_by": ["Andrew Miller"],
@@ -404,7 +404,7 @@
       <lessons>
         - A speaker can talk extensively ABOUT someone NOT in the meeting (Tita). Extract that person as a "person" entity AND put them in about_person on the relevant signal. Tita not being a speaker doesn't disqualify her.
         - Coined concepts ("human water cooler") are entities of type "concept" — the speaker's framing IS extractable, not just named tools and projects.
-        - "My exemplar for X is Y" patterns yield an impactful_point about Y, not just an insight about X. Specificity wins.
+        - "My exemplar for X is Y" patterns yield an insight about Y, not just an insight about X. Specificity wins.
       </lessons>
     </example>
 
@@ -414,7 +414,7 @@
       Pattern coverage:
         - Speaker N anonymous label preserved verbatim in said_by
         - Cohort member as addressee (Chloe Wang answering)
-        - impactful_point (project deployment status — important for prep
+        - insight (project deployment status — important for prep
           even though the question itself wasn't open at the chunk level)
         - "project" entity (Crossroads) + "technology" entity (Ethereum testnet)
         - Demonstrates the model should NOT promote anonymous Speaker N to
@@ -429,7 +429,7 @@
 {
   "summary": "Andrew asked whether Crossroads is deployed on an Ethereum testnet or running as a hosted service; Chloe confirmed it is only running locally, not yet deployed.",
   "signals": [
-    {"kind": "impactful_point",
+    {"kind": "insight",
      "text": "Crossroads is not yet deployed to a testnet; it only runs locally",
      "source_quote": "No, it's currently not deployed, it's only running local",
      "said_by": ["Chloe Wang"],
@@ -446,7 +446,7 @@
       </expected>
       <lessons>
         - Speaker N labels are NEVER promoted to real names — keep them verbatim in said_by even when the surrounding context might let you guess.
-        - Q-and-A patterns where the answer is in the same chunk are NOT open_questions — they're impactful_points carrying the revealed information. The signal text describes the answer, not the question.
+        - Q-and-A patterns where the answer is in the same chunk are NOT open_questions — they're insights carrying the revealed information. The signal text describes the answer, not the question.
         - A negative answer ("not deployed yet, only running local") is still high-signal — it's the prep-relevant fact a future organizer needs.
       </lessons>
     </example>
@@ -471,7 +471,7 @@
 {
   "summary": "Andrew Hang's team finally got traction after Opus 4.0 + Cloud Code + MCP adoption in January; they've migrated agent-framework stacks 7-8 times (LangChain → LangGraph → BAML → Mastra → AI SDK → ASI SDK) and have learned to avoid over-engineering.",
   "signals": [
-    {"kind": "impactful_point",
+    {"kind": "insight",
      "text": "Andrew Hang's MCP block explorer got production traction once Opus 4.0, Cloud Code, and MCP adoption converged in January — about a year of work before that",
      "source_quote": "January this year finally teams started using Cloud Code and MCP is a lot more, so we've gotten a lot of usage since then",
      "said_by": ["Andrew Hang"],
@@ -590,11 +590,15 @@
   </extraction_examples>
 
   <style_guide>
-    <kind name="decision">A course of action the group agreed on. Past or present tense ("we decided", "let's go with", "we should").</kind>
-    <kind name="action_item">A concrete next step someone agreed to do. Often "I'll send", "you handle", "can you", "let me reach out".</kind>
-    <kind name="open_question">A question raised in this chunk that is NOT answered within the same chunk.</kind>
-    <kind name="insight">A non-obvious observation or learning. Use sparingly — prefer a more specific kind when one fits.</kind>
-    <kind name="impactful_point">A consequential statement that doesn't fit decision/action/question but matters for prep. Use rarely.</kind>
+    <!-- v2.2 schema (3 kinds): action_item absorbed decision; insight absorbed
+         insight. Examples above were authored under the v2.1 (5-kind)
+         schema; the spans still teach the right patterns under the new naming
+         (group decisions and personal next-steps are both action_items now;
+         consequential statements are insights). Each example's <lessons>
+         block carries the discipline; read those, not the labels alone. -->
+    <kind name="action_item">Anyone commits to a course of action. Group OR individual, soft OR hard. Triggers include "I'll send", "you handle", "we should X", "let's go with Y", "I'm going to try Z", "let me know when W". Conditionals MUST be preserved verbatim ("Alex will help IF asked" ≠ "Alex will help"). Person-attached when possible. ABSORBED the old "decision" kind in v2.2.</kind>
+    <kind name="open_question">A question raised in this chunk that is NOT answered within the same chunk. Includes implicit ones ("the thing we still need to figure out is X"). Excludes rhetorical questions ("you know?", "right?") and fully-answered ones.</kind>
+    <kind name="insight">A notable nugget: specific, praiseworthy, or a synthesised observation across a stretch of dialogue. Three soft tests: (1) self-contained, (2) names at least one entity, (3) synthesis over single-sentence paraphrase. A sharp single-sentence praise IS an insight if it's notable and named. CAP: max 4 per chunk. ABSORBED the old "insight" kind in v2.2.</kind>
   </style_guide>
 
   <open_world_note>

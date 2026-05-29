@@ -75,7 +75,17 @@ class Signal(BaseModel):
     about_person=["Tina", "Andrew"]; Tina may not be on the call at all).
     """
 
-    # decision | insight | impactful_point | action_item | open_question
+    # v2.2: collapsed to 3 kinds.
+    # action_item    — anyone commits to a course of action, group or individual,
+    #                  soft or hard. Absorbed the old "decision" kind in v2.2;
+    #                  legacy DB rows carrying kind="decision" remain readable
+    #                  (Pydantic ignores unknown literal values), but new
+    #                  enrichment never emits decision/impactful_point.
+    # open_question  — non-rhetorical question raised in the chunk that is
+    #                  NOT answered within the same chunk.
+    # insight        — notable nugget: specific, praiseworthy, or a synthesised
+    #                  observation across a stretch of dialogue. Absorbed the
+    #                  old "impactful_point" kind in v2.2.
     kind: str
     text: str
     #: Verbatim speaker label(s) at the turn this signal was anchored to.

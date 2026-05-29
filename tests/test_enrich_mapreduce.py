@@ -120,7 +120,7 @@ def test_single_chunk_uses_one_llm_call_and_stamps_provenance():
     sess = _short_session()
     fake = FakeLLM({
         "summary": "short meeting",
-        "signals": [{"kind": "decision", "text": "ship matching first", "said_by": ["Shaw"]}],
+        "signals": [{"kind": "action_item", "text": "ship matching first", "said_by": ["Shaw"]}],
         "entities": [{"name": "matching", "type": "project", "evidence": "main topic"}],
     })
 
@@ -128,7 +128,7 @@ def test_single_chunk_uses_one_llm_call_and_stamps_provenance():
 
     assert len(fake.calls) == 1  # single-shot path — no reduce
     assert sess.derived.summary == "short meeting"
-    assert sess.derived.signals[0].kind == "decision"
+    assert sess.derived.signals[0].kind == "action_item"
     assert sess.derived.entities[0].name == "matching"
 
     # Provenance stamps.
@@ -145,7 +145,7 @@ def test_single_chunk_drops_blank_signals_and_coerces_bad_kinds():
         "signals": [
             {"kind": "bogus_kind", "text": "coerced to insight"},
             {"kind": "insight", "text": "   "},  # blank → dropped
-            {"kind": "decision", "text": "kept"},
+            {"kind": "action_item", "text": "kept"},
         ],
         "entities": [
             {"name": "VoxTerm", "type": "weird"},  # bad type → coerced to concept
@@ -153,7 +153,7 @@ def test_single_chunk_drops_blank_signals_and_coerces_bad_kinds():
         ],
     })
     enrich_session(sess, llm=fake)
-    assert {s.kind for s in sess.derived.signals} == {"insight", "decision"}
+    assert {s.kind for s in sess.derived.signals} == {"insight", "action_item"}
     assert any(e.name == "VoxTerm" and e.type == "concept" for e in sess.derived.entities)
     assert all(e.name for e in sess.derived.entities)
 
@@ -182,7 +182,7 @@ def test_multi_chunk_runs_map_then_reduce_with_summary_synth():
         }
         # Sprinkle a duplicate decision into the first and last chunks.
         if i == 0 or i == n_chunks - 1:
-            item["signals"].append({"kind": "decision", "text": "ship matcher first", "said_by": []})
+            item["signals"].append({"kind": "action_item", "text": "ship matcher first", "said_by": []})
         # Sprinkle a casing-only entity dup into the second chunk.
         if i == 1:
             item["entities"].append({"name": "Project-X", "type": "project", "evidence": "again in 1"})
@@ -215,7 +215,7 @@ def test_reduce_caps_signals_at_max_signals():
 
     partials = [
         {"summary": "s", "signals": [
-            {"kind": "decision", "text": f"sig-{i}-{j}", "said_by": []}
+            {"kind": "action_item", "text": f"sig-{i}-{j}", "said_by": []}
             for j in range(MAX_SIGNALS)
         ]}
         for i in range(3)
@@ -251,8 +251,8 @@ def test_dedup_entities_merges_evidence_strings():
 
 def test_dedup_signals_keeps_first_occurrence():
     out = _dedup_signals([
-        {"kind": "decision", "text": "Ship the matcher", "said_by": ["s1"]},
-        {"kind": "decision", "text": "ship the matcher", "said_by": []},
+        {"kind": "action_item", "text": "Ship the matcher", "said_by": ["s1"]},
+        {"kind": "action_item", "text": "ship the matcher", "said_by": []},
         {"kind": "insight", "text": "different signal"},
     ])
     assert [s.text for s in out] == ["Ship the matcher", "different signal"]

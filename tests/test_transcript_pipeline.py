@@ -157,7 +157,7 @@ def test_enrich_fills_derived_with_typed_signals():
     fake = FakeLLM({
         "summary": "The team locked the hybrid matcher as v1.",
         "signals": [
-            {"kind": "decision", "text": "Ship tag-based matching first.", "said_by": ["speaker_1"]},
+            {"kind": "action_item", "text": "Ship tag-based matching first.", "said_by": ["speaker_1"]},
             {"kind": "action_item", "text": "Wire VoxTerm transcripts in by Friday.", "said_by": ["speaker_1"]},
             {"kind": "bogus_kind", "text": "Coerced to insight.", "said_by": []},
             {"kind": "insight", "text": ""},
@@ -175,7 +175,7 @@ def test_enrich_fills_derived_with_typed_signals():
     assert d.summary == "The team locked the hybrid matcher as v1."
     # blank-text signal dropped; bad kind coerced to "insight".
     assert len(d.signals) == 3
-    assert {s.kind for s in d.signals} == {"decision", "action_item", "insight"}
+    assert {s.kind for s in d.signals} == {"action_item", "insight"}
     # speaker labels stay verbatim on the new said_by field.
     assert d.signals[0].said_by == ["speaker_1"]
     assert d.signals[0].about_person == []

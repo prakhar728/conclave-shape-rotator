@@ -68,7 +68,10 @@ def _get_team_context():
     return _TEAM_CONTEXT_CACHE
 
 
-_VALID_SIGNAL_KINDS = {"decision", "insight", "impactful_point", "action_item", "open_question"}
+#: v2.2: 3 kinds (action_item absorbed decision; insight absorbed impactful_point).
+#: Old DB rows with kind="decision" or kind="impactful_point" remain readable but
+#: enrichment never emits them — the LLM's output is whitelisted here.
+_VALID_SIGNAL_KINDS = {"action_item", "open_question", "insight"}
 _VALID_ENTITY_TYPES = {"person", "project", "technology", "concept", "org"}
 
 

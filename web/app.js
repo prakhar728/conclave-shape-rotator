@@ -112,20 +112,19 @@ function renderSpeakerChips(resolved) {
   );
 }
 
-// F1 (§D.4): the section header carries the kind label; per-item rows
-// no longer render an inner kind badge. Each row is just text + quote +
-// attribution under the section's color stripe.
+// v2.2 (§D.4): the section header carries the kind label; per-item rows
+// no longer render an inner kind badge or the source_quote. source_quote
+// stays in the API payload for audit/backend use; the dashboard renders
+// only the extracted text + speaker attribution (the standing instruction
+// we kept missing in v2.1).
 function renderSignal(s) {
-  // v1 renames: `speakers` → `said_by`; new `about_person` and `source_quote`.
+  // v1 renames: `speakers` → `said_by`; new `about_person`.
   const said_by = s.said_by || s.speakers || [];
   const about = s.about_person || [];
   return el(
     "li",
     { class: "signal" },
     el("div", { class: "signal-text" }, s.text),
-    s.source_quote
-      ? el("blockquote", { class: "signal-quote", title: "verbatim source span" }, `“${s.source_quote}”`)
-      : null,
     said_by.length || about.length
       ? el(
           "span",
@@ -142,21 +141,19 @@ function renderSignal(s) {
 // `api/transcripts_routes.py`). We trust that order here — frontend
 // stays a thin consumer. Empty sections are skipped (no "INSIGHTS (0)"
 // clutter); their absence is the signal.
+// v2.2 collapsed to 3 sections: action_items (decisions absorbed),
+// open_questions, insights (impactful_points absorbed).
 const _SECTION_LABELS = {
-  decisions:        "DECISIONS",
-  action_items:     "ACTION ITEMS",
-  open_questions:   "OPEN QUESTIONS",
-  impactful_points: "IMPACTFUL POINTS",
-  insights:         "INSIGHTS",
+  action_items:   "ACTION ITEMS",
+  open_questions: "OPEN QUESTIONS",
+  insights:       "INSIGHTS",
 };
 // Singular form per plural — drives the per-section color class so
-// the header inherits the same accent the per-item badge used to.
+// the header inherits the section's accent.
 const _SECTION_KIND = {
-  decisions:        "decision",
-  action_items:     "action_item",
-  open_questions:   "open_question",
-  impactful_points: "impactful_point",
-  insights:         "insight",
+  action_items:   "action_item",
+  open_questions: "open_question",
+  insights:       "insight",
 };
 
 function renderSignalSections(detail) {
@@ -218,11 +215,11 @@ function renderTopics(topics) {
 
 // ── F2: card preview vs detail view ────────────────────────────────────
 
-// Importance rule (§D.3): pick the top 2-3 signals to show in the card
-// preview. Decisions first, then action items, then fall back to
-// impactful points, then insights. Open questions are skipped from the
-// preview (less actionable at a glance) but always present in detail.
-const _PREVIEW_KIND_ORDER = ["decisions", "action_items", "impactful_points", "insights"];
+// v2.2 importance rule (§D.3): action_items first (which now include the
+// old decisions), then insights (which now include the old impactful
+// points). Open questions are skipped from the preview (less actionable
+// at a glance) but always present in detail.
+const _PREVIEW_KIND_ORDER = ["action_items", "insights"];
 const _PREVIEW_MAX = 3;
 
 function pickTopSignals(detail) {

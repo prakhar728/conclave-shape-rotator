@@ -32,7 +32,7 @@ from transcripts.models import Derived, Entity, Signal
 def _derived(*, signals: list[str], entities: list[str]) -> Derived:
     return Derived(
         summary="(synthetic)",
-        signals=[Signal(kind="decision", text=t) for t in signals],
+        signals=[Signal(kind="action_item", text=t) for t in signals],
         entities=[Entity(name=n, type="concept") for n in entities],
         graph_nodes=None,
     )

@@ -62,7 +62,7 @@ def test_example_xml_loads_and_parses():
             if f'"kind": "{kind}"' in ex["expected"]:
                 example_kinds.add(kind)
     # The example file ships with decision, action_item, open_question covered.
-    assert {"decision", "action_item", "open_question"}.issubset(example_kinds)
+    assert {"action_item", "open_question", "insight"}.issubset(example_kinds)
     # Open-world note carries the non-exhaustive language.
     assert "NON-EXHAUSTIVE" in ctx.open_world_note
 

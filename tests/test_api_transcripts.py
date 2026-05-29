@@ -61,7 +61,7 @@ def _store_session(sid: str = "demo", *, enriched: bool = True, date: str = "202
     derived = Derived(
         summary="They locked the hybrid matcher.",
         signals=[Signal(
-            kind="decision", text="ship matcher",
+            kind="action_item", text="ship matcher",
             said_by=["Shaw"], about_person=[],
             source_quote="we should ship the matcher first",
         )],
@@ -124,20 +124,18 @@ def test_card_includes_v1_topics_and_participants(client):
 
 
 def test_detail_view_groups_signals_by_kind(client):
-    """v1.1: ``signals_by_kind`` is a server-side convenience grouping so
-    the dashboard can render distinct DECISIONS / ACTION ITEMS / OPEN
-    QUESTIONS / INSIGHTS / IMPACTFUL POINTS sections without re-filtering
-    the flat ``signals[]`` array. The flat array is still served too — both
-    shapes coexist."""
+    """v2.2: ``signals_by_kind`` groups by the 3 collapsed kinds
+    (action_items absorbed decisions; insights absorbed impactful_points).
+    The flat ``signals[]`` array is still served too — both shapes coexist."""
     from transcripts.models import Signal as _Signal
     sess = _store_session("demo")
     sess.derived.signals = [
-        _Signal(kind="decision", text="ship matcher", said_by=["Shaw"]),
+        _Signal(kind="action_item", text="ship matcher", said_by=["Shaw"]),
         _Signal(kind="action_item", text="send link", said_by=["Alex"], about_person=["Shaw"]),
         _Signal(kind="action_item", text="give email IF needed", said_by=["Alex"], about_person=["Shaw"]),
         _Signal(kind="open_question", text="how does X work?", said_by=["Speaker 1"]),
         _Signal(kind="insight", text="Y is hard", said_by=["Shaw"]),
-        _Signal(kind="impactful_point", text="Z happens", said_by=["Shaw"]),
+        _Signal(kind="insight", text="Z happens", said_by=["Shaw"]),
     ]
     store.save_session(sess)
 
@@ -147,41 +145,36 @@ def test_detail_view_groups_signals_by_kind(client):
     assert "signals" in view
     assert len(view["signals"]) == 6
 
-    # Grouping under a stable set of pluralized keys.
+    # Grouping under the v2.2 pluralized keys.
     grouped = view["signals_by_kind"]
-    assert set(grouped) == {"decisions", "action_items", "open_questions", "insights", "impactful_points"}
-    assert len(grouped["decisions"]) == 1
-    assert len(grouped["action_items"]) == 2
+    assert set(grouped) == {"action_items", "open_questions", "insights"}
+    assert len(grouped["action_items"]) == 3
     assert len(grouped["open_questions"]) == 1
-    assert len(grouped["insights"]) == 1
-    assert len(grouped["impactful_points"]) == 1
+    assert len(grouped["insights"]) == 2
     # Each grouped signal preserves the v1 schema fields.
-    assert grouped["action_items"][0]["text"] == "send link"
-    assert grouped["action_items"][0]["said_by"] == ["Alex"]
-    assert grouped["action_items"][0]["about_person"] == ["Shaw"]
+    assert grouped["action_items"][1]["text"] == "send link"
+    assert grouped["action_items"][1]["said_by"] == ["Alex"]
+    assert grouped["action_items"][1]["about_person"] == ["Shaw"]
     # An empty group is an empty list, not missing — frontend can iterate safely.
     sess.derived.signals = [_Signal(kind="insight", text="only insight")]
     store.save_session(sess)
     view2 = client.get("/transcripts/sessions/demo").json()
-    assert view2["signals_by_kind"]["decisions"] == []
+    assert view2["signals_by_kind"]["action_items"] == []
     assert view2["signals_by_kind"]["open_questions"] == []
 
 
 def test_signals_by_kind_preserves_demo_priority_order(client):
-    """§D.4: section render order is decision → action_item → open_question
-    → impactful_point → insight. The frontend trusts ``signals_by_kind`` key
-    insertion order (Python 3.7+ dicts preserve it); JSON also preserves
-    object key order in practice. Locking this here prevents accidental
-    reorders from rearranging the dashboard."""
+    """v2.2 §D.4: section render order is action_item → open_question → insight.
+    The frontend trusts ``signals_by_kind`` key insertion order (Python 3.7+
+    dicts preserve it); JSON also preserves object key order in practice.
+    Locking this here prevents accidental reorders from rearranging the dashboard."""
     sess = _store_session("demo")
     sess.derived.signals = []  # empty is fine — keys still present
     store.save_session(sess)
     grouped = client.get("/transcripts/sessions/demo").json()["signals_by_kind"]
     assert list(grouped.keys()) == [
-        "decisions",
         "action_items",
         "open_questions",
-        "impactful_points",
         "insights",
     ]
 
@@ -229,7 +222,7 @@ def test_detail_returns_signals_and_entities(client):
     assert r.status_code == 200
     view = r.json()
     assert view["summary"].startswith("They locked")
-    assert view["signals"][0]["kind"] == "decision"
+    assert view["signals"][0]["kind"] == "action_item"
     assert view["entities"][0]["name"] == "matcher"
 
 
@@ -444,7 +437,9 @@ def test_me_action_items_filters_signals_by_viewer_via_said_by(client):
     _store_action_item_session("demo", [
         Signal(kind="action_item", text="ship it", said_by=["Shaw"]),
         Signal(kind="action_item", text="not for shaw", said_by=["Other Person"]),
-        Signal(kind="decision", text="decided", said_by=["Shaw"]),  # not action_item
+        # Insight by Shaw — viewer is implicated by said_by but kind isn't
+        # action_item, so /me/action-items must skip it.
+        Signal(kind="insight", text="Shaw thinks X is hard", said_by=["Shaw"]),
     ])
     r = client.get("/transcripts/me/action-items?viewer=shaw-walters")
     assert r.status_code == 200, r.text

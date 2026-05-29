@@ -200,11 +200,12 @@ a { color: inherit; }
   letter-spacing: 0.1em;
   color: rgba(255,255,255,0.55);
 }
-.signal-kind.decision        { color: #c9ff5b; }
-.signal-kind.action_item     { color: #ff8a5b; }
-.signal-kind.insight         { color: #66d9e8; }
-.signal-kind.impactful_point { color: #d9a8ff; }
-.signal-kind.open_question   { color: #ffdd5b; }
+/* v2.2: 3 kinds. action_item absorbed decision; insight absorbed
+   impactful_point. Colors picked so each section reads distinctly
+   even at small sizes. */
+.signal-kind.action_item   { color: #c9ff5b; } /* accent-green — actions */
+.signal-kind.open_question { color: #ffdd5b; } /* amber — unresolved */
+.signal-kind.insight       { color: #66d9e8; } /* cyan — notable */
 
 .signal-text {
   color: rgba(255,255,255,0.9);
@@ -240,16 +241,9 @@ a { color: inherit; }
 .entity-external { border-color: rgba(255,138,91,0.35); color: #ff8a5b; }
 .entity-unknown  { border-color: rgba(255,255,255,0.15); color: rgba(255,255,255,0.55); }
 
-/* v1 signal additions: source_quote + about_person */
-.signal-quote {
-  font-family: var(--font-display, "Fraunces", serif);
-  font-style: italic;
-  font-size: 12px;
-  color: rgba(255,255,255,0.55);
-  margin: 4px 0 0;
-  padding-left: 8px;
-  border-left: 2px solid rgba(255,255,255,0.12);
-}
+/* v2.2: source_quote is no longer rendered on the dashboard (backend-only
+   audit field); .signal-quote rule removed. Attribution + about_person
+   stay. */
 .signal-attribution {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 10px;
