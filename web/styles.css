@@ -291,6 +291,113 @@ a { color: inherit; }
   border-top: 1px solid rgba(255,255,255,0.05);
 }
 
+/* ── F3 identity picker ──────────────────────────────────────────── */
+
+.identity-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(11, 11, 14, 0.85);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.identity-panel {
+  background: #15151a;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 14px;
+  padding: 36px 36px 30px;
+  max-width: 520px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+}
+
+.identity-title {
+  font-family: var(--font-display, "Fraunces", serif);
+  font-weight: 500;
+  font-size: 26px;
+  margin: 0;
+  letter-spacing: -0.005em;
+}
+.identity-sub {
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.65);
+  margin: 0;
+}
+
+.identity-select-wrap { margin: 6px 0 2px; }
+.identity-select {
+  width: 100%;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 8px;
+  color: var(--ink, #e9e6df);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 13px;
+}
+
+.identity-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.identity-confirm,
+.identity-anon {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: transparent;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+}
+.identity-confirm {
+  background: var(--accent, #c9ff5b);
+  color: #0b0b0e;
+  border-color: var(--accent, #c9ff5b);
+}
+.identity-anon:hover {
+  border-color: rgba(255,255,255,0.35);
+}
+
+.identity-error {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: #ff8a5b;
+  margin-top: 4px;
+}
+
+/* Masthead chip showing current viewer; clickable to re-open picker. */
+.identity-chip {
+  display: inline-block;
+  margin-left: 14px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.55);
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 999px;
+  cursor: pointer;
+}
+.identity-chip:hover {
+  color: var(--accent, #c9ff5b);
+  border-color: rgba(201,255,91,0.5);
+}
+
 /* ── F2 preview + detail ─────────────────────────────────────────── */
 
 /* Mini preview card: whole card is clickable; cursor + lift on hover so

@@ -17,18 +17,58 @@
 import { mountShape } from "/dashboard/shape-ui/shape-canvas.js";
 
 const SESSIONS_URL = "/transcripts/sessions";
+const ROSTER_URL = "/transcripts/_cohort/roster";
+
+// F3 (§D.1): viewer identity — demo-hardcoded picker. Stored under a
+// stable localStorage key so the picker only appears once per browser.
+// Cleared via the masthead "switch identity" link. There is no real
+// auth here — Phase 1.5 swaps the picker for an auth callback and
+// every API call site stays identical (the helpers below take care
+// of threading whatever identity is current).
+const VIEWER_STORAGE_KEY = "conclaveViewerId";
+
+function getViewer() {
+  try {
+    const v = localStorage.getItem(VIEWER_STORAGE_KEY);
+    return v && v.trim() ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function setViewer(v) {
+  try {
+    // Empty string == "explicit anonymous" (distinct from key absent,
+    // which means first visit and triggers the picker). Non-empty
+    // strings are the picked record_id.
+    localStorage.setItem(VIEWER_STORAGE_KEY, v || "");
+  } catch { /* localStorage disabled — picker still works for this tab */ }
+}
+
+function withViewer(url) {
+  const v = getViewer();
+  if (!v) return url;
+  const sep = url.includes("?") ? "&" : "?";
+  return `${url}${sep}viewer=${encodeURIComponent(v)}`;
+}
 
 async function loadSessions() {
-  const r = await fetch(SESSIONS_URL, { headers: { Accept: "application/json" } });
+  const url = withViewer(SESSIONS_URL);
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
   if (!r.ok) throw new Error(`GET ${SESSIONS_URL} → ${r.status}`);
   return r.json();
 }
 
 async function loadDetail(sessionId) {
-  const r = await fetch(`${SESSIONS_URL}/${encodeURIComponent(sessionId)}`, {
-    headers: { Accept: "application/json" },
-  });
+  const url = withViewer(`${SESSIONS_URL}/${encodeURIComponent(sessionId)}`);
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
   if (!r.ok) throw new Error(`GET ${SESSIONS_URL}/${sessionId} → ${r.status}`);
+  return r.json();
+}
+
+async function loadRoster() {
+  const r = await fetch(ROSTER_URL, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(`GET ${ROSTER_URL} → ${r.status}`);
   return r.json();
 }
 
@@ -457,5 +497,126 @@ async function routeToCurrentHash() {
   }
 }
 
+// ── F3: identity picker ────────────────────────────────────────────────
+
+async function renderIdentityPicker() {
+  // Modal-style overlay; built fresh each time so a "switch identity"
+  // click after first pick shows current state without stale data.
+  const existing = document.getElementById("identity-overlay");
+  if (existing) existing.remove();
+
+  const overlay = el("div", { id: "identity-overlay", class: "identity-overlay" });
+  const panel = el("div", { class: "identity-panel" });
+  panel.appendChild(el("h2", { class: "identity-title" }, "Who are you?"));
+  panel.appendChild(
+    el(
+      "p",
+      { class: "identity-sub" },
+      "Pick yourself from the cohort roster. This is the demo identity ",
+      "the dashboard will use — no password, no verification. You can ",
+      "switch any time from the masthead.",
+    )
+  );
+
+  const selectWrap = el("div", { class: "identity-select-wrap" });
+  const select = el("select", { class: "identity-select", id: "identity-select" },
+    el("option", { value: "" }, "— select identity —"));
+  selectWrap.appendChild(select);
+  panel.appendChild(selectWrap);
+
+  const actions = el("div", { class: "identity-actions" });
+  const confirm = el(
+    "button",
+    {
+      class: "identity-confirm",
+      type: "button",
+      onclick: () => {
+        const v = select.value;
+        if (!v) return;
+        setViewer(v);
+        overlay.remove();
+        renderMasthead();
+        // Re-fetch with new viewer; state caches were populated under
+        // the prior identity, so drop them.
+        _cardsCache = null;
+        _detailsCache = {};
+        routeToCurrentHash();
+      },
+    },
+    "Continue"
+  );
+  const anon = el(
+    "button",
+    {
+      class: "identity-anon",
+      type: "button",
+      onclick: () => {
+        setViewer(null);
+        overlay.remove();
+        renderMasthead();
+        _cardsCache = null;
+        _detailsCache = {};
+        routeToCurrentHash();
+      },
+    },
+    "Stay anonymous"
+  );
+  actions.appendChild(confirm);
+  actions.appendChild(anon);
+  panel.appendChild(actions);
+
+  overlay.appendChild(panel);
+  document.body.appendChild(overlay);
+
+  // Hydrate the dropdown lazily so the picker pops in instantly even
+  // if the roster fetch is slow.
+  try {
+    const roster = await loadRoster();
+    const current = getViewer();
+    for (const entry of roster) {
+      const opt = el(
+        "option",
+        { value: entry.record_id },
+        `${entry.label} (${entry.record_id})${entry.source === "speaker" ? " · speaker-only" : ""}`
+      );
+      if (current && current === entry.record_id) opt.setAttribute("selected", "selected");
+      select.appendChild(opt);
+    }
+  } catch (err) {
+    panel.appendChild(el("div", { class: "identity-error" }, `roster unavailable: ${err.message}`));
+  }
+}
+
+function renderMasthead() {
+  const right = document.querySelector(".mast-right");
+  if (!right) return;
+  // Remove any previously-rendered identity chip; counts span stays.
+  for (const node of Array.from(right.querySelectorAll(".identity-chip"))) node.remove();
+  const v = getViewer();
+  const chip = el(
+    "span",
+    {
+      class: "identity-chip",
+      title: v ? "switch identity" : "pick identity",
+      onclick: () => renderIdentityPicker(),
+    },
+    v ? `viewing as: ${v}` : "anonymous · pick identity"
+  );
+  right.appendChild(chip);
+}
+
+// First-visit picker: if no identity has been chosen AND no explicit
+// anonymous choice was made (we use the presence/absence of the key
+// as proxy — absent = first visit). The picker can also be re-opened
+// via the masthead chip.
+function maybeShowFirstVisitPicker() {
+  // Treat "key missing" as first visit; "key present but empty" as
+  // explicitly anonymous (don't nag). Anonymous is a valid identity.
+  const raw = (() => { try { return localStorage.getItem(VIEWER_STORAGE_KEY); } catch { return null; } })();
+  if (raw === null) renderIdentityPicker();
+}
+
 window.addEventListener("hashchange", routeToCurrentHash);
+renderMasthead();
+maybeShowFirstVisitPicker();
 routeToCurrentHash();
