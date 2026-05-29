@@ -457,6 +457,30 @@ a { color: inherit; }
   color: var(--accent, #c9ff5b);
 }
 
+/* F4 (§D.1): visibility toggle — only rendered when viewer is the
+   owner. Sits inline in the card so its presence is itself a
+   permission signal ("you own this"). Two visual states keyed off
+   data-state. */
+.visibility-toggle {
+  align-self: flex-start;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.02);
+  color: rgba(255,255,255,0.7);
+  cursor: pointer;
+}
+.visibility-toggle:hover { color: var(--accent, #c9ff5b); border-color: rgba(201,255,91,0.4); }
+.visibility-toggle:disabled { opacity: 0.5; cursor: progress; }
+.visibility-toggle[data-state="owner-only"] {
+  border-color: rgba(255,138,91,0.5);
+  color: #ff8a5b;
+}
+
 /* Detail view: single-column, wider than a card; reuses all the
    section/entity/topic styling so we don't duplicate rules. */
 #cards.detail {

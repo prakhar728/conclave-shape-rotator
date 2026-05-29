@@ -108,6 +108,11 @@ def to_card(session: Session) -> dict:
         "topics": list(d.topics or []),
         "participants": list(participants) if participants else None,
         "participants_count": len(participants) if participants else None,
+        # F4 (§D.1): the frontend renders the "hide from cohort" toggle
+        # only when the current viewer is the owner. Surfacing both
+        # fields here keeps the card a self-describing payload.
+        "visibility": m.visibility or "cohort",
+        "owner": m.owner,
         "seed": session.session_id,
     }
 

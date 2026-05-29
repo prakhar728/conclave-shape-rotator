@@ -99,6 +99,13 @@ def test_card_shape_has_expected_fields(client):
     # v1 additions.
     for k in ("topics", "participants", "participants_count", "team_context_version"):
         assert k in card
+    # F4 (§D.1) additions: visibility + owner surface on the card so the
+    # frontend can render the owner-only toggle. Default visibility is
+    # "cohort", default owner is None — neither affects existing UIs.
+    for k in ("visibility", "owner"):
+        assert k in card
+    assert card["visibility"] == "cohort"
+    assert card["owner"] is None
     assert card["seed"] == card["session_id"]
     assert card["resolved_speakers"]["Shaw"]["record_id"] == "shaw-walters"
 

@@ -246,6 +246,60 @@ function renderPreviewSignals(detail) {
   return el("ul", { class: "preview-signals" }, top.map(renderPreviewSignal));
 }
 
+// F4 (§D.1): visibility toggle UI. Rendered only when the current
+// viewer is the card's owner — the backend enforces the same rule, so
+// this is a UX concern, not a security one. Clicking flips the
+// visibility via POST /transcripts/sessions/{id}/visibility; on
+// success we mutate the in-memory card so the UI reflects the new
+// state without a refetch.
+async function flipVisibility(card, btn) {
+  const target = card.visibility === "cohort" ? "owner-only" : "cohort";
+  const viewer = getViewer();
+  btn.disabled = true;
+  try {
+    const r = await fetch(`${SESSIONS_URL}/${encodeURIComponent(card.session_id)}/visibility`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ visibility: target, viewer }),
+    });
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const payload = await r.json();
+    card.visibility = payload.visibility;
+    btn.textContent = visibilityToggleLabel(card);
+    btn.setAttribute("data-state", card.visibility);
+  } catch (err) {
+    btn.textContent = `! ${err.message}`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function visibilityToggleLabel(card) {
+  // Verb describes the action the click performs (not the current state)
+  return card.visibility === "cohort" ? "hide from cohort" : "show to cohort";
+}
+
+function renderVisibilityToggle(card) {
+  const viewer = getViewer();
+  if (!viewer || !card.owner || viewer !== card.owner) return null;
+  const btn = el(
+    "button",
+    {
+      type: "button",
+      class: "visibility-toggle",
+      "data-state": card.visibility || "cohort",
+      title: `current: ${card.visibility || "cohort"}`,
+      onclick: (e) => {
+        e.preventDefault();
+        e.stopPropagation(); // don't trigger the card's navigate-to-detail
+        flipVisibility(card, e.currentTarget);
+      },
+    },
+    visibilityToggleLabel(card)
+  );
+  return btn;
+}
+
 function buildMeta(card) {
   return [
     card.date,
@@ -314,6 +368,7 @@ function renderCardPreview(card, detail) {
     summary,
     renderPreviewSignals(detail),
     el("div", { class: "card-counts" }, counts),
+    renderVisibilityToggle(card),
     el("div", { class: "card-cta" }, "view detail →")
   );
 
@@ -360,6 +415,7 @@ function renderDetail(card, detail) {
     renderSpeakerChips(card.resolved_speakers),
     renderTopics(card.topics),
     summary,
+    renderVisibilityToggle(card),
     renderSignalSections(detail),
     renderEntities(detail && detail.entities)
   );
