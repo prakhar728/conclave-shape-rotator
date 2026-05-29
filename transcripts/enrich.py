@@ -565,8 +565,18 @@ def _model_id(llm: Any, model_override: Optional[str]) -> str:
                 return str(val)
         return type(llm).__name__
     # Walk the config to record the resolved backend default.
+    # v2.2: dispatch on llm_backend explicitly so the right model name is
+    # recorded per backend (the v2.1 code always returned settings.default_model
+    # — the NearAI deepseek id — even when the actual backend was redpill).
     try:
         from config import settings
-        return settings.ollama_model if settings.llm_backend == "ollama" else settings.default_model
+        backend = settings.llm_backend
+        if backend == "ollama":
+            return settings.ollama_model
+        if backend == "redpill":
+            return settings.redpill_model
+        if backend == "nearai":
+            return settings.default_model
+        return settings.default_model  # legacy fallback for unknown backends
     except Exception:  # noqa: BLE001
         return "unknown"
