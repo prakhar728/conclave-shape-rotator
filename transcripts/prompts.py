@@ -41,9 +41,12 @@ from __future__ import annotations
 
 #: Bump on any prompt-body change. ``enrich_pending`` keys backfills off this.
 #: v1 → v2 marks the schema + prompt overhaul from the PoC to the post-PoC
-#: extraction-quality lift. All previously-enriched sessions become stale
-#: and re-enrich on the next ``enrich --pending`` against v2.
-ENRICH_PROMPT_VERSION = "v2"
+#: extraction-quality lift.
+#: v2 → v2.1: strengthened open-world entity rule + conditional action_item
+#: rule, addressing two recall gaps observed in the V7 (v2) Gemma run —
+#: anchor-list bias suppressing unanchored entities, and conditional
+#: action_items being flattened into unconditional ones.
+ENRICH_PROMPT_VERSION = "v2.1"
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +88,21 @@ ENTITY TYPES — pick the most specific that fits:
   org        — a company or organization
   concept    — anything else (use sparingly; prefer a specific type when one fits)
 
+OPEN-WORLD ENTITY EXTRACTION — THIS IS THE MOST IMPORTANT RULE:
+  The <known_projects> and <known_technologies> lists in <team_context> are ANCHORS for \
+canonicalization (use the canonical name when an alias appears) — they are NOT a closed \
+vocabulary you're limited to. Chunks WILL ROUTINELY mention projects, technologies, \
+organizations, and people NOT in the anchor lists:
+    - competitors and external references (e.g. Azuki, MetaMask, Cloudflare worker, Hermes)
+    - guest speakers' own work (a guest's startup, paper, library)
+    - off-cohort tools the team uses or evaluates (Mastra, BAML, llama.cpp, Smithers, Chutes)
+    - frameworks they migrated through or considered (Lang Chaining → LangGraph → AI SDK)
+    - third parties named in passing (Bob, Tita, Christian, Greg)
+  EXTRACT THESE TOO. The anchor lists exist to help you NAME entities you find, not to LIMIT \
+which entities you find. If you only extract entities that appear in the anchor lists, you are \
+failing this task. When in doubt, extract. Anchor-list matching ONLY changes cohort_status / \
+canonical naming — it does not gate inclusion.
+
 SIGNAL KINDS — pick the most specific that fits; AVOID defaulting to "insight":
   decision        — a course of action the group AGREED on ("we decided", "let's go with", "we should")
   action_item     — a concrete next step someone agreed to do ("I'll send", "you handle", "can you", "I'll reach out")
@@ -94,6 +112,14 @@ SIGNAL KINDS — pick the most specific that fits; AVOID defaulting to "insight"
 
 EMIT AT MOST 6 SIGNALS per chunk. Prefer fewer high-quality ones over many bland ones. \
 If the chunk contains decisions or action items, surface those over generic "insights."
+
+CONDITIONAL ACTION_ITEMS — preserve the trigger:
+  If an action_item has a precondition ("X if Y", "let me know when Z", "I'll do X after Y is done"), \
+the `text` field MUST keep the conditional clause in plain English. "Alex will help if asked" and \
+"Alex will help" are SEMANTICALLY DISTINCT signals — do not collapse them. \
+Example: "I can give you my email if you run into issues" → action_item text = \
+"Alex will give Shaw his email IF Shaw runs into issues with EZTE" (not "Alex will give Shaw his email"). \
+The trigger is what makes the signal useful for meeting prep.
 
 SAID_BY vs ABOUT_PERSON discipline:
   said_by       — verbatim speaker label(s) at the turn this signal is anchored to (1+ entries)
@@ -108,6 +134,7 @@ ANTI-HALLUCINATION:
   If you are not confident about a person's name, term, or attribution, OMIT the entire item rather than guess.
   NEVER emit placeholder text like "<NAME>" or invent names not present in the transcript.
   NEVER invent entities to fill out the list — fewer real entities > more invented ones.
+  However, REAL entities that are mentioned in the chunk MUST be extracted even if they're new to the cohort.
 
 TRANSCRIPTION-FIX POLICY:
   Only correct an obvious transcription error (e.g. "Optus 4.0" → "Opus 4.0") if the corrected term \
@@ -116,7 +143,13 @@ appears in <known_technologies> or <known_projects> in the team context. Otherwi
 SUMMARY STYLE — DO and DON'T:
   GOOD: "Team decided to switch from RATLS to ATLS; agreed to use EZTE for reproducible builds; open question on Kubernetes migration."
   BAD:  "The conversation covered various topics including X, Y, Z."
-  The bad version is the anti-pattern. Avoid it."""
+  The bad version is the anti-pattern. Avoid it.
+
+LEARNING FROM EXAMPLES:
+  Each example in <extraction_examples> includes a <lessons> block calling out the specific \
+patterns it demonstrates. READ the lessons — they are explicit rules expressed through the example. \
+Apply those rules to the chunk you're extracting from. Don't just pattern-match the surface; \
+apply the underlying lesson."""
 
 
 # ---------------------------------------------------------------------------

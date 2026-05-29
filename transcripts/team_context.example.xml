@@ -156,7 +156,12 @@
     <topic>healthcare / regulated</topic>
   </known_topics>
 
-  <!-- Real-grounded extraction examples — preserved from prior hand-curation, NOT auto-generated. -->
+  <!--
+    Real-grounded extraction examples — drawn from tests/fixtures/transcripts/.
+    Each example carries a <lessons> block stating the specific patterns it
+    demonstrates; the prompt explicitly asks the model to READ those lessons
+    and apply the underlying rules (not just pattern-match the surface).
+  -->
   <extraction_examples>
     <!--
       EXAMPLE 1 — DECISION + technology entities + cohort member speaker.
@@ -200,6 +205,11 @@
   "topics": ["attestation", "service mesh", "deployment"]
 }
       </expected>
+      <lessons>
+        - When a speaker walks through a decision they personally made, that's a "decision" signal — DO NOT default it to "insight." The trigger phrases ("there is decision I need to make", "I didn't go with X because Y") are explicit decision markers.
+        - Multiple distinct entity types in one chunk: project (DStack, service mesh), technology (compose hash, app ID, CVM, KMS). Don't lump everything into "concept" — extract the specific type each time.
+        - Two related signals (the decision AND the reasoning) can come from one chunk. The reasoning is its own "insight" — don't merge them into one diluted signal.
+      </lessons>
     </example>
 
     <!--
@@ -243,6 +253,11 @@
   "topics": ["reproducible builds", "agent operating systems"]
 }
       </expected>
+      <lessons>
+        - said_by ("Alex (flashbots?)") and about_person ("Shaw") are DIFFERENT — Alex offers, Shaw receives. Always fill about_person when there's a clear addressee, not just when there's a third party mentioned.
+        - External speakers (Alex's "(flashbots?)" parenthetical) keep their LABEL verbatim in said_by but the AFFILIATION field on the corresponding Person entity captures the hint. The base name "Alex" stays as the entity name; "flashbots" goes in affiliation.
+        - Each Person who's a speaker AND a named entity in the chunk should appear in entities[], not just resolved_speakers. Multiple person entities is fine.
+      </lessons>
     </example>
 
     <!--
@@ -286,6 +301,11 @@
   "topics": ["cross-chain", "confidential compute"]
 }
       </expected>
+      <lessons>
+        - A question is an "open_question" ONLY when it's NOT answered in the same chunk. If the speaker self-answers, it's an insight, not an open_question.
+        - Cross-cohort references (Tina being "in New York") generate an "impactful_point" with the mentioned person in about_person — even when Tina isn't speaking. The chunk is asserting a logistical fact about her, so she's the subject.
+        - Multi-clause chunks can carry two signals from one speaker: the open question + a separate impactful_point. Don't artificially limit to one signal per speaker.
+      </lessons>
     </example>
 
     <!--
@@ -333,6 +353,11 @@
   "topics": ["product evolution", "articulation", "speaking practice"]
 }
       </expected>
+      <lessons>
+        - Even in a long pitch monologue, a single chunk can yield multiple distinct signals (a decision + the insight motivating it + a metric milestone). Don't collapse them into one bland summary.
+        - Concrete numbers ("524 users") become "impactful_point" signals — they're not decisions, not actions, but they're the kind of fact someone preparing for a follow-up meeting needs.
+        - Summary should LEAD with what was shipped/decided, not "Albiona talked about Elocute." The DO/DON'T contrast in the prompt applies to summaries inside chunks too.
+      </lessons>
     </example>
 
     <!--
@@ -376,6 +401,11 @@
   "topics": ["context routing", "community building"]
 }
       </expected>
+      <lessons>
+        - A speaker can talk extensively ABOUT someone NOT in the meeting (Tita). Extract that person as a "person" entity AND put them in about_person on the relevant signal. Tita not being a speaker doesn't disqualify her.
+        - Coined concepts ("human water cooler") are entities of type "concept" — the speaker's framing IS extractable, not just named tools and projects.
+        - "My exemplar for X is Y" patterns yield an impactful_point about Y, not just an insight about X. Specificity wins.
+      </lessons>
     </example>
 
     <!--
@@ -414,6 +444,148 @@
   "topics": ["project status", "deployment"]
 }
       </expected>
+      <lessons>
+        - Speaker N labels are NEVER promoted to real names — keep them verbatim in said_by even when the surrounding context might let you guess.
+        - Q-and-A patterns where the answer is in the same chunk are NOT open_questions — they're impactful_points carrying the revealed information. The signal text describes the answer, not the question.
+        - A negative answer ("not deployed yet, only running local") is still high-signal — it's the prep-relevant fact a future organizer needs.
+      </lessons>
+    </example>
+
+    <!--
+      EXAMPLE 7 — UNANCHORED ENTITIES: framework migration list with multiple
+      non-cohort tools named in passing.
+      Source: Office Hours Transcript @ ~24:00 (Andrew Hang on MCP block explorer).
+      Pattern coverage:
+        - Real chunk mentioning MULTIPLE projects/technologies that are NOT in
+          the cohort-data anchor list (Mastra, BAML, Vercel AI SDK, Cloud Code,
+          Smithers — none are cohort projects)
+        - The few cohort-anchored items (LangGraph, MCP) get correctly named
+        - Demonstrates that anchor-list matching is for naming, not for filtering
+        - "insight" with framework-migration retrospective character
+    -->
+    <example>
+      <chunk>
+[Andrew Hang] Thankfully, Opus 4.0 came out and solved a bunch of our headaches, so we were working on this for a year before we really got into traction, and then, yeah, January this year finally teams started using Cloud Code and MCP is a lot more, so we've gotten a lot of usage since then. Now we've moved into the harness layer. Over the last year and a half of working on this, we've migrated frameworks like seven or eight times, whether that's from Lang Chaining to Land Graph to BAM, to Mastra to AI SDK, now to Asia to SDK — it's like a painful migration every time, so we've now learned to like try and not over-engineer and overfit the work.
+      </chunk>
+      <expected>
+{
+  "summary": "Andrew Hang's team finally got traction after Opus 4.0 + Cloud Code + MCP adoption in January; they've migrated agent-framework stacks 7-8 times (LangChain → LangGraph → BAML → Mastra → AI SDK → ASI SDK) and have learned to avoid over-engineering.",
+  "signals": [
+    {"kind": "impactful_point",
+     "text": "Andrew Hang's MCP block explorer got production traction once Opus 4.0, Cloud Code, and MCP adoption converged in January — about a year of work before that",
+     "source_quote": "January this year finally teams started using Cloud Code and MCP is a lot more, so we've gotten a lot of usage since then",
+     "said_by": ["Andrew Hang"],
+     "about_person": []},
+    {"kind": "insight",
+     "text": "After 7-8 framework migrations across the agent stack, Andrew Hang's team has learned to avoid over-engineering and over-fitting solutions to current frameworks",
+     "source_quote": "we've migrated frameworks like seven or eight times … so we've now learned to like try and not over-engineer",
+     "said_by": ["Andrew Hang"],
+     "about_person": []}
+  ],
+  "entities": [
+    {"name": "Opus 4.x", "type": "technology", "evidence": "the model release that unblocked their traction"},
+    {"name": "Cloud Code", "type": "technology", "evidence": "the agent runtime teams started adopting"},
+    {"name": "MCP", "type": "protocol", "evidence": "their protocol surface that got adoption"},
+    {"name": "LangChain", "type": "technology", "evidence": "first framework in the migration list"},
+    {"name": "LangGraph", "type": "technology", "evidence": "second framework in the migration list"},
+    {"name": "BAML", "type": "technology", "evidence": "third framework in the migration list"},
+    {"name": "Mastra", "type": "technology", "evidence": "fourth framework in the migration list"},
+    {"name": "Vercel AI SDK", "type": "technology", "evidence": "fifth framework in the migration list"},
+    {"name": "ASI SDK", "type": "technology", "evidence": "current framework choice"},
+    {"name": "Andrew Hang", "type": "person", "evidence": "the speaker walking through the framework history"}
+  ],
+  "topics": ["agent runtime", "framework selection", "production traction"]
+}
+      </expected>
+      <lessons>
+        - THE OPEN-WORLD RULE IN ACTION: BAML, Mastra, Vercel AI SDK, ASI SDK, Cloud Code are NOT in the team_context anchor lists — but they're named in the transcript and they're real, so extract them. The anchor list helps you name LangChain/LangGraph/MCP/Opus 4.x canonically; it does NOT limit which entities you extract.
+        - A chunk densely-packed with technology names should yield a high-count technology entity list. Don't collapse "we migrated through 5 frameworks" into a single "frameworks (concept)" entity — name each one.
+        - When a speaker enumerates a list of related items, each item is its own entity. Lists are recall opportunities, not items to abstract away.
+      </lessons>
+    </example>
+
+    <!--
+      EXAMPLE 8 — CONDITIONAL ACTION_ITEM: the trigger ("if X") stays in the
+      text field, not collapsed away.
+      Source: dstack hangout Alex Shaw Lsdan Andrew @ 4:21.
+      Pattern coverage:
+        - Real conditional action item ("I can give you my email if you run into issues")
+        - Conditional clause preserved in text
+        - said_by = external speaker, about_person = cohort member recipient
+        - Topic = collaboration
+    -->
+    <example>
+      <chunk>
+[Alex (flashbots?)] yeah, I can give you my email if you, if you run into any issues
+[Shaw] By the way, if you want to send me an email, the best email to reach me is Alex at Alex holbrook dot com
+      </chunk>
+      <expected>
+{
+  "summary": "Alex (Flashbots) offered to share his email with Shaw IF Shaw runs into issues with EZTE; Shaw reciprocated by sharing his own email (Alex at Alex holbrook dot com).",
+  "signals": [
+    {"kind": "action_item",
+     "text": "Alex (Flashbots) will give Shaw his email IF Shaw runs into issues using EZTE",
+     "source_quote": "I can give you my email if you, if you run into any issues",
+     "said_by": ["Alex (flashbots?)"],
+     "about_person": ["Shaw"]},
+    {"kind": "action_item",
+     "text": "Shaw shared his contact email (Alex at Alex holbrook dot com) — an open invitation, not conditional",
+     "source_quote": "the best email to reach me is Alex at Alex holbrook dot com",
+     "said_by": ["Shaw"],
+     "about_person": ["Alex (flashbots?)"]}
+  ],
+  "entities": [
+    {"name": "EZTE", "type": "project", "evidence": "the project whose use is the implicit trigger for Alex's email offer"},
+    {"name": "Alex (flashbots?)", "type": "person", "evidence": "speaker offering the conditional contact", "affiliation": "flashbots"},
+    {"name": "Shaw", "type": "person", "evidence": "speaker offering reciprocal unconditional contact"}
+  ],
+  "topics": ["collaboration", "follow-up coordination"]
+}
+      </expected>
+      <lessons>
+        - THE CONDITIONALITY RULE IN ACTION: "I can give you my email IF you run into issues" is NOT the same signal as "I'll give you my email." Keep the IF clause in the text — it's what makes the signal useful for prep ("Shaw, did you actually run into issues? You can email Alex if so").
+        - Side-by-side conditional and unconditional action items in one chunk: extract BOTH, mark the difference. The model often defaults to flattening — don't.
+        - said_by and about_person SWAP across the two signals: in the first, Alex acts and Shaw is the addressee. In the second, Shaw acts and Alex is the addressee. Both should appear.
+      </lessons>
+    </example>
+
+    <!--
+      EXAMPLE 9 — Open question about EXTERNAL non-cohort project + said_by/about_person.
+      Source: Friday Shaw & Greg Transcript_May_22 @ 1:53:20 (Tina Z asking Shaw about Azuki).
+      Pattern coverage:
+        - External non-cohort project (Azuki — NFT project, not in anchor list) extracted as project
+        - said_by (Tina Z, cohort member) ≠ about_person (Shaw, the addressee)
+        - Open question pattern with named addressee
+        - "consumer go-to-market" topic that's not in the curated list
+    -->
+    <example>
+      <chunk>
+[Tina Z] some of the insights that maybe I think are welcome for this particular cohort — I think that the party experience I'm more familiar with is when you were at Azuki, which is quite interesting as your consumer went through this column theory. What were some of the lessons of case study, and also if any additional progress had any pipeline for folks who are more in identifying what is product market fit for them in like this multi-agent centric world?
+      </chunk>
+      <expected>
+{
+  "summary": "Tina Z asked Shaw to share lessons from his time at Azuki on consumer go-to-market and column theory, and how those lessons translate to PMF in a multi-agent context.",
+  "signals": [
+    {"kind": "open_question",
+     "text": "What lessons did Shaw take from his time at Azuki on consumer go-to-market and column theory, and how do those translate to identifying product-market fit in a multi-agent world?",
+     "source_quote": "What were some of the lessons of case study, and also if any additional progress had any pipeline for folks who are more in identifying what is product market fit for them",
+     "said_by": ["Tina Z"],
+     "about_person": ["Shaw"]}
+  ],
+  "entities": [
+    {"name": "Azuki", "type": "project", "evidence": "the NFT project Shaw worked at, referenced for its consumer-PMF lessons"},
+    {"name": "Tina Z", "type": "person", "evidence": "asked the question of Shaw"},
+    {"name": "Shaw", "type": "person", "evidence": "the addressee of the question"},
+    {"name": "column theory", "type": "concept", "evidence": "consumer go-to-market framework Tina is asking Shaw to apply"}
+  ],
+  "topics": ["product-market fit", "consumer go-to-market", "multi-agent systems"]
+}
+      </expected>
+      <lessons>
+        - Azuki is NOT in the team_context anchor list — but it's a real NFT project Shaw worked at, named in the transcript, so extract it as a "project". This is the open-world rule on external entities.
+        - When a question is directed AT a specific person ("what lessons did YOU take from Azuki"), about_person captures that addressee. said_by is the asker, about_person is the addressee. Both are filled when there's a clear direction.
+        - Topics can come from the QUESTION-asking context, not just from named entities. "Consumer go-to-market" is a topic even though it's not literally a project or technology.
+      </lessons>
     </example>
   </extraction_examples>
 
