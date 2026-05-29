@@ -1322,3 +1322,90 @@ The schema changes (§3), prompt-version bump (§7), and identity/dedup tighteni
 **Anti-domino rule.** Each Vn commits with its tests in the same change. Suite stays green at every commit. If V1's `Signal.speakers → said_by` rename breaks the FakeLLM payload tests, those tests are updated *in the same commit* — not deferred to V4.
 
 **One gotcha.** The DB already has 12 sessions stored with the old `"speakers"` JSON shape on signals. When V3 lands the prompt-version bump, `enrich_pending` will treat all 12 as stale and re-enrich them under v2 — at which point the new `said_by` shape gets written. There's no read-side migration needed: `Signal(**data)` will ignore unknown JSON keys (Pydantic default), and the old `"speakers"` keys on the existing rows just go unused after re-enrichment. If someone wants to inspect the pre-v1 rows before re-enrichment, they keep the old shape until re-enriched. Documented behaviour, not a migration task.
+
+---
+
+## Improving results and fixing minor errors — v2.2
+
+### What went wrong with v2.1
+
+v2.1 shipped to the DB without being compared against v1.1 — the v1.1 run (`enriched-output-gemma3-v1.1/`) was the last one we'd actually side-by-side reviewed and found "good enough". v2.1 was a prompt iteration on top of v1.1, but the DB rewrite happened before the diff was looked at. Result observed on the demo dashboard: **action_items and decisions sparse (3 total action_items across 12 sessions), summaries flat, `insight` and `impactful_point` indistinguishable in the rendered output.**
+
+Three causes:
+1. **Two near-identical kinds.** `insight` and `impactful_point` had circular definitions ("non-obvious observation" vs "consequential statement that isn't a decision/action/question"). The model picks at random; the dashboard renders both as sections with the same body shape; you can't tell them apart.
+2. **decision/action_item triggers calibrated to standup phrasing.** "we decided", "I'll send" — cohort discussions are exploratory, not transactional, so the prompt's trigger list mostly fails. The model isn't being shy; the content doesn't contain what the prompt asks for.
+3. **Stale few-shot examples.** The 9 examples in `team_context.example.xml` were hand-picked while the schema still had 5 kinds. After collapsing to 3, those examples reference categories that no longer exist (decision, action_item, impactful_point) — they have to be re-picked from the real transcripts under the new schema, not mechanically remapped.
+
+### What v2.2 changes — the locked schema
+
+Three signal kinds. Naming kept simple — no new term, the merged kind takes the existing `action_item` name with a broader definition.
+
+- **action_item** — anyone commits to a course of action: group or individual, soft or hard. Triggers include "I'll send", "we should X", "let me know when Y", "I'm going to try Z", "we'll go with W". Person-attached when possible. Conditionals preserved verbatim in `text`. **Absorbs what used to be `decision`** — the cohort doesn't naturally separate the two (one person deciding to email another IS the next step), so the prompt stopped pretending the line existed. The existing narrow-action_item fixtures all stay valid under this broader definition.
+- **open_question** — non-rhetorical question raised in the chunk that's not answered within the same chunk. Includes implicit ones ("the thing we still need to figure out is X").
+- **insight** — a notable nugget: something specific, praiseworthy in the meeting, or interesting enough that a future agent or graph would want it indexed. Three soft tests as guidance, not gates: (1) self-contained (no "in this meeting, X said…" framing), (2) names at least one entity (person/project/technology), (3) synthesised from a stretch of dialogue or a monologue, not a paraphrase of one sentence. A sharp single-sentence praise IS an insight if it's notable. **Cap: max 4 insights per chunk.** Absorbs what used to be `impactful_point`.
+
+Source quote stays in the schema (audit/backend) but stops rendering on the frontend (the standing instruction we kept missing).
+
+Cohort-specific framing is NOT in the prompt. It belongs in `team_context.xml` as priors the model uses to ground extraction, not as a directive about downstream uses. Downstream uses (cross-meeting graph, collaboration matcher, meeting-prep brief) consume the structured output; the extractor doesn't pre-bake them.
+
+### Few-shot examples — freshly picked, not remapped
+
+The current 9 examples in `team_context.example.xml` were validated for the 5-kind schema. They are **stale for v2.2** because they label spans as `decision` or `impactful_point`, kinds that no longer exist. Mechanical relabeling (decision → commitment, impactful_point → insight) preserves the spans but contaminates the model — the spans were picked because they exemplified the *old* category boundaries, not the new ones.
+
+Replacement procedure:
+1. Pick **3 examples per kind** (9 total) freshly from the 12 real transcripts in the DB. Source spans visible verbatim; the example block carries each span + the gold `text` we want the model to emit + a one-line `<lessons>` note explaining why this span maps to this kind.
+2. Cover the soft/hard spectrum for `commitment`: at least one group-level ("we'll go with X"), one individual ("I'll send"), one conditional ("I'll do X if Y").
+3. Cover the depth spectrum for `insight`: at least one cross-project notable, one praise-of-work, one synthesised observation from a longer stretch.
+4. `open_question` examples should cover one explicit and one implicit.
+
+Examples land in `team_context.example.xml` under a `<extraction_examples>` block; the version SHA stamped into `team_context_version` changes; the backfill rule treats all sessions as stale.
+
+The prompt body itself (`transcripts/prompts.py`) grows to fit the new schema and the longer example block. The product owner is OK with a bigger prompt — the corpus is small and chunks aren't budget-tight.
+
+### Eval mechanism — what we should have done for v2.1
+
+Three transcripts are designated as the held-out test split:
+
+- `dstack-hangout-alex-shaw-lsdan-andrew` — informal hangout, action-heavy
+- `office-hours-transcript` — Q&A workshop, open-question-heavy
+- `ideal-customer-profiling-user-interviews-transcript-from-albiona` — interview, insight-heavy
+
+For each, a hand-written gold YAML lives at `transcripts/eval/gold/<session_id>.yaml`, with the v2.2 schema shape. Gold is written by reading the raw transcript end-to-end with no LLM in the loop; the product owner signs off on each gold file before any prompt work.
+
+The eval script (`transcripts/eval/score.py`) loads gold + the DB state for the same session and prints a side-by-side grouped by kind, with simple counts (gold-only, dashboard-only, both). No LLM-as-judge in v2.2 — eyeball comparison is good enough for 3 transcripts and avoids a second LLM dependency on the demo critical path.
+
+Two baselines get scored against gold before v2.2 runs:
+- **v2.1** — current DB state
+- **v1.1** — re-load from `enriched-output-gemma3-v1.1/*.txt` into a scratch table (or parse-on-read), score against the same gold
+
+This catches the v2.1 regression we missed and gives v2.2 a real "is this actually better?" check.
+
+### Sequence — 3 commits + 1 CLI invocation
+
+Time-boxed for the demo. Gold YAMLs and an automated score script were dropped from V22 — they're framework-tier work, not demo-critical. Eval becomes a manual side-by-side written into `EVAL_v2.2.md`.
+
+| # | Step | Files | Tests |
+|---|---|---|---|
+| **V22-1** | **Atomic v2.2 cascade** — schema collapse + new prompt + new few-shot examples + API + frontend + all test rewrites | `transcripts/models.py`, `transcripts/prompts.py`, `transcripts/team_context.example.xml`, `api/transcripts_routes.py`, `web/app.js`, `web/styles.css`, every test file referencing `kind="decision"` or `kind="impactful_point"` | All mechanical `kind="decision"` / `kind="impactful_point"` rewrites in `test_transcript_pipeline.py`, `test_enrich_mapreduce.py`, `test_api_transcripts.py`. Existing `kind="action_item"` fixtures stay valid (the new definition is broader). The two `signals_by_kind` assertions update. |
+| *(CLI)* | Re-enrich all 12 sessions under v2.2 | none — `transcripts enrich` reads the new version, sees stale rows, rewrites | none |
+| **V22-2** | **Eval comparison** — side-by-side of v1.1 vs v2.1 vs v2.2 across the 3 test sessions + recommendation | NEW `transcripts/eval/EVAL_v2.2.md` | none |
+| **V22-3** | **Backend cleanup** — `settings.default_model` flipped to RedPill Gemma; `settings.llm_backend` default flipped to `"redpill"`; remove NearAI plumbing (config, requirements, imports, dead-code llm clients); `enrich._model_id` reads from `settings.llm_backend` first; one-shot script patches the 12 stored rows so the dashboard model badge reads right | `config/settings.py`, `transcripts/enrich.py`, `requirements.txt`, anything still importing the NearAI client, NEW `transcripts/scripts/patch_model_id.py` | 1 new test (`test_model_id_resolves_redpill_when_backend_is_redpill`); remove any test that asserted NearAI defaults |
+
+V22-3 is bundled in this round because the same DB rewrite touches every row — wrong `model_id` badges on the demo would undermine the v2.2 quality story.
+
+### Test impact — total
+
+- **Existing tests rewritten:** ~8-12 across 3 files (down from the earlier estimate now that `action_item` is kept — only `decision` and `impactful_point` literals need replacing). All mechanical (kind string substitutions + the two `signals_by_kind` assertions).
+- **New tests:** 1 (`test_model_id_resolves_redpill_when_backend_is_redpill`). Eval is run-once, output is markdown; no pytest coverage needed.
+- **Suite floor:** 299. After V22-3 backend cleanup: 300.
+
+### Explicitly out of scope for v2.2
+
+- **Per-meeting Q&A pairs** (Read.ai-style). Useful, but a separate prompt pass per chunk doubles tokens. Park as a post-demo card.
+- **Google Gemini backend.** v2.2 stays on Gemma 3 27B via RedPill (the existing path). Adding Gemini is its own backend wiring exercise; doesn't belong in this round.
+- **Cross-meeting relations (Phase 2c).** Not a v2.2 concern; v2.2 makes the per-meeting signals dense enough for 2c to land cleanly later.
+- **Backfill of `enriched-output-*` text files.** Those are debug snapshots; they don't need to track v2.2.
+
+### Gate
+
+Product owner gave a "go decisive" mandate — no mid-stream sign-off. The v2.2 cascade ships as one commit; the eval comparison is read after re-enrichment finishes. If the comparison shows v2.2 is worse than v1.1 baseline on the 3 test sessions, V22-1 gets reverted and the prompt iterates (v2.3) before the demo. The v2.1 mistake was shipping ahead of any comparison; v2.2 fixes that by writing the comparison even when nobody is gating it.
