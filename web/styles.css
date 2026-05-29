@@ -151,20 +151,48 @@ a { color: inherit; }
   font-style: italic;
 }
 
-/* signals */
-.signals { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-.signal {
-  display: grid;
-  grid-template-columns: 84px 1fr;
-  gap: 12px;
+/* signals — F1 (§D.4): grouped into ordered sections (DECISIONS,
+   ACTION ITEMS, OPEN QUESTIONS, IMPACTFUL POINTS, INSIGHTS). The
+   section header carries the kind label + color; per-item rows are
+   plain (no inner badge, no left column) so the eye reads body text
+   straight. */
+.signal-sections { display: flex; flex-direction: column; gap: 18px; }
+.signal-section { display: flex; flex-direction: column; gap: 6px; }
+
+.signal-section-head {
+  display: flex;
   align-items: baseline;
+  gap: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.signal-section-label {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+}
+.signal-section-count {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 10px;
+  color: rgba(255,255,255,0.4);
+}
+
+.signals { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.signal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: 13px;
   line-height: 1.45;
-  padding: 8px 0;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  padding: 6px 0;
+  border-top: 1px solid rgba(255,255,255,0.04);
 }
 .signal:first-child { border-top: none; }
 
+/* Color tokens — applied to .signal-section-head via .signal-kind.<kind>.
+   Kept available for any legacy per-item badge usage as well. */
 .signal-kind {
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 10px;
@@ -172,11 +200,11 @@ a { color: inherit; }
   letter-spacing: 0.1em;
   color: rgba(255,255,255,0.55);
 }
-.signal-kind.decision      { color: #c9ff5b; }
-.signal-kind.action_item   { color: #ff8a5b; }
-.signal-kind.insight       { color: #66d9e8; }
+.signal-kind.decision        { color: #c9ff5b; }
+.signal-kind.action_item     { color: #ff8a5b; }
+.signal-kind.insight         { color: #66d9e8; }
 .signal-kind.impactful_point { color: #d9a8ff; }
-.signal-kind.open_question { color: #ffdd5b; }
+.signal-kind.open_question   { color: #ffdd5b; }
 
 .signal-text {
   color: rgba(255,255,255,0.9);

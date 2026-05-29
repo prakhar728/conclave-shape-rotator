@@ -85,11 +85,11 @@ def to_card(session: Session) -> dict:
 #: Keys are the JSON-friendly pluralised names served under
 #: ``signals_by_kind``; values are the matching ``Signal.kind`` strings.
 _SIGNAL_KIND_GROUPS: list[tuple[str, str]] = [
-    ("decisions",        "decision"),
-    ("action_items",     "action_item"),
-    ("open_questions",   "open_question"),
-    ("insights",         "insight"),
-    ("impactful_points", "impactful_point"),
+    ("decisions",        "decision"),        # decision-led, lands first
+    ("action_items",     "action_item"),     # commitments, second
+    ("open_questions",   "open_question"),   # unresolved threads, third
+    ("impactful_points", "impactful_point"), # consequential facts, fourth
+    ("insights",         "insight"),         # non-obvious observations, last
 ]
 
 

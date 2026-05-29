@@ -160,6 +160,25 @@ def test_detail_view_groups_signals_by_kind(client):
     assert view2["signals_by_kind"]["open_questions"] == []
 
 
+def test_signals_by_kind_preserves_demo_priority_order(client):
+    """§D.4: section render order is decision → action_item → open_question
+    → impactful_point → insight. The frontend trusts ``signals_by_kind`` key
+    insertion order (Python 3.7+ dicts preserve it); JSON also preserves
+    object key order in practice. Locking this here prevents accidental
+    reorders from rearranging the dashboard."""
+    sess = _store_session("demo")
+    sess.derived.signals = []  # empty is fine — keys still present
+    store.save_session(sess)
+    grouped = client.get("/transcripts/sessions/demo").json()["signals_by_kind"]
+    assert list(grouped.keys()) == [
+        "decisions",
+        "action_items",
+        "open_questions",
+        "impactful_points",
+        "insights",
+    ]
+
+
 def test_detail_view_includes_v1_signal_fields(client):
     """v1 schema additions surface through the detail endpoint:
     said_by/about_person/source_quote on signals; cohort_status/affiliation

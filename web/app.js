@@ -51,6 +51,9 @@ function renderSpeakerChips(resolved) {
   );
 }
 
+// F1 (§D.4): the section header carries the kind label; per-item rows
+// no longer render an inner kind badge. Each row is just text + quote +
+// attribution under the section's color stripe.
 function renderSignal(s) {
   // v1 renames: `speakers` → `said_by`; new `about_person` and `source_quote`.
   const said_by = s.said_by || s.speakers || [];
@@ -58,24 +61,67 @@ function renderSignal(s) {
   return el(
     "li",
     { class: "signal" },
-    el("span", { class: `signal-kind ${s.kind}` }, s.kind.replace("_", " ")),
-    el(
-      "div",
-      {},
-      el("div", { class: "signal-text" }, s.text),
-      s.source_quote
-        ? el("blockquote", { class: "signal-quote", title: "verbatim source span" }, `“${s.source_quote}”`)
-        : null,
-      said_by.length || about.length
-        ? el(
-            "span",
-            { class: "signal-attribution" },
-            said_by.length ? el("span", { class: "signal-saidby" }, said_by.join(" · ")) : null,
-            about.length ? el("span", { class: "signal-about" }, ` → about: ${about.join(", ")}`) : null
-          )
-        : null
-    )
+    el("div", { class: "signal-text" }, s.text),
+    s.source_quote
+      ? el("blockquote", { class: "signal-quote", title: "verbatim source span" }, `“${s.source_quote}”`)
+      : null,
+    said_by.length || about.length
+      ? el(
+          "span",
+          { class: "signal-attribution" },
+          said_by.length ? el("span", { class: "signal-saidby" }, said_by.join(" · ")) : null,
+          about.length ? el("span", { class: "signal-about" }, ` → about: ${about.join(", ")}`) : null
+        )
+      : null
   );
+}
+
+// F1 (§D.4): section render order is locked server-side via the
+// `signals_by_kind` key insertion order (see `_SIGNAL_KIND_GROUPS` in
+// `api/transcripts_routes.py`). We trust that order here — frontend
+// stays a thin consumer. Empty sections are skipped (no "INSIGHTS (0)"
+// clutter); their absence is the signal.
+const _SECTION_LABELS = {
+  decisions:        "DECISIONS",
+  action_items:     "ACTION ITEMS",
+  open_questions:   "OPEN QUESTIONS",
+  impactful_points: "IMPACTFUL POINTS",
+  insights:         "INSIGHTS",
+};
+// Singular form per plural — drives the per-section color class so
+// the header inherits the same accent the per-item badge used to.
+const _SECTION_KIND = {
+  decisions:        "decision",
+  action_items:     "action_item",
+  open_questions:   "open_question",
+  impactful_points: "impactful_point",
+  insights:         "insight",
+};
+
+function renderSignalSections(detail) {
+  const sbk = (detail && detail.signals_by_kind) || {};
+  const sections = [];
+  for (const plural of Object.keys(sbk)) {
+    const items = sbk[plural] || [];
+    if (!items.length) continue; // skip empty per §D.4
+    const label = _SECTION_LABELS[plural] || plural.toUpperCase().replace(/_/g, " ");
+    const kind = _SECTION_KIND[plural] || "";
+    sections.push(
+      el(
+        "section",
+        { class: `signal-section signal-section-${kind}` },
+        el(
+          "div",
+          { class: `signal-section-head signal-kind ${kind}` },
+          el("span", { class: "signal-section-label" }, label),
+          el("span", { class: "signal-section-count" }, `(${items.length})`)
+        ),
+        el("ul", { class: "signals" }, items.map(renderSignal))
+      )
+    );
+  }
+  if (!sections.length) return null;
+  return el("div", { class: "signal-sections" }, sections);
 }
 
 function renderEntities(entities) {
@@ -140,9 +186,8 @@ function renderCard(card, detail) {
     renderSpeakerChips(card.resolved_speakers),
     renderTopics(card.topics),
     summary,
-    detail && detail.signals && detail.signals.length
-      ? el("ul", { class: "signals" }, detail.signals.map(renderSignal))
-      : null,
+    // F1: signals grouped into ordered sections via signals_by_kind.
+    renderSignalSections(detail),
     renderEntities(detail && detail.entities)
   );
 
