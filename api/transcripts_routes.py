@@ -17,6 +17,7 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from transcripts import store
 from transcripts.models import Session
@@ -197,3 +198,42 @@ def get_session(session_id: str, viewer: Optional[str] = None) -> dict:
     if not can_see(v, session):
         raise HTTPException(status_code=403, detail="not allowed")
     return to_view(session)
+
+
+# ---------------------------------------------------------------------------
+# Visibility toggle — P3 (§D.1). Owner-gated. Body carries the viewer
+# (the demo identity) because there's no auth header yet; Phase 1.5
+# replaces this with a session-cookie / Authorization-header check and
+# the body shrinks to just `{"visibility": ...}`.
+# ---------------------------------------------------------------------------
+
+class _VisibilityUpdate(BaseModel):
+    visibility: str   # "cohort" | "owner-only"
+    viewer: Optional[str] = None
+
+
+_VALID_VISIBILITY = {"cohort", "owner-only"}
+
+
+@router.post("/sessions/{session_id}/visibility")
+def set_visibility(session_id: str, body: _VisibilityUpdate) -> dict:
+    if body.visibility not in _VALID_VISIBILITY:
+        raise HTTPException(
+            status_code=400,
+            detail=f"visibility must be one of {sorted(_VALID_VISIBILITY)}",
+        )
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    v = _resolve_viewer(body.viewer)
+    owner = session.metadata.owner
+    # Only the stamped owner can flip a session's visibility. If owner
+    # was never set (e.g. ingest didn't use --owner-from-first-speaker),
+    # no one can toggle — the session stays at whatever it was. That's
+    # the safe demo posture; Phase 1.5 layers real auth on top.
+    if owner is None or v != owner:
+        raise HTTPException(status_code=403, detail="only the session owner can change visibility")
+
+    store.set_visibility(session_id, body.visibility, owner=owner)
+    return {"session_id": session_id, "visibility": body.visibility, "owner": owner}

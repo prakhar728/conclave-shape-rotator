@@ -360,6 +360,63 @@ def test_get_session_403s_when_viewer_cannot_see(client):
     assert r.status_code == 403
 
 
+# ---------------------------------------------------------------------------
+# Visibility toggle endpoint — P3 (§D.1). Owner-only.
+# ---------------------------------------------------------------------------
+
+def test_visibility_endpoint_owner_only_succeeds_for_owner(client):
+    """Owner can flip a session from cohort → owner-only and back. The
+    response echoes the new state, and the underlying store reflects it."""
+    sess = _store_session("demo")
+    # Stamp ownership so the toggle has an authoritative caller.
+    md = sess.metadata.model_copy(update={"owner": "shaw-walters"})
+    store.save_session(sess.model_copy(update={"metadata": md}))
+
+    r = client.post(
+        "/transcripts/sessions/demo/visibility",
+        json={"visibility": "owner-only", "viewer": "shaw-walters"},
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["visibility"] == "owner-only"
+    assert payload["owner"] == "shaw-walters"
+    reloaded = store.load_session("demo")
+    assert reloaded.metadata.visibility == "owner-only"
+    assert reloaded.metadata.owner == "shaw-walters"
+
+    # Flip back to cohort.
+    r2 = client.post(
+        "/transcripts/sessions/demo/visibility",
+        json={"visibility": "cohort", "viewer": "shaw-walters"},
+    )
+    assert r2.status_code == 200
+    assert store.load_session("demo").metadata.visibility == "cohort"
+
+
+def test_visibility_endpoint_403s_for_non_owner(client):
+    """A viewer who isn't the stamped owner — including the case where
+    no owner has been stamped at all — gets 403 and the stored
+    visibility doesn't change."""
+    sess = _store_session("demo")
+    md = sess.metadata.model_copy(update={"owner": "shaw-walters"})
+    store.save_session(sess.model_copy(update={"metadata": md}))
+
+    r = client.post(
+        "/transcripts/sessions/demo/visibility",
+        json={"visibility": "owner-only", "viewer": "someone-else"},
+    )
+    assert r.status_code == 403
+    assert store.load_session("demo").metadata.visibility == "cohort"
+
+    # Unowned session — even a plausible viewer can't toggle.
+    _store_session("unowned")  # owner stays None
+    r2 = client.post(
+        "/transcripts/sessions/unowned/visibility",
+        json={"visibility": "owner-only", "viewer": "shaw-walters"},
+    )
+    assert r2.status_code == 403
+
+
 def test_list_filtering_by_source_and_date_works(client):
     _store_session("a", date="2026-05-10")
     _store_session("b", date="2026-05-20")
