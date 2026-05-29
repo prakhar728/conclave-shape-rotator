@@ -917,19 +917,51 @@ Reaffirms anti-scope from §L plus this round's specific deferrals:
 
 Phase 1.5 in `BUILD_PLAN.md §5` calls for a real `can_see(viewer, session)` + an `auth.py` module. For the demo we **shortcut** that:
 
-- **Mock identity picker** at `/dashboard/` entry — dropdown of cohort `record_id`s from `MOCK_DIRECTORY`. Stored in `localStorage`; no auth backend.
-- **Permission rule (hardcoded):** a viewer sees a session if any of:
-  - `metadata.visibility == "cohort"` (default — public to the cohort)
-  - `viewer == metadata.owner` (owner sees their own private sessions)
-  - `viewer` matches a `record_id` in `metadata.resolved_speakers` (you see meetings you spoke in)
-- **`SessionMetadata.owner`** stays optional. Demo defaults it to the first
-  resolved speaker on ingest (opt-in via env var, no test impact).
-- **"Hide from cohort" toggle** on cards you own → `POST /transcripts/sessions/{id}/visibility` flips `visibility: "cohort" ⇄ "owner-only"`. Auth check is `viewer_id == owner`.
-- **Personal action-items view** at `/dashboard/me`: filters all visible sessions' `signals[]` where `kind == "action_item"` AND (`viewer in said_by` OR `viewer in about_person`, matching either by speaker label or by `resolved_speakers` lookup).
+- **Mock identity picker** at `/dashboard/` entry — dropdown of cohort `record_id`s sourced from a new `GET /transcripts/_cohort/roster` endpoint (`MOCK_DIRECTORY` + dedup of all sessions' `resolved_speakers`). Selection stored in `localStorage` as `conclaveViewerId`. No real auth.
+- **Permission rule (precise):**
+  ```
+  can_see(viewer: str | None, session) -> bool:
+      md = session.metadata
+      if md.visibility == "cohort":   return True               # public to cohort
+      if viewer is None:              return False              # anonymous + private
+      if md.owner and md.owner == viewer: return True           # owner
+      speaker_record_ids = {
+          m["record_id"] for m in (md.resolved_speakers or {}).values()
+          if isinstance(m, dict) and m.get("record_id")
+      }
+      return viewer in speaker_record_ids                       # you spoke in it
+  ```
+- **API surface (additive):**
+  - `GET /transcripts/sessions?viewer=<record_id>` filters via `can_see`.
+  - `GET /transcripts/sessions/{id}?viewer=<record_id>` → 403 if `can_see` fails.
+  - `POST /transcripts/sessions/{id}/visibility` body `{"visibility":"cohort|owner-only","viewer":"<rid>"}`; 403 unless `viewer == owner`. Calls `store.set_visibility` (already exists).
+  - `GET /transcripts/me/action-items?viewer=<record_id>` returns `[{session_id, session_date, signal}]` for every visible session where `kind == "action_item"` AND viewer's `record_id` is in `said_by` or `about_person` (matched via reverse-lookup on `resolved_speakers`).
+  - `GET /transcripts/_cohort/roster` returns `[{record_id, label, source}]`.
+- **`SessionMetadata.owner`** stays optional. New CLI flag `transcripts ingest --owner-from-first-speaker` stamps `owner = first record_id in resolved_speakers`. **Opt-in** — default leaves `owner=None` so `test_metadata_defaults_are_phase_1_friendly` stays green.
+- **What does NOT change:** C10 raw-leak guard, existing card-shape contract, SQLite schema (all in JSON metadata).
+
+**Test deltas (full inventory):**
+
+- **MUST UPDATE (1):**
+  - `test_can_see_stub_returns_true_for_everyone` → rewrite as `test_can_see_visibility_cohort_returns_true_for_everyone` (the default-visibility branch keeps the old behavior; this rename + delta covers the intent).
+- **MUST ADD (13):**
+  - `test_can_see_owner_only_blocks_anonymous_viewer`
+  - `test_can_see_owner_only_allows_owner`
+  - `test_can_see_owner_only_allows_speaker_via_resolved_speakers`
+  - `test_can_see_owner_only_blocks_unrelated_viewer`
+  - `test_list_sessions_filters_by_viewer_query_param`
+  - `test_get_session_403s_when_viewer_cannot_see`
+  - `test_visibility_endpoint_owner_only_succeeds_for_owner`
+  - `test_visibility_endpoint_403s_for_non_owner`
+  - `test_me_action_items_filters_signals_by_viewer_via_said_by`
+  - `test_me_action_items_filters_signals_by_viewer_via_about_person`
+  - `test_me_action_items_skips_invisible_sessions`
+  - `test_ingest_owner_from_first_speaker_opt_in_stamps_owner`
+  - `test_ingest_default_leaves_owner_none`
 
 **No new branch.** Lands on `transcripts-phase1` alongside v1.1, tagged
-`demo-related` so future Phase-1.5 work can rebase or supersede without
-confusion. Test impact: 1 existing test rewrite (`test_can_see_stub_returns_true_for_everyone` — intentional), all other changes additive.
+`demo —` in commit messages so future Phase-1.5 work can rebase or supersede without
+confusion. Execution is sequenced in **§D.10 Steps P1-P5**.
 
 ### D.2 Shape-UI isolation (keep cohort-specific styling out of the product)
 
@@ -947,24 +979,61 @@ visual layer must be optional and replaceable:
   into Core API responses. The current `seed: card.session_id` field is
   generic enough; no change needed beyond making the rendering optional.
 
-### D.3 Card expansion / preview pattern (low urgency)
+### D.3 Card preview + click-to-detail page
 
-Current behaviour: every card renders FULL content (summary + ordered signal sections + entities + topics). For dense corpora this gets visually heavy.
+Cards default to a **mini preview** (the most important signals visible
+immediately); clicking anywhere on the card opens a **per-meeting detail
+page** with everything in depth.
 
-**Planned:** cards default to a compressed preview — title, date, topic
-chips, 1-line summary, signal-count badges. **On click**, expand inline
-or navigate to a per-session detail page. Likely implementation:
+**URL scheme (locked):** hash-based SPA route — `/dashboard/#/sessions/<id>`.
+Same `index.html`, JS routes on `hashchange`. No backend route changes
+required; the detail view re-uses `GET /transcripts/sessions/{id}`.
 
-- Add `?compressed=true` (or default) state on cards
-- Click → toggle inline expansion (no route change) OR
-- Click → navigate to `/dashboard/sessions/<id>` (a dedicated detail page)
+**Card preview composition (in order):**
+- Title + date + source + chunk count + model_id badge
+- Topic chips (always visible)
+- Resolved-speaker chips
+- 1-2 line summary (truncate with `…` if longer)
+- **Top 2-3 signals** by importance rule:
+  - decisions first
+  - then action items
+  - fall back to first 1-2 impactful_points if neither exists
+  - then first 1-2 insights as last resort
+- Signal-count badges: `N signals · M entities · K topics`
+- Whole card is clickable (cursor: pointer, soft hover elevation)
 
-**Low urgency** for the demo; current full-card render is acceptable.
+**Detail page composition:**
+- Header with title, date, source, model, chunk count, back-link
+- Full summary
+- All signals rendered as ordered sections (per §D.4 — reuses the same
+  `renderSignalSections(detail)` helper, no duplication)
+- All entities with cohort_status chips + affiliation subtitles
+- All topics
+- Resolved-speakers list + participants (when populated)
 
-### D.4 Signal section ordering (LANDED in v1.1 dashboard JS)
+**Routing in `app.js`:**
+- On load and on `hashchange`, check if hash matches `#/sessions/<id>`.
+- Yes → fetch detail, render detail view.
+- No → render grid (existing path).
+- Detail view's back-link calls `history.back()`.
 
-Signals now render in deterministic priority sections, driven by the
-v1.1 `signals_by_kind` server-side grouping:
+**No tests break.** Smoke test only checks shell + assets; behavior is
+client-side. The detail page consumes an API surface that already exists.
+Execution is sequenced in **§D.10 Step F2**.
+
+### D.4 Signal section ordering (design pending — frontend reverted)
+
+**Status correction:** the first cut was reverted in `c48707f` after a
+labeling bug (section header `INSIGHT` immediately followed by per-item
+`insight` badge). The backend grouping (`signals_by_kind`) is wired in
+`to_view()` and stays. The frontend section render is **not yet shipped**.
+
+**Design choice (locked):**
+
+- One labeling axis only — section header carries the kind label, per-item
+  `[kind]` badge is dropped inside each section.
+- Empty sections are not rendered (no `INSIGHTS (0)` clutter).
+- Section render order is server-driven via `_SIGNAL_KIND_GROUPS`:
 
 ```
 DECISIONS (n)            ← decision-led, lands first
@@ -974,8 +1043,7 @@ IMPACTFUL POINTS (n)     ← consequential facts, fourth
 INSIGHTS (n)             ← non-obvious observations, last
 ```
 
-Empty sections are not rendered (no "Insights (0)" clutter). Already
-committed alongside the v1.1 prompt + the `signals_by_kind` API field.
+Implementation lands as part of **§D.10 Step F1** below.
 
 ### D.5 LAN access / tunneling for the demo (operational)
 
@@ -998,13 +1066,221 @@ LAN — **but** many venue / corporate / guest WiFi networks have
   5-line fix + patch existing DB rows in place. Demo-blocking only if you
   show the model badge; cosmetic otherwise.
 
+### D.7 Live reload via `?dev` query param (operational)
+
+For iterating on the dashboard during the demo build — especially when
+the dashboard is opened over ngrok on a second machine — the served HTML
+includes a **dev-only** polling reload:
+
+- Enabled by appending `?dev` to the dashboard URL. Off by default so the
+  demo URL stays clean.
+- Polls `Last-Modified` on `/dashboard/app.js`, `/dashboard/styles.css`,
+  `/dashboard/index.html`, and `/dashboard/shape-ui/tokens.css` every 800ms.
+- Reloads the page when any of those `Last-Modified` headers change.
+- Companion change: `main.py` stamps `Cache-Control: no-store, must-revalidate`
+  on every `/dashboard/*` response so the browser actually revalidates
+  rather than serving cached copies (this fixes the "I reverted but the
+  remote browser still shows the old layout" failure mode).
+- Pure client-side dev convenience — **no new dependencies**, no server-side
+  watcher, no test impact.
+
+### D.8 Cross-meeting relations (out of scope for the demo)
+
+Tracked here so the demo plan doesn't accidentally absorb it. Belongs to
+**Phase 2c** in `BUILD_PLAN.md §5` ("Cross-transcript relations ⭐ — co-occurrence").
+
+- **Approach when it lands:** start with shared-entity co-occurrence
+  (graph of sessions linked by shared `Entity.name`/`record_id`).
+  Embeddings come later for fuzzy "related meetings".
+- **No code action for the demo.** Mentioned in the dashboard's footer
+  copy only — "relations come in Phase 2".
+
+### D.9 Server stability — defensive `raw_diarization` parse
+
+Hit during the demo build: a malformed `raw_diarization` JSON column
+(double-encoded — first 8 chars parse, trailing bytes choke `json.loads`)
+crashes `storage/sqlite.py::get_transcript_session`. Whenever that row is
+loaded the server 500s. Compounding effect: the uvicorn worker can die
+from the chained traceback during embedding-model teardown (the
+sentence-transformers SIGSEGV described in the v1 §8 verification logs).
+
+**Fix (two parts, one commit):**
+1. **Defensive parse** in `storage/sqlite.py:510`:
+   ```python
+   try:
+       raw = json.loads(row["raw_diarization"])
+   except json.JSONDecodeError as e:
+       logger.warning("sqlite: raw_diarization unparseable for %s — %s", session_id, e)
+       raw = {}
+   ```
+   Dashboard stays up even if a row is corrupted.
+2. **Audit script** `transcripts/scripts/check_raw_diarization.py`:
+   - Iterates every row, runs `json.loads(row["raw_diarization"])`, prints the offending session_ids.
+   - For each offender, decide per-row: re-ingest from the source file (preferred), or hand-repair the JSON (fallback).
+
+**Tests:** add one for the defensive branch
+(`test_get_transcript_session_returns_empty_raw_when_corrupt`).
+Sequenced as **§D.10 Step P0** because it's load-bearing for the demo.
+
+### D.10 Execution sequence — commits and ticks
+
+> **Branch:** `transcripts-phase1`. No push until explicit sign-off.
+> Every step = one commit; tests in the same commit as the code that
+> changes their contract; suite stays at 283+ green after every step.
+> Each commit message uses the `transcripts: demo — <verb>` shape (or
+> `transcripts: dev — …` for the dev-only steps).
+
+#### Step P0 — server stability (§D.9) — **LOAD-BEARING**
+
+| | |
+|---|---|
+| **Touches** | `storage/sqlite.py`, `transcripts/scripts/check_raw_diarization.py` (NEW), `tests/test_sqlite_transcripts.py` (NEW or extend) |
+| **Tests** | 1 new: `test_get_transcript_session_returns_empty_raw_when_corrupt` |
+| **Commit** | `transcripts: demo — defensive raw_diarization parse + audit script` |
+| **BUILD_PLAN tick** | none (operational) |
+
+#### Step P1 — `model_id` provenance fix (§D.6)
+
+| | |
+|---|---|
+| **Touches** | `transcripts/enrich.py::_model_id`, `transcripts/scripts/patch_model_id.py` (NEW) |
+| **Tests** | 1 new: `test_model_id_resolves_redpill_when_backend_is_redpill` |
+| **Commit** | `transcripts: demo — model_id resolves from settings.llm_backend, patch script` |
+| **BUILD_PLAN tick** | none (cosmetic) |
+
+#### Step F1 — signal section rendering (§D.4)
+
+| | |
+|---|---|
+| **Touches** | `web/app.js` (add `renderSignalSections(detail)`), `web/styles.css` (`.signal-section`, `.signal-section-head`) |
+| **Tests** | none break, none new (visual only) |
+| **Commit** | `transcripts: demo — signal sections render via signals_by_kind, drop per-item kind badge` |
+| **BUILD_PLAN tick** | none (frontend polish under Phase 1d) |
+
+#### Step F2 — card preview + detail page (§D.3)
+
+| | |
+|---|---|
+| **Touches** | `web/app.js` (hash router + `renderDetail()` + `renderCardPreview()`), `web/styles.css` (`.detail-view`, `.card.preview`, `.signal-importance-rule`) |
+| **Tests** | none break (smoke test still passes); no new tests (client-only behavior) |
+| **Commit** | `transcripts: demo — hash-route detail page + mini-card preview` |
+| **BUILD_PLAN tick** | `Phase 1d Stylized dashboard ⭐ ✅` becomes ticked once F2 + F1 land |
+
+#### Step P2 — permissions backend — `can_see` + viewer threading (§D.1)
+
+| | |
+|---|---|
+| **Touches** | `api/transcripts_routes.py` (`can_see()` replace stub, `_resolve_viewer()`, viewer-aware list + detail endpoints) |
+| **Tests** | 1 rewrite + 6 new: `test_can_see_visibility_cohort_returns_true_for_everyone` (rewrite), `test_can_see_owner_only_blocks_anonymous_viewer`, `test_can_see_owner_only_allows_owner`, `test_can_see_owner_only_allows_speaker_via_resolved_speakers`, `test_can_see_owner_only_blocks_unrelated_viewer`, `test_list_sessions_filters_by_viewer_query_param`, `test_get_session_403s_when_viewer_cannot_see` |
+| **Commit** | `transcripts: demo — can_see rule + viewer query-param filtering` |
+| **BUILD_PLAN tick** | partial progress on Phase 1.5 — DO NOT tick yet (this is a stepping-stone, not the contract) |
+
+#### Step P3 — permissions backend — visibility toggle endpoint (§D.1)
+
+| | |
+|---|---|
+| **Touches** | `api/transcripts_routes.py` (new `POST /transcripts/sessions/{id}/visibility`) |
+| **Tests** | 2 new: `test_visibility_endpoint_owner_only_succeeds_for_owner`, `test_visibility_endpoint_403s_for_non_owner` |
+| **Commit** | `transcripts: demo — visibility toggle endpoint (owner-gated)` |
+
+#### Step P4 — permissions backend — action items + roster endpoints (§D.1)
+
+| | |
+|---|---|
+| **Touches** | `api/transcripts_routes.py` (new `GET /transcripts/me/action-items`, new `GET /transcripts/_cohort/roster`) |
+| **Tests** | 3 new: `test_me_action_items_filters_signals_by_viewer_via_said_by`, `test_me_action_items_filters_signals_by_viewer_via_about_person`, `test_me_action_items_skips_invisible_sessions` + (roster shape assertion, in-line with one of the above or its own micro-test) |
+| **Commit** | `transcripts: demo — /me/action-items + /_cohort/roster endpoints` |
+
+#### Step P5 — owner stamping on ingest (§D.1)
+
+| | |
+|---|---|
+| **Touches** | `transcripts/cli.py` (new `--owner-from-first-speaker` flag), `transcripts/ingest.py` (apply the stamp) |
+| **Tests** | 2 new: `test_ingest_owner_from_first_speaker_opt_in_stamps_owner`, `test_ingest_default_leaves_owner_none` |
+| **Commit** | `transcripts: demo — opt-in owner stamping (--owner-from-first-speaker)` |
+
+#### Step F3 — identity picker overlay (§D.1 frontend)
+
+| | |
+|---|---|
+| **Touches** | `web/app.js` (first-visit picker, `localStorage.conclaveViewerId`, append `?viewer=<id>` to all API calls), `web/styles.css` (`.identity-picker`, `.identity-overlay`) |
+| **Tests** | none new (client-only); existing smoke test still passes |
+| **Commit** | `transcripts: demo — first-visit identity picker + viewer threading on API calls` |
+
+#### Step F4 — visibility toggle UI on owner's cards (§D.1 frontend)
+
+| | |
+|---|---|
+| **Touches** | `web/app.js` (render toggle when `viewer === card.owner`), `web/styles.css` |
+| **Tests** | none new |
+| **Commit** | `transcripts: demo — owner-only visibility toggle UI on cards` |
+
+#### Step F5 — personal action-items route (§D.1 frontend)
+
+| | |
+|---|---|
+| **Touches** | `web/app.js` (new `#/me/action-items` route + render), `web/styles.css` |
+| **Tests** | none new |
+| **Commit** | `transcripts: demo — #/me/action-items personal-queue route` |
+
+#### Step D — dev-only live reload (§D.7) — already partially in tree
+
+| | |
+|---|---|
+| **Touches** | `web/index.html` (the `?dev` polling script — already added, uncommitted), `main.py` (the `Cache-Control: no-store` middleware — **already committed in `fc3e139`**) |
+| **Tests** | none |
+| **Commit** | `transcripts: dev — live-reload via ?dev query param` (one commit for the index.html change) |
+| **Verification** | Make any trivial change to `app.js`; second-laptop tab at `…/dashboard/?dev` reloads automatically within ~1s. |
+
+#### Sequence summary (in suggested execution order)
+
+```
+P0 → P1 → F1 → F2 → P2 → P3 → P4 → P5 → F3 → F4 → F5 → D
+       └ load-bearing ┘   └ permission backend ┘   └ frontend layer ┘
+```
+
+Rationale: server stability first (P0); cosmetic provenance second (P1, cheap);
+visible dashboard polish before any permissions work (F1, F2) so the demo is
+already presentable; then the permission backend in 4 small commits (P2-P5);
+then the frontend that consumes it (F3-F5); finally the dev-only live reload
+(D — independent, can land anywhere). Each step is independently revertable
+because every commit ships with its own tests and keeps the suite green.
+
+### D.11 BUILD_PLAN tick-off mechanism
+
+The `BUILD_PLAN.md` phase ledger is the **single source of truth for what
+phase we're in**; this implementation-plan file is the working memory.
+Tick mechanism:
+
+- **Sub-step done** — append ` ✅` after the sub-step's bold name:
+  `- **1d Stylized dashboard ⭐ ✅** — ...`
+- **Whole phase done** — append ` ✅` to the phase heading:
+  `**Phase 1.1 — Extraction-quality lift ✅**`
+- **Partial / stepping-stone progress** (e.g. the demo permission stub
+  in §D.1 is a step toward Phase 1.5 but is NOT Phase 1.5) — do **NOT**
+  tick the phase. Add a footnote line under the phase instead:
+  `> *Demo stub landed (§D.1, `transcripts-phase1`); real Phase 1.5 contract pending.*`
+- **Tick happens in the commit that ships the last sub-step of the
+  phase**, not in a separate "tick" commit. Commit message format:
+  `transcripts: build-plan — tick Phase Xy ✅ (<step-id>)`
+
+Concrete planned ticks from this round:
+
+| Trigger | BUILD_PLAN edit |
+|---|---|
+| F1 + F2 land | Tick `Phase 1d Stylized dashboard ⭐ ✅` |
+| P0 + P1 land | (operational — no tick) |
+| P2-P5 + F3-F5 all land | Add footnote under Phase 1.5: `> *Demo stub landed (§D.1, `transcripts-phase1`); real Phase 1.5 contract pending.*` |
+| Phase 1.1 success criteria fully met | Tick `Phase 1.1 — Extraction-quality lift ✅` |
+
 ### Discipline
 
 - **All D.* changes go on `transcripts-phase1`** alongside v1.1 (per D.1).
-- Commit-message tag: `demo —` prefix or `(demo)` suffix.
+- Commit-message tag: `transcripts: demo —` prefix (or `transcripts: dev —` for dev-only ops like D.7).
 - Real Phase 1.5 (per `BUILD_PLAN.md §5`) supersedes D.1 when it lands;
   the demo hardcoded permissions are a stepping stone, not the contract.
-- Every D.* change keeps the full test suite green.
+- Every D.* change keeps the full test suite green (floor: 283).
+- No push until explicit sign-off.
 
 ### 10. Test impact
 
