@@ -18,6 +18,7 @@ import { mountShape } from "/dashboard/shape-ui/shape-canvas.js";
 
 const SESSIONS_URL = "/transcripts/sessions";
 const ROSTER_URL = "/transcripts/_cohort/roster";
+const ME_ACTION_ITEMS_URL = "/transcripts/me/action-items";
 
 // F3 (§D.1): viewer identity — demo-hardcoded picker. Stored under a
 // stable localStorage key so the picker only appears once per browser.
@@ -69,6 +70,16 @@ async function loadDetail(sessionId) {
 async function loadRoster() {
   const r = await fetch(ROSTER_URL, { headers: { Accept: "application/json" } });
   if (!r.ok) throw new Error(`GET ${ROSTER_URL} → ${r.status}`);
+  return r.json();
+}
+
+async function loadMyActionItems() {
+  // Server requires ?viewer=; we surface the same 400 to the user.
+  const v = getViewer();
+  if (!v) throw new Error("anonymous viewer has no personal queue — pick an identity");
+  const url = `${ME_ACTION_ITEMS_URL}?viewer=${encodeURIComponent(v)}`;
+  const r = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!r.ok) throw new Error(`GET ${ME_ACTION_ITEMS_URL} → ${r.status}`);
   return r.json();
 }
 
@@ -427,10 +438,13 @@ function renderDetail(card, detail) {
 // ── hash router ────────────────────────────────────────────────────────
 
 const _DETAIL_HASH_RE = /^#\/sessions\/([^/]+)$/;
+const _ME_ACTION_ITEMS_HASH = "#/me/action-items";
 
 function parseRoute() {
-  const m = _DETAIL_HASH_RE.exec(location.hash || "");
+  const h = location.hash || "";
+  const m = _DETAIL_HASH_RE.exec(h);
   if (m) return { name: "detail", session_id: decodeURIComponent(m[1]) };
+  if (h === _ME_ACTION_ITEMS_HASH) return { name: "me_action_items" };
   return { name: "grid" };
 }
 
@@ -445,6 +459,10 @@ function navigateToGrid() {
   } else {
     location.hash = "";
   }
+}
+
+function navigateToMyActionItems() {
+  location.hash = _ME_ACTION_ITEMS_HASH;
 }
 
 // ── grid + detail render dispatch ──────────────────────────────────────
@@ -544,10 +562,100 @@ async function renderDetailRoute(sessionId) {
   window.scrollTo({ top: 0, behavior: "instant" });
 }
 
+async function renderMyActionItemsRoute() {
+  const root = document.getElementById("cards");
+  root.className = "detail";
+  root.innerHTML = "";
+
+  const back = el(
+    "a",
+    {
+      class: "detail-back",
+      href: "#",
+      onclick: (e) => { e.preventDefault(); navigateToGrid(); },
+    },
+    "← back to grid"
+  );
+
+  const heading = el("h1", { class: "detail-title" }, "My action items");
+  const sub = el(
+    "p",
+    { class: "card-summary" },
+    "Action items where you spoke, or that name you as the assignee. ",
+    "Only items from sessions you can see."
+  );
+
+  const view = el("article", { class: "detail-view me-queue" }, back, heading, sub);
+  root.appendChild(view);
+
+  let items;
+  try {
+    items = await loadMyActionItems();
+  } catch (err) {
+    view.appendChild(el("div", { class: "empty-state" }, err.message));
+    document.getElementById("counts").textContent = "—";
+    return;
+  }
+
+  document.getElementById("counts").textContent =
+    `${items.length} action item${items.length === 1 ? "" : "s"}`;
+
+  if (!items.length) {
+    view.appendChild(
+      el(
+        "div",
+        { class: "empty-state" },
+        "Nothing on your queue. Either you're not implicated in any ",
+        "open action_item, or no visible session has one for you."
+      )
+    );
+    return;
+  }
+
+  // One row per item, in date-desc order from the server. Clicking the
+  // row navigates to the source session's detail page.
+  const list = el("ul", { class: "me-queue-list" });
+  for (const item of items) {
+    const sig = item.signal;
+    const said_by = sig.said_by || [];
+    const about = sig.about_person || [];
+    list.appendChild(
+      el(
+        "li",
+        {
+          class: "me-queue-item",
+          tabindex: "0",
+          role: "link",
+          onclick: () => navigateToDetail(item.session_id),
+          onkeydown: (e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              navigateToDetail(item.session_id);
+            }
+          },
+        },
+        el("div", { class: "me-queue-text" }, sig.text),
+        el(
+          "div",
+          { class: "me-queue-meta" },
+          el("span", {}, item.session_date || ""),
+          el("span", {}, item.session_id.replace(/-/g, " · ")),
+          said_by.length ? el("span", { class: "signal-saidby" }, `by ${said_by.join(" · ")}`) : null,
+          about.length ? el("span", { class: "signal-about" }, `→ about: ${about.join(", ")}`) : null,
+        )
+      )
+    );
+  }
+  view.appendChild(list);
+  window.scrollTo({ top: 0, behavior: "instant" });
+}
+
 async function routeToCurrentHash() {
   const route = parseRoute();
   if (route.name === "detail") {
     await renderDetailRoute(route.session_id);
+  } else if (route.name === "me_action_items") {
+    await renderMyActionItemsRoute();
   } else {
     await renderGrid();
   }
@@ -646,9 +754,25 @@ async function renderIdentityPicker() {
 function renderMasthead() {
   const right = document.querySelector(".mast-right");
   if (!right) return;
-  // Remove any previously-rendered identity chip; counts span stays.
-  for (const node of Array.from(right.querySelectorAll(".identity-chip"))) node.remove();
+  // Remove any previously-rendered identity / queue chips; counts span stays.
+  for (const node of Array.from(right.querySelectorAll(".identity-chip, .queue-chip"))) {
+    node.remove();
+  }
   const v = getViewer();
+  // F5: queue link, only when a non-anonymous identity is set.
+  if (v) {
+    const queue = el(
+      "a",
+      {
+        class: "queue-chip",
+        href: "#",
+        title: "open my action items",
+        onclick: (e) => { e.preventDefault(); navigateToMyActionItems(); },
+      },
+      "my queue"
+    );
+    right.appendChild(queue);
+  }
   const chip = el(
     "span",
     {

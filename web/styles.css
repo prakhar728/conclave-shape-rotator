@@ -398,6 +398,63 @@ a { color: inherit; }
   border-color: rgba(201,255,91,0.5);
 }
 
+/* F5: queue link next to the identity chip. Same visual vocabulary. */
+.queue-chip {
+  display: inline-block;
+  margin-left: 14px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+  color: rgba(201,255,91,0.9);
+  text-decoration: none;
+  padding: 4px 10px;
+  border: 1px solid rgba(201,255,91,0.35);
+  border-radius: 999px;
+}
+.queue-chip:hover {
+  background: rgba(201,255,91,0.08);
+  border-color: rgba(201,255,91,0.7);
+}
+
+/* F5: personal-queue list. One row per action_item; clicking jumps to
+   the source session's detail page. */
+.me-queue { gap: 18px; }
+.me-queue-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.me-queue-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 18px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+  transition: border-color 140ms ease;
+}
+.me-queue-item:hover { border-color: rgba(201,255,91,0.5); }
+.me-queue-item:focus-visible { outline: 2px solid var(--accent, #c9ff5b); outline-offset: 3px; }
+.me-queue-text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255,255,255,0.9);
+}
+.me-queue-meta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: rgba(255,255,255,0.5);
+}
+
 /* ── F2 preview + detail ─────────────────────────────────────────── */
 
 /* Mini preview card: whole card is clickable; cursor + lift on hover so
