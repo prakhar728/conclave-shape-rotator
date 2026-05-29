@@ -43,6 +43,7 @@ def ingest_path(
     force: bool = False,
     dry_run: bool = False,
     tags: Optional[list[str]] = None,
+    owner_from_first_speaker: bool = False,
 ) -> IngestReport:
     """Ingest a file or every transcript file under a directory.
 
@@ -50,6 +51,11 @@ def ingest_path(
     raw (the storage layer is raw-write-once). `force=True` routes through
     `store.replace_session` (delete + save) so a corrected transcript can
     replace its predecessor in place.
+
+    P5 (§D.1): `owner_from_first_speaker=True` stamps the session's
+    `metadata.owner` with the record_id of the first speaker in
+    `resolved_speakers` whose record_id is set. Opt-in so existing tests
+    and behaviors are unchanged when the flag is omitted.
     """
     report = IngestReport()
     for fp in _iter_files(path):
@@ -65,6 +71,14 @@ def ingest_path(
             # Unresolved labels (Speaker N, guests not in the roster) stay out
             # of resolved_speakers — see identity.resolve_speakers.
             session.metadata.resolved_speakers = resolve_speakers(session)
+            if owner_from_first_speaker:
+                # Walk resolved_speakers in insertion order (preserves the
+                # transcript's speaker order) and stamp the first one with
+                # a real record_id as the owner.
+                for _label, meta in (session.metadata.resolved_speakers or {}).items():
+                    if isinstance(meta, dict) and meta.get("record_id"):
+                        session.metadata.owner = meta["record_id"]
+                        break
             if dry_run:
                 report.stored += 1
                 continue

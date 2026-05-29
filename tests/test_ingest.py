@@ -142,3 +142,31 @@ def test_ingest_real_cohort_fixtures_no_llm(tmp_db, llm_forbidden):
     for s in store.list_sessions():
         assert len(s.raw_diarization) > 0
         assert s.derived.summary is None  # nothing enriched in ingest
+
+
+# ---------------------------------------------------------------------------
+# P5 (§D.1): opt-in --owner-from-first-speaker. Default leaves owner=None.
+# ---------------------------------------------------------------------------
+
+def test_ingest_default_leaves_owner_none(tmp_db, llm_forbidden, tmp_path):
+    """Phase-1-friendly default: no owner_from_first_speaker → owner stays
+    None. This is what keeps existing tests + the existing dashboard
+    working unchanged."""
+    f = tmp_path / "Session_C_May_20.txt"
+    f.write_text("Shaw  0:00\nhello\n\nAlex (flashbots?)  0:05\nhi\n\n", encoding="utf-8")
+    ingest_path(f)
+    sessions = store.list_sessions()
+    assert len(sessions) == 1
+    assert sessions[0].metadata.owner is None
+
+
+def test_ingest_owner_from_first_speaker_opt_in_stamps_owner(tmp_db, llm_forbidden, tmp_path):
+    """With the flag, the first speaker in resolved_speakers whose
+    record_id is set becomes metadata.owner. Shaw resolves via
+    MOCK_DIRECTORY to shaw-walters in the fixture."""
+    f = tmp_path / "Session_D_May_20.txt"
+    f.write_text("Shaw  0:00\nhello\n\nAlex (flashbots?)  0:05\nhi\n\n", encoding="utf-8")
+    ingest_path(f, owner_from_first_speaker=True)
+    sessions = store.list_sessions()
+    assert len(sessions) == 1
+    assert sessions[0].metadata.owner == "shaw-walters"

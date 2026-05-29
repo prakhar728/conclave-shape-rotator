@@ -65,7 +65,13 @@ def render_markdown(session: Session) -> str:
 
 def _cmd_ingest(args: argparse.Namespace) -> int:
     tags = [t.strip() for t in args.tags.split(",") if t.strip()] if args.tags else None
-    report = ingest_path(args.path, force=args.force, dry_run=args.dry_run, tags=tags)
+    report = ingest_path(
+        args.path,
+        force=args.force,
+        dry_run=args.dry_run,
+        tags=tags,
+        owner_from_first_speaker=getattr(args, "owner_from_first_speaker", False),
+    )
     print(
         f"ingest: stored={report.stored} replaced={report.replaced} "
         f"skipped={report.skipped} failed={len(report.failed)}"
@@ -294,6 +300,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     pi.add_argument("--force", action="store_true", help="replace existing sessions")
     pi.add_argument("--dry-run", action="store_true", help="parse but do not write to the store")
     pi.add_argument("--tags", help="comma-separated tags attached to every ingested session")
+    pi.add_argument(
+        "--owner-from-first-speaker",
+        action="store_true",
+        help="(demo, §D.1) stamp metadata.owner with the first resolved speaker's record_id",
+    )
     pi.set_defaults(func=_cmd_ingest)
 
     pe = sub.add_parser("enrich", help="map-reduce enrichment over pending sessions (uses the LLM)")
