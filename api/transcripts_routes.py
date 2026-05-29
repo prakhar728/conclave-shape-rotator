@@ -26,19 +26,50 @@ router = APIRouter(prefix="/transcripts", tags=["transcripts"])
 
 
 # ---------------------------------------------------------------------------
-# Permission stub — the seam Phase 1.5 swaps
+# Permission layer — demo-hardcoded (Phase 1.5 swaps `_resolve_viewer` to
+# a real auth callback; the rule + endpoint surface stay identical).
+# See IMPLEMENTATION_PLAN.md §D.1 for the full rationale.
 # ---------------------------------------------------------------------------
 
-def can_see(viewer: Optional[str], session: Session) -> bool:
-    """Phase-1 stub: everyone sees everything.
+def _resolve_viewer(viewer: Optional[str]) -> Optional[str]:
+    """One-line seam between the public endpoint and `can_see`.
 
-    The viewer arg is the seat for 1.5's real check
-    (``session.metadata.visibility == "cohort"`` + membership lookup,
-    or ``owner-only`` + viewer == owner). Defined now so the dashboard
-    can already call it; the body changes at 1.5 without a signature change.
+    Today: trust the `?viewer=<record_id>` query param verbatim — no
+    auth, no verification (the demo posture). Phase 1.5 replaces this
+    with an OAuth/cookie callback that returns the authenticated
+    record_id (or None if anonymous). The signature stays the same so
+    every call site is unaffected.
     """
-    _ = viewer  # unused in Phase 1
-    return True
+    return viewer
+
+
+def can_see(viewer: Optional[str], session: Session) -> bool:
+    """Demo permission rule (§D.1).
+
+    1. `visibility == "cohort"` (default) → True for everyone, anonymous
+       included. This keeps existing dashboards working without any
+       viewer threading.
+    2. `visibility == "owner-only"` and viewer is None → False.
+    3. Owner sees their own session.
+    4. A viewer whose `record_id` matches any speaker's `record_id` in
+       `resolved_speakers` sees the session (you can see meetings you
+       spoke in).
+    5. Otherwise False.
+
+    Phase 1.5 supersedes this with the real `auth.py` check; the
+    rule's structure stays the same so the contract doesn't move.
+    """
+    md = session.metadata
+    if (md.visibility or "cohort") == "cohort":
+        return True
+    if viewer is None:
+        return False
+    if md.owner and md.owner == viewer:
+        return True
+    for sp_meta in (md.resolved_speakers or {}).values():
+        if isinstance(sp_meta, dict) and sp_meta.get("record_id") == viewer:
+            return True
+    return False
 
 
 # ---------------------------------------------------------------------------
@@ -141,20 +172,28 @@ def list_sessions(
     source: Optional[str] = None,
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
+    viewer: Optional[str] = None,
 ) -> list[dict]:
-    """Newest-first list of session cards. Phase-1 all-access."""
+    """Newest-first list of session cards, filtered by `can_see`.
+
+    `viewer` is the demo-hardcoded identity hint (see `_resolve_viewer`).
+    Omit it and the caller is anonymous; cohort-visible sessions still
+    return (default visibility is "cohort"), so the existing dashboard
+    keeps working unchanged.
+    """
+    v = _resolve_viewer(viewer)
     sessions = store.list_sessions(source=source, date_from=date_from, date_to=date_to)
     # Most-recent first by date (then session_id for a stable tiebreaker).
     sessions.sort(key=lambda s: (s.metadata.date, s.session_id), reverse=True)
-    return [to_card(s) for s in sessions if can_see(None, s)]
+    return [to_card(s) for s in sessions if can_see(v, s)]
 
 
 @router.get("/sessions/{session_id}")
-def get_session(session_id: str) -> dict:
+def get_session(session_id: str, viewer: Optional[str] = None) -> dict:
+    v = _resolve_viewer(viewer)
     session = store.load_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
-    if not can_see(None, session):
-        # Phase 1.5: this becomes a real 403 with a proper auth context.
+    if not can_see(v, session):
         raise HTTPException(status_code=403, detail="not allowed")
     return to_view(session)

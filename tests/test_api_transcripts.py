@@ -282,16 +282,82 @@ def test_to_card_and_to_view_helpers_omit_raw_directly():
 
 
 # ---------------------------------------------------------------------------
-# can_see stub — Phase 1 all-access (1.5 swaps the body, not the signature)
+# can_see — demo-hardcoded permission rule (§D.1)
+# Default visibility is "cohort" → everyone (incl. anonymous) sees the
+# session. Switching a session to "owner-only" engages the owner +
+# speaker branches.
 # ---------------------------------------------------------------------------
 
-def test_can_see_stub_returns_true_for_everyone(client):
-    """Verify the all-access posture explicitly so the regression is loud
-    if a Phase-1.5 implementation lands here by accident."""
+def test_can_see_visibility_cohort_returns_true_for_everyone(client):
+    """Default-visibility ("cohort") is the unchanged-from-stub branch:
+    anonymous AND any viewer both see the session. This is the path the
+    existing dashboard (no picker yet) walks."""
     from api.transcripts_routes import can_see
     sess = _store_session("demo")
+    assert sess.metadata.visibility == "cohort"
     assert can_see(None, sess) is True
     assert can_see("any-viewer", sess) is True
+
+
+def _make_owner_only_session(sid: str = "private", owner: str | None = None):
+    """Build a private session with arbitrary visibility/owner."""
+    sess = _store_session(sid)
+    md = sess.metadata.model_copy(update={"visibility": "owner-only", "owner": owner})
+    sess = sess.model_copy(update={"metadata": md})
+    store.save_session(sess)
+    return sess
+
+
+def test_can_see_owner_only_blocks_anonymous_viewer(client):
+    from api.transcripts_routes import can_see
+    sess = _make_owner_only_session(owner="shaw-walters")
+    assert can_see(None, sess) is False
+
+
+def test_can_see_owner_only_allows_owner(client):
+    from api.transcripts_routes import can_see
+    sess = _make_owner_only_session(owner="shaw-walters")
+    assert can_see("shaw-walters", sess) is True
+
+
+def test_can_see_owner_only_allows_speaker_via_resolved_speakers(client):
+    """The fixture's resolved_speakers maps `Shaw → shaw-walters`, so
+    even without owner == viewer, a viewer matching a speaker's
+    record_id sees the session."""
+    from api.transcripts_routes import can_see
+    sess = _make_owner_only_session(owner=None)
+    assert can_see("shaw-walters", sess) is True
+
+
+def test_can_see_owner_only_blocks_unrelated_viewer(client):
+    from api.transcripts_routes import can_see
+    sess = _make_owner_only_session(owner="shaw-walters")
+    assert can_see("someone-else", sess) is False
+
+
+def test_list_sessions_filters_by_viewer_query_param(client):
+    """The list endpoint accepts ?viewer=<rid> and only returns sessions
+    `can_see` allows. Anonymous callers still see the default-cohort
+    sessions; owner-only sessions are hidden from them."""
+    _store_session("public", date="2026-05-20")  # visibility=cohort
+    _make_owner_only_session("private")          # visibility=owner-only, owner=None
+    # Anonymous: only the public session is returned.
+    ids_anon = [c["session_id"] for c in client.get("/transcripts/sessions").json()]
+    assert "public" in ids_anon and "private" not in ids_anon
+    # Viewer who spoke in private (Shaw) sees both.
+    ids_speaker = [
+        c["session_id"]
+        for c in client.get("/transcripts/sessions?viewer=shaw-walters").json()
+    ]
+    assert "public" in ids_speaker and "private" in ids_speaker
+
+
+def test_get_session_403s_when_viewer_cannot_see(client):
+    """The detail endpoint enforces can_see — anonymous viewer + an
+    owner-only session → 403 (not 404)."""
+    _make_owner_only_session("private", owner="shaw-walters")
+    r = client.get("/transcripts/sessions/private")
+    assert r.status_code == 403
 
 
 def test_list_filtering_by_source_and_date_works(client):
