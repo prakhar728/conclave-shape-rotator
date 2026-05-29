@@ -417,6 +417,103 @@ def test_visibility_endpoint_403s_for_non_owner(client):
     assert r2.status_code == 403
 
 
+# ---------------------------------------------------------------------------
+# /me/action-items + /_cohort/roster — P4 (§D.1)
+# ---------------------------------------------------------------------------
+
+def _store_action_item_session(sid: str, signals):
+    """Helper: create a session whose Shaw label resolves to shaw-walters
+    and store the provided signals on it."""
+    sess = _store_session(sid)
+    sess.derived.signals = signals
+    store.save_session(sess)
+    return sess
+
+
+def test_me_action_items_filters_signals_by_viewer_via_said_by(client):
+    """An action_item said by a label that resolves to the viewer's
+    record_id surfaces in their queue."""
+    from transcripts.models import Signal
+    _store_action_item_session("demo", [
+        Signal(kind="action_item", text="ship it", said_by=["Shaw"]),
+        Signal(kind="action_item", text="not for shaw", said_by=["Other Person"]),
+        Signal(kind="decision", text="decided", said_by=["Shaw"]),  # not action_item
+    ])
+    r = client.get("/transcripts/me/action-items?viewer=shaw-walters")
+    assert r.status_code == 200, r.text
+    items = r.json()
+    assert len(items) == 1
+    assert items[0]["signal"]["text"] == "ship it"
+    assert items[0]["session_id"] == "demo"
+
+
+def test_me_action_items_filters_signals_by_viewer_via_about_person(client):
+    """An action_item *about* the viewer surfaces too (e.g. someone else
+    committed to do X for Shaw)."""
+    from transcripts.models import Signal
+    _store_action_item_session("demo", [
+        Signal(kind="action_item", text="send shaw the link",
+               said_by=["Alex"], about_person=["Shaw"]),
+        Signal(kind="action_item", text="alex's own thing", said_by=["Alex"]),
+    ])
+    r = client.get("/transcripts/me/action-items?viewer=shaw-walters")
+    items = r.json()
+    assert len(items) == 1
+    assert items[0]["signal"]["text"] == "send shaw the link"
+
+
+def test_me_action_items_skips_invisible_sessions(client):
+    """An action_item the viewer would qualify for inside an
+    owner-only session they can't see does NOT leak through."""
+    from transcripts.models import Signal
+    # Visible session: viewer is a speaker → qualifies.
+    _store_action_item_session("visible", [
+        Signal(kind="action_item", text="visible-task", said_by=["Shaw"]),
+    ])
+    # Owner-only session viewer isn't a speaker in → invisible.
+    blocked = _store_action_item_session("blocked", [
+        Signal(kind="action_item", text="blocked-task", said_by=["Shaw"]),
+    ])
+    md = blocked.metadata.model_copy(update={
+        "visibility": "owner-only",
+        "owner": "someone-else",
+        # Strip Shaw from resolved_speakers so can_see doesn't let the
+        # viewer through on the speaker branch.
+        "resolved_speakers": {},
+    })
+    store.save_session(blocked.model_copy(update={"metadata": md}))
+
+    items = client.get("/transcripts/me/action-items?viewer=shaw-walters").json()
+    texts = [i["signal"]["text"] for i in items]
+    assert "visible-task" in texts
+    assert "blocked-task" not in texts
+
+
+def test_me_action_items_requires_viewer_query_param(client):
+    r = client.get("/transcripts/me/action-items")
+    assert r.status_code in (400, 422)  # FastAPI validates required param itself
+
+
+def test_cohort_roster_returns_directory_and_speaker_ids(client):
+    """The roster picker sees MOCK_DIRECTORY entries AND any speaker
+    record_ids found in stored sessions, deduped by record_id."""
+    # Store a session whose Shaw label resolves to shaw-walters (already
+    # in MOCK_DIRECTORY) so we exercise the dedup path.
+    _store_session("demo")
+    roster = client.get("/transcripts/_cohort/roster").json()
+    assert isinstance(roster, list) and roster
+    rids = {e["record_id"] for e in roster}
+    # MOCK_DIRECTORY contributes a known coordinator (added 2026-05-29).
+    assert "tina" in rids or "shaw-walters" in rids
+    # Each entry has the expected shape.
+    for e in roster:
+        assert set(e.keys()) >= {"record_id", "label", "source"}
+        assert e["source"] in {"directory", "speaker"}
+    # Dedup: each record_id appears exactly once.
+    rid_list = [e["record_id"] for e in roster]
+    assert len(rid_list) == len(set(rid_list))
+
+
 def test_list_filtering_by_source_and_date_works(client):
     _store_session("a", date="2026-05-10")
     _store_session("b", date="2026-05-20")

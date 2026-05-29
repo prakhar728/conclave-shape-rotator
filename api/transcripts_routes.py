@@ -237,3 +237,90 @@ def set_visibility(session_id: str, body: _VisibilityUpdate) -> dict:
 
     store.set_visibility(session_id, body.visibility, owner=owner)
     return {"session_id": session_id, "visibility": body.visibility, "owner": owner}
+
+
+# ---------------------------------------------------------------------------
+# Personal action-items + cohort roster — P4 (§D.1)
+# ---------------------------------------------------------------------------
+
+def _viewer_speaker_labels(viewer: str, session: Session) -> set[str]:
+    """Reverse-lookup: which speaker labels in this session map to viewer?
+
+    `resolved_speakers` is `{label: {"record_id": ..., "name": ..., ...}}`.
+    A signal's `said_by` / `about_person` arrays carry speaker labels (or
+    raw name strings), so to ask "is the viewer implicated?" we first
+    have to map viewer.record_id back to the labels they appear under.
+    """
+    labels: set[str] = set()
+    for label, meta in (session.metadata.resolved_speakers or {}).items():
+        if isinstance(meta, dict) and meta.get("record_id") == viewer:
+            labels.add(label)
+    return labels
+
+
+@router.get("/me/action-items")
+def get_my_action_items(viewer: str) -> list[dict]:
+    """Personal action-items queue.
+
+    Walks every session the viewer can see; for each, picks signals
+    where `kind == "action_item"` AND the viewer is implicated (their
+    record_id maps to a speaker label that appears in `said_by` or
+    `about_person`). Returns one entry per implicated signal.
+
+    Phase 1.5: drop the `viewer` query param in favor of an auth header
+    and resolve identity server-side; the rest of this function is
+    unchanged.
+    """
+    v = _resolve_viewer(viewer)
+    if v is None:
+        raise HTTPException(status_code=400, detail="viewer query param is required")
+    out: list[dict] = []
+    sessions = store.list_sessions()
+    sessions.sort(key=lambda s: (s.metadata.date, s.session_id), reverse=True)
+    for s in sessions:
+        if not can_see(v, s):
+            continue
+        labels = _viewer_speaker_labels(v, s)
+        if not labels:
+            continue
+        for sig in (s.derived.signals or []):
+            if sig.kind != "action_item":
+                continue
+            said_by = set(sig.said_by or [])
+            about = set(sig.about_person or [])
+            if labels & (said_by | about):
+                out.append({
+                    "session_id": s.session_id,
+                    "session_date": s.metadata.date,
+                    "signal": sig.model_dump(),
+                })
+    return out
+
+
+@router.get("/_cohort/roster")
+def get_cohort_roster() -> list[dict]:
+    """Roster for the identity picker (§D.1 frontend).
+
+    Source: MOCK_DIRECTORY (cohort-data) ∪ resolved_speakers across all
+    sessions. Deduped by record_id. Each entry: {record_id, label, source}
+    where `source` is "directory" or "speaker" — the picker can use it
+    to flag speaker-only ids (people without a cohort-data file).
+
+    Demo-only — Phase 1.5 replaces with a real cohort-OS lookup.
+    """
+    from transcripts.identity import MOCK_DIRECTORY
+
+    seen: dict[str, dict] = {}
+    # Directory entries first — they win the `source` tag.
+    for label, record_id in MOCK_DIRECTORY.items():
+        if record_id not in seen:
+            seen[record_id] = {"record_id": record_id, "label": label, "source": "directory"}
+    # Then speaker-derived ids that the directory doesn't cover.
+    for s in store.list_sessions():
+        for label, meta in (s.metadata.resolved_speakers or {}).items():
+            if not isinstance(meta, dict):
+                continue
+            rid = meta.get("record_id")
+            if rid and rid not in seen:
+                seen[rid] = {"record_id": rid, "label": label, "source": "speaker"}
+    return sorted(seen.values(), key=lambda e: e["record_id"])
