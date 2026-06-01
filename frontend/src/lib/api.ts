@@ -102,3 +102,43 @@ export const workspaces = {
   meetings: (id: string) =>
     apiFetch<{ meetings: Meeting[] }>(`/api/workspaces/${id}/meetings`),
 };
+
+// --- Meeting detail (legacy /transcripts endpoint, dual-mode in 1.7/1.14) ---
+
+export type Signal = {
+  kind: string;
+  text: string;
+  said_by?: string[];
+  about_person?: string[];
+  source_quote?: string | null;
+};
+
+export type Entity = {
+  name: string;
+  type: string;
+  evidence?: string | null;
+};
+
+export type MeetingView = {
+  session_id: string;
+  date: string;
+  source: string;
+  summary: string | null;
+  visibility: string;
+  owner: string | null;
+  resolved_speakers: Record<string, unknown>;
+  topics: string[];
+  participants: string[] | null;
+  signals: Signal[];
+  signals_by_kind: {
+    action_items: Signal[];
+    open_questions: Signal[];
+    insights: Signal[];
+  };
+  entities: Entity[];
+};
+
+export const meetings = {
+  get: (sessionId: string) =>
+    apiFetch<MeetingView>(`/api/transcripts/sessions/${sessionId}`),
+};

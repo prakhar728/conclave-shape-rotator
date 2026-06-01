@@ -271,11 +271,45 @@ def list_sessions(
 
 
 @router.get("/sessions/{session_id}")
-def get_session(session_id: str, viewer: Optional[str] = None) -> dict:
-    v = _resolve_viewer(viewer)
+def get_session(
+    session_id: str,
+    request: Request,
+    viewer: Optional[str] = None,
+) -> dict:
+    """Detail view for a single session.
+
+    Dual-mode permission per 1.7's `can_see` dispatcher:
+      - if the cookie resolves to an authenticated User AND the session
+        has a workspace_id, route to workspace-mode (typed columns)
+      - otherwise, fall back to the legacy cohort path with the
+        `viewer` query param (existing cohort dashboards stay green)
+    """
     session = store.load_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    # Only consult the workspace columns when there's an authed user — keeps
+    # anonymous cohort traffic on the legacy path and means test DBs without
+    # the 1.6 columns (some legacy fixtures use init_db without alembic) are
+    # never touched.
+    row = None
+    if user is not None:
+        try:
+            ws_row = store.get_workspace_fields(session_id)
+        except Exception:  # noqa: BLE001 — defensive vs schema drift in test DBs
+            ws_row = None
+        if ws_row and ws_row.get("workspace_id"):
+            row = {"session_id": session_id, **ws_row}
+
+    # Workspace mode when both pieces are present; otherwise legacy cohort.
+    if user is not None and row is not None:
+        if not can_user_see(user, row):
+            raise HTTPException(status_code=403, detail="not allowed")
+        return to_view(session)
+
+    v = _resolve_viewer(viewer)
     if not can_see(v, session):
         raise HTTPException(status_code=403, detail="not allowed")
     return to_view(session)
