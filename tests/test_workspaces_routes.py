@@ -13,9 +13,8 @@ from storage.sqlite import _get_conn
 
 @pytest.fixture(autouse=True)
 def _clean_tables():
-    conn = _get_conn()
-    for table in ("sessions", "meeting_shares", "workspace_members", "workspaces", "users"):
-        conn.execute(f"DELETE FROM {table}")
+    from tests.conftest import reset_workspace_domain_tables
+    reset_workspace_domain_tables()
     yield
 
 
@@ -92,14 +91,13 @@ def test_non_member_cannot_see_workspace(client: TestClient):
     assert r.status_code == 404
 
 
-def test_meetings_endpoint_stub(client: TestClient):
+def test_meetings_endpoint_empty_for_new_workspace(client: TestClient):
+    """New workspace has no meetings until 1.6's set_workspace binds one."""
     _login(client, "meet@example.com")
     ws_id = client.get("/api/workspaces").json()["workspaces"][0]["id"]
     r = client.get(f"/api/workspaces/{ws_id}/meetings")
     assert r.status_code == 200
-    body = r.json()
-    assert body["meetings"] == []
-    assert "Phase 1.6" in body["note"]
+    assert r.json()["meetings"] == []
 
 
 def test_add_member_returns_501(client: TestClient):

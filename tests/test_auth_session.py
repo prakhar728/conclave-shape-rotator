@@ -19,9 +19,8 @@ from storage.sqlite import _get_conn
 @pytest.fixture(autouse=True)
 def _clean_tables():
     """Reset the auth-related tables between tests for isolation."""
-    conn = _get_conn()
-    for table in ("sessions", "workspace_members", "workspaces", "users"):
-        conn.execute(f"DELETE FROM {table}")
+    from tests.conftest import reset_workspace_domain_tables
+    reset_workspace_domain_tables()
     yield
 
 

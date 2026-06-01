@@ -12,23 +12,9 @@ from infra import identity, workspaces
 
 @pytest.fixture(autouse=True)
 def _clean_tables():
-    """Wipe the workspace-domain tables before each test for isolation.
-
-    The legacy tables stay untouched (different domain, different tests).
-    """
-    from storage.sqlite import _get_conn
-
-    conn = _get_conn()
-    for table in (
-        "sessions",          # added in 1.4 — must drop before users (FK)
-        "meeting_shares",
-        "magic_links",
-        "bot_invitations",
-        "workspace_members",
-        "workspaces",
-        "users",
-    ):
-        conn.execute(f"DELETE FROM {table}")
+    """Wipe the workspace-domain tables before each test for isolation."""
+    from tests.conftest import reset_workspace_domain_tables
+    reset_workspace_domain_tables()
     yield
 
 

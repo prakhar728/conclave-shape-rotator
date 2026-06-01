@@ -98,3 +98,41 @@ def _row_to_session(row: dict) -> Session:
         metadata=SessionMetadata(**row["metadata"]),
         derived=Derived(**row["derived"]),
     )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1.6 — workspace / owner / visibility (typed columns from Alembic 0004)
+# ---------------------------------------------------------------------------
+
+def set_workspace(
+    session_id: str,
+    workspace_id: Optional[str],
+    owner_user_id: Optional[str],
+    visibility: Optional[str] = None,
+) -> None:
+    """Bind a session to a workspace + owner (and optionally flip visibility).
+
+    Pure setter — does NOT touch raw_diarization, metadata JSON, or derived.
+    The JSON `metadata.owner` and `metadata.visibility` fields are now
+    legacy mirrors; Phase 1.7's `can_see` will read the typed columns.
+    """
+    from storage import sqlite as _sqlite
+    _sqlite.set_transcript_workspace(
+        session_id=session_id,
+        workspace_id=workspace_id,
+        owner_user_id=owner_user_id,
+        visibility=visibility,
+    )
+
+
+def get_workspace_fields(session_id: str) -> Optional[dict]:
+    """Return `{workspace_id, owner_user_id, visibility}` or None if missing."""
+    from storage import sqlite as _sqlite
+    return _sqlite.get_transcript_workspace_fields(session_id)
+
+
+def list_workspace_sessions(workspace_id: str) -> list[Session]:
+    """All sessions belonging to a workspace, newest-first. No visibility filter
+    yet — Phase 1.7 layers `can_see` on top."""
+    from storage import sqlite as _sqlite
+    return [_row_to_session(r) for r in _sqlite.list_workspace_transcript_sessions(workspace_id)]

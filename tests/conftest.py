@@ -41,6 +41,10 @@ try:
     from storage import sqlite as _sqlite
     _sqlite._DB_PATH = _TEST_DB_PATH
     _sqlite._conn = None
+    # Force _init_schema to run NOW so the legacy `transcript_sessions` table
+    # exists before alembic's 0004 tries to ALTER it. Order matters: legacy
+    # schema must land before alembic-owned migrations touch it.
+    _sqlite._get_conn()
 except Exception:  # noqa: BLE001 — if storage isn't importable, nothing to protect
     pass
 
@@ -63,6 +67,41 @@ except Exception as _e:  # noqa: BLE001 — alembic optional; legacy tests still
     print(f"[conftest] alembic upgrade skipped: {_e}", file=_sys.stderr)
 
 DEMO_JSON_PATH = os.path.join(os.path.dirname(__file__), "demo_matrix.json")
+
+
+# ---------------------------------------------------------------------------
+# Shared cleanup helper
+# ---------------------------------------------------------------------------
+
+def reset_workspace_domain_tables() -> None:
+    """Wipe the workspace-domain tables (users/workspaces/sessions/etc.) safely.
+
+    Phase 1.6 added FK references from `transcript_sessions` to `workspaces`
+    and `users`. Nulling those columns first lets per-test fixtures delete
+    user/workspace rows without tripping the constraint. The
+    `transcript_sessions` rows themselves stay — different tests own those.
+    """
+    try:
+        from storage.sqlite import _get_conn
+    except Exception:  # noqa: BLE001
+        return
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE transcript_sessions SET workspace_id = NULL, owner_user_id = NULL"
+    )
+    for table in (
+        "sessions",
+        "meeting_shares",
+        "magic_links",
+        "bot_invitations",
+        "workspace_members",
+        "workspaces",
+        "users",
+    ):
+        try:
+            conn.execute(f"DELETE FROM {table}")
+        except Exception:  # noqa: BLE001 — table may not exist in legacy-only DBs
+            pass
 
 
 # ---------------------------------------------------------------------------

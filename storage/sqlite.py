@@ -605,6 +605,76 @@ def update_transcript_metadata(session_id: str, metadata: dict) -> None:
     )
 
 
+def set_transcript_workspace(
+    session_id: str,
+    workspace_id: str | None,
+    owner_user_id: str | None,
+    visibility: str | None = None,
+) -> None:
+    """Set the workspace/owner/visibility typed columns added in Alembic 0004.
+
+    Use this when promoting a legacy NULL-workspace session into a real
+    workspace, or when wiring a freshly-ingested webhook session to its
+    inviting user (Phase 2). Leaves the existing JSON metadata column
+    alone — `can_see` (Phase 1.7) reads the typed columns, not the JSON.
+    """
+    fields, params = ["updated_at = ?"], [_now()]
+    fields.insert(0, "workspace_id = ?")
+    params.insert(0, workspace_id)
+    fields.insert(1, "owner_user_id = ?")
+    params.insert(1, owner_user_id)
+    if visibility is not None:
+        fields.insert(2, "visibility = ?")
+        params.insert(2, visibility)
+    params.append(session_id)
+    _get_conn().execute(
+        f"UPDATE transcript_sessions SET {', '.join(fields)} WHERE session_id = ?",
+        tuple(params),
+    )
+
+
+def get_transcript_workspace_fields(session_id: str) -> dict | None:
+    """Read the typed workspace columns for a session (None if row missing)."""
+    row = _get_conn().execute(
+        "SELECT workspace_id, owner_user_id, visibility "
+        "FROM transcript_sessions WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_workspace_transcript_sessions(workspace_id: str) -> list[dict]:
+    """List sessions belonging to a workspace, newest-first.
+
+    Returns the same row shape as `list_transcript_sessions`. Phase 1.7
+    layers the visibility check on top via `can_see`; this helper is
+    the workspace-scoped fetch the meetings list endpoint will use.
+    """
+    rows = _get_conn().execute(
+        "SELECT session_id, source, session_date, raw_diarization, metadata, "
+        "derived, created_at, updated_at, workspace_id, owner_user_id, visibility "
+        "FROM transcript_sessions WHERE workspace_id = ? "
+        "ORDER BY session_date DESC, created_at DESC",
+        (workspace_id,),
+    ).fetchall()
+    return [
+        {
+            "session_id": r["session_id"],
+            "source": r["source"],
+            "session_date": r["session_date"],
+            "raw_diarization": json.loads(r["raw_diarization"]),
+            "metadata": json.loads(r["metadata"]),
+            "derived": json.loads(r["derived"]),
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+            "workspace_id": r["workspace_id"],
+            "owner_user_id": r["owner_user_id"],
+            "visibility": r["visibility"],
+        }
+        for r in rows
+    ]
+
+
 def delete_transcript_session(session_id: str) -> None:
     """Hard-delete a session row. Only the `--force` replace path uses this;
     the normal write path is `save_transcript_session` (raw-write-once)."""

@@ -67,15 +67,26 @@ def list_workspace_meetings(
     workspace_id: str,
     user: dict = Depends(require_current_user),
 ):
-    """List meetings in this workspace.
+    """List meetings in this workspace, newest-first.
 
-    Returns [] until Phase 1.6 adds `transcript_sessions.workspace_id` and
-    1.7 enforces workspace-scoped visibility. Wiring this endpoint now lets
-    the frontend integrate against the final contract.
+    Phase 1.6 wired this to the typed `workspace_id` column. Phase 1.7
+    layers the per-meeting visibility check on top — for now membership
+    in the workspace is the only gate, so a member sees everything.
     """
     _require_member(workspace_id, user["id"])
-    # TODO(1.6): query transcript_sessions WHERE workspace_id = ? AND visibility check.
-    return {"meetings": [], "note": "Workspace-scoped meetings activate in Phase 1.6."}
+    from transcripts import store as _store
+    sessions = _store.list_workspace_sessions(workspace_id)
+    return {
+        "meetings": [
+            {
+                "session_id": s.session_id,
+                "date": s.metadata.date,
+                "source": s.metadata.source,
+                "summary": s.derived.summary if s.derived else None,
+            }
+            for s in sessions
+        ]
+    }
 
 
 @router.post("/{workspace_id}/members", status_code=501)
