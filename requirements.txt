@@ -30,3 +30,5 @@ dstack-sdk>=0.5.2
 base58>=2.1.0
 PyYAML
 mcp>=1.27.0
+alembic>=1.13
+SQLAlchemy>=2.0

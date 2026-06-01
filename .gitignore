@@ -15,6 +15,7 @@ venv/
 /plans/
 eval_results/
 scripts/
+!alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
 !tests/fixtures/voxterm_session.json
