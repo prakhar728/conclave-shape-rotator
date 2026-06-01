@@ -167,6 +167,41 @@ export const magicLinks = {
 
 // --- Meeting owner controls (Phase 2.12, 2.13) ----------------------------
 
+export type BotStatus =
+  | "requested"
+  | "joining"
+  | "active"
+  | "completed"
+  | "failed";
+
+export type BotInviteResp = {
+  invitation_id: string;
+  meeting_session_id: string;
+  status: BotStatus;
+};
+
+export type BotStatusResp = {
+  invitation_id: string;
+  status: BotStatus;
+  recato_bot_id: number | null;
+  created_at: string;
+  completed_at: string | null;
+};
+
+export const bots = {
+  invite: (params: {
+    meet_url_or_code: string;
+    workspace_id: string;
+    attendee_emails?: string[];
+  }) =>
+    apiFetch<BotInviteResp>("/api/meetings/invite-bot", {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  status: (sessionId: string) =>
+    apiFetch<BotStatusResp>(`/api/meetings/${sessionId}/bot-status`),
+};
+
 export type MeetingShare = { email: string; granted_at: string };
 
 export const meetingOwner = {

@@ -85,6 +85,12 @@ export default function DashboardPage() {
               {me.workspace?.name ?? "No workspace"}
             </p>
           </div>
+          <Link
+            href="/invite"
+            className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+          >
+            Invite bot
+          </Link>
         </div>
 
         {meetings === null ? (

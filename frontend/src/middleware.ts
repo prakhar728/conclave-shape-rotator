@@ -18,7 +18,7 @@ import { NextResponse, type NextRequest } from "next/server";
 
 const SESSION_COOKIE = "conclave_session";
 
-const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/meeting"];
+const PROTECTED_PREFIXES = ["/dashboard", "/workspace", "/meeting", "/invite"];
 const AUTH_PAGES = new Set(["/login", "/signup"]);
 
 export function middleware(req: NextRequest) {
@@ -50,6 +50,7 @@ export const config = {
     "/dashboard/:path*",
     "/workspace/:path*",
     "/meeting/:path*",
+    "/invite/:path*",
     "/login",
     "/signup",
   ],
