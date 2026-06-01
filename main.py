@@ -2,6 +2,17 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 
+# Load .env into os.environ BEFORE any module reads it. The route handlers
+# (e.g. api/transcripts_routes.py `_load_producer_secrets`) read env vars
+# directly via os.environ; pydantic-settings in config.py only populates the
+# typed Settings object, not the process env. Without this, the canonical
+# ingest webhook can't find producer secrets.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # python-dotenv is optional; works if env is set by the shell instead
+
 from fastapi import FastAPI, Request
 from fastapi.responses import Response
 

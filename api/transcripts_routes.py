@@ -14,13 +14,20 @@ when membership-based permissions land.
 """
 from __future__ import annotations
 
+import asyncio
+import hashlib
+import hmac
+import logging
+import os
 from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Header, HTTPException, Request, status
+from pydantic import BaseModel, Field
 
 from transcripts import store
 from transcripts.models import Session
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(prefix="/transcripts", tags=["transcripts"])
@@ -330,3 +337,187 @@ def get_cohort_roster() -> list[dict]:
             if rid and rid not in seen:
                 seen[rid] = {"record_id": rid, "label": label, "source": "speaker"}
     return sorted(seen.values(), key=lambda e: e["record_id"])
+
+
+# ---------------------------------------------------------------------------
+# Canonical ingest webhook (`STRATEGY.md` Appendix A.3)
+# ---------------------------------------------------------------------------
+#
+# `POST /transcripts/ingest` is Conclave's **public ingestion contract**. Any
+# producer (Recato, Otter adapter, in-house bot) POSTs a canonical-shape
+# payload signed with HMAC-SHA256 over the raw body; the route verifies the
+# signature, dedupes by `event_id`, persists the raw session, returns 202
+# with `session_id`, and kicks LLM enrichment as a background task. Producers
+# never block on enrichment latency.
+#
+# Producer secrets live in env vars: `CONCLAVE_INGEST_SECRET_<NAME>` (uppercase
+# name; e.g. `CONCLAVE_INGEST_SECRET_RECATO`). The `source` field on the
+# payload picks which secret to verify against — case-insensitive lookup.
+# This is the v1 / demo posture; DB-backed producer registration is deferred
+# until there's a second real producer asking (Appendix A.3, "registration").
+
+
+def _load_producer_secrets() -> dict[str, str]:
+    """Snapshot of producer signing secrets from env (read once per request).
+
+    Lazy and per-call by design — lets tests override individual env vars
+    via `monkeypatch` without restarting the process, and lets ops rotate
+    a key without bouncing the dashboard.
+    """
+    prefix = "CONCLAVE_INGEST_SECRET_"
+    return {
+        k[len(prefix):].lower(): v
+        for k, v in os.environ.items()
+        if k.startswith(prefix) and v
+    }
+
+
+def _verify_signature(body: bytes, header_value: Optional[str], secret: str) -> bool:
+    """HMAC-SHA256 verification, Stripe/GitHub/Vexa-compatible.
+
+    Header format: ``sha256=<hex digest>``. ``hmac.compare_digest`` is used
+    so the comparison is constant-time and not vulnerable to timing analysis.
+    """
+    if not header_value or not header_value.startswith("sha256="):
+        return False
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(f"sha256={expected}", header_value)
+
+
+class _CanonicalSegment(BaseModel):
+    start: float
+    end: float
+    text: str
+    speaker: Optional[str] = None
+    language: Optional[str] = None
+    absolute_start: Optional[str] = None
+    absolute_end: Optional[str] = None
+
+
+class _CanonicalMeeting(BaseModel):
+    external_id: str
+    platform: Optional[str] = None       # gmeet | zoom | teams | in_person | other
+    url: Optional[str] = None
+    title: Optional[str] = None
+    start_time: Optional[str] = None     # ISO 8601
+    end_time: Optional[str] = None
+    participants: Optional[list[str]] = None
+
+
+class CanonicalIngestPayload(BaseModel):
+    """Public ingestion contract. Versioned by `api_version` for forward-compat."""
+    event_id: str
+    event_type: str = Field(..., pattern=r"^transcript\.ingest$")
+    api_version: str = Field(..., pattern=r"^v\d+$")
+    produced_at: Optional[str] = None
+    source: str = Field(..., min_length=1, max_length=64)
+    meeting: _CanonicalMeeting
+    segments: list[_CanonicalSegment]
+
+
+def _build_and_save_session(payload_dict: dict) -> Session:
+    """Pure pipeline: canonical payload → NormalizedInput → Session → store.
+
+    Mirrors the file-ingest flow in `transcripts.ingest.ingest_path` but
+    skips the file I/O and the `_iter_files` discovery — the payload *is*
+    the input. Identity resolution still runs so `resolved_speakers` is
+    populated for downstream `can_see` and the dashboard's identity picker.
+    """
+    from transcripts.sources import read_canonical
+    from transcripts.parse import build_session
+    from transcripts.identity import resolve_speakers
+
+    ni = read_canonical(payload_dict)
+    if not ni.segments:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="canonical payload contains no usable segments",
+        )
+    session = build_session(ni)
+    session.metadata.resolved_speakers = resolve_speakers(session)
+    store.save_session(session)
+    return session
+
+
+def _enrich_in_background(session_id: str) -> None:
+    """Run enrichment on a stored session; log and swallow exceptions.
+
+    Mirrors the load → enrich → persist-derived flow used by
+    ``transcripts.enrich.enrich_pending``: enrichment mutates the session
+    object only, so we must `set_derived` + `set_metadata` after the call
+    to persist the LLM output.
+
+    The webhook returns 202 the moment the raw session is persisted — the
+    LLM run happens after. Failures here must NOT propagate (no response
+    listener); they're logged and surfaced via session status only.
+    Re-enrichment is always available via the existing CLI / batch path
+    (`enrich_pending` will pick up any session whose derived is empty or
+    whose prompt version is stale).
+    """
+    try:
+        from transcripts.enrich import enrich_session
+        session = store.load_session(session_id)
+        if session is None:
+            logger.error("background enrich: session %s not found", session_id)
+            return
+        enrich_session(session)
+        store.set_derived(session.session_id, session.derived)
+        store.set_metadata(session.session_id, session.metadata)
+    except Exception:
+        logger.exception("background enrich failed for session %s", session_id)
+
+
+@router.post(
+    "/ingest",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Canonical transcript ingestion webhook (STRATEGY.md Appendix A.3)",
+)
+async def ingest_transcript(
+    request: Request,
+    payload: CanonicalIngestPayload,
+    x_conclave_signature: Optional[str] = Header(default=None, alias="X-Conclave-Signature"),
+) -> dict:
+    """Accept a canonical transcript payload from any registered producer.
+
+    Returns ``{"session_id": ..., "status": "accepted" | "duplicate"}``.
+    The body has already been parsed by FastAPI for Pydantic validation,
+    but signature verification needs the **raw** bytes — we re-read them
+    from `request` (FastAPI caches the body, so this is a dict lookup,
+    not a re-stream).
+    """
+    # ── 1. Auth: HMAC-SHA256 ───────────────────────────────────────────────
+    secrets = _load_producer_secrets()
+    source_key = payload.source.lower()
+    secret = secrets.get(source_key)
+    if not secret:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"unknown producer source: {payload.source!r}",
+        )
+    raw_body = await request.body()
+    if not _verify_signature(raw_body, x_conclave_signature, secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="signature verification failed",
+        )
+
+    # ── 2. Idempotency: dedupe by meeting.external_id ─────────────────────
+    # `external_id` flows through `read_canonical` → `provenance.session_id`
+    # → `Session.session_id` (deterministic per `parse._session_id`). So a
+    # session for this meeting already exists iff `load_session(external_id)`
+    # finds one. event_id is preserved in provenance for audit, but is NOT
+    # used as the dedupe key — same meeting POSTed twice (e.g. webhook
+    # retry) yields one session.
+    existing = store.load_session(payload.meeting.external_id)
+    if existing is not None:
+        return {"session_id": existing.session_id, "status": "duplicate"}
+
+    # ── 3. Persist raw (sync — fast; no LLM) ──────────────────────────────
+    session = _build_and_save_session(payload.model_dump())
+
+    # ── 4. Kick async enrichment, return 202 immediately ──────────────────
+    asyncio.create_task(asyncio.to_thread(_enrich_in_background, session.session_id))
+
+    return {"session_id": session.session_id, "status": "accepted"}
+
+

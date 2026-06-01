@@ -28,5 +28,17 @@ external/
 # Local-only enrichment artefacts (cohort transcript content + derived).
 # Regenerable via `transcripts.cli enrich --pending`; cohort transcripts
 # themselves are already gitignored under tests/fixtures/.
-enriched-output/
+# Glob covers run variants (enriched-output-gemma3/, -12k/) and the
+# comparison markdowns (enriched-output*-comparison.md).
+enriched-output*/
+enriched-output*.md
 tmp/
+
+# Backup files created by sed -i.bak edits (may contain old .env secrets)
+.env.bak
+.env.*.bak
+*.env.bak
+
+# macOS metadata
+.DS_Store
+**/.DS_Store

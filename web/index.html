@@ -11,7 +11,7 @@
   <header class="masthead">
     <div class="mast-left">
       <span class="brand">Conclave</span>
-      <span class="brand-sub">cohort context intelligence</span>
+      <span class="brand-sub">cohort context intelligence · dev</span>
     </div>
     <div class="mast-right">
       <span id="counts" class="counts">— sessions · — signals · — entities</span>
@@ -26,5 +26,49 @@
   </footer>
 
   <script type="module" src="/dashboard/app.js"></script>
+
+  <!--
+    Dev-only live reload. Enable by appending ?dev to the URL:
+        http://<host>:8000/dashboard/?dev
+    Polls Last-Modified on the static files every 800ms and reloads the
+    page on change. No new deps, no server-side wiring. Disabled by
+    default so the demo URL stays clean.
+  -->
+  <script>
+    (function () {
+      if (!new URLSearchParams(location.search).has("dev")) return;
+      const watch = [
+        "/dashboard/app.js",
+        "/dashboard/styles.css",
+        "/dashboard/index.html",
+        "/dashboard/shape-ui/tokens.css",
+      ];
+      const lastMods = {};
+      let firstPass = true;
+      async function tick() {
+        for (const path of watch) {
+          try {
+            const r = await fetch(path + "?t=" + Date.now(), {
+              method: "HEAD",
+              cache: "no-store",
+            });
+            const m = r.headers.get("Last-Modified") || "";
+            if (!firstPass && lastMods[path] && m && m !== lastMods[path]) {
+              console.log("[dev-reload] %s changed → reloading", path);
+              location.reload();
+              return;
+            }
+            lastMods[path] = m;
+          } catch (e) {
+            /* network blip — try again next tick */
+          }
+        }
+        firstPass = false;
+      }
+      console.log("[dev-reload] enabled. polling", watch.join(", "));
+      setInterval(tick, 800);
+      tick();
+    })();
+  </script>
 </body>
 </html>

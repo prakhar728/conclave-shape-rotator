@@ -284,6 +284,121 @@ def _from_json(obj: Any, *, explicit_source: Optional[str]) -> NormalizedInput:
 
 
 # ---------------------------------------------------------------------------
+# Canonical ingest reader (webhook payload → NormalizedInput)
+# ---------------------------------------------------------------------------
+#
+# Spec: ``STRATEGY.md`` Appendix A.3. Conclave's ``POST /transcripts/ingest``
+# webhook accepts a **canonical** payload — not a producer-native one. Producers
+# (Recato, in-house bots, third-party adapters) translate their native shape to
+# this canonical envelope before POSTing. Keeps Conclave decoupled from any
+# specific capture tool: one schema in, N producers out.
+#
+# Payload shape (v1):
+#     {
+#       "event_id", "event_type": "transcript.ingest", "api_version": "v1",
+#       "produced_at", "source": "<producer-id>",
+#       "meeting": {external_id, platform?, url?, title?, start_time, end_time,
+#                   participants?: [str]},
+#       "segments": [{start: float, end: float, text: str, speaker: str,
+#                     language?: str, absolute_start?: iso, absolute_end?: iso}]
+#     }
+#
+# Pure function — no I/O, no LLM, no network. Verification (HMAC signature,
+# idempotency on event_id, async enrich kick) is the route handler's job;
+# this module only knows how to *shape* the payload.
+
+def read_canonical(payload: Any) -> NormalizedInput:
+    """Convert a canonical-ingest webhook payload to ``NormalizedInput``.
+
+    Mirrors ``_from_json``'s contract (same segment shape, same provenance
+    discipline) but consumes the public canonical schema rather than any
+    producer-native format. Speaker labels pass through verbatim — identity
+    resolution remains a downstream concern (``identity.resolve_speakers``).
+    """
+    if not isinstance(payload, dict):
+        raise ValueError(
+            f"canonical payload must be a dict, got {type(payload).__name__}"
+        )
+
+    source = str(payload.get("source") or "unknown")
+    meeting = payload.get("meeting") if isinstance(payload.get("meeting"), dict) else {}
+
+    # Segments — same {speaker, text, start, end} shape Conclave uses internally.
+    # Whisper-verbose_json fields pass through; absolute timestamps are kept in
+    # provenance, not segments (segments are relative-second-floats by contract).
+    raw_segments = payload.get("segments") or []
+    segments: list[dict] = []
+    for seg in raw_segments:
+        if not isinstance(seg, dict):
+            continue
+        text = str(seg.get("text") or "").strip()
+        if not text:
+            continue
+        start = seg.get("start")
+        end = seg.get("end")
+        segments.append({
+            "speaker": str(seg.get("speaker") or "speaker_unknown"),
+            "text": text,
+            "start": float(start) if start is not None else None,
+            "end": float(end) if end is not None else None,
+        })
+
+    # Members: prefer explicit `participants` (the producer asserted who attended);
+    # fall back to distinct non-anonymous speaker labels in insertion order, same
+    # heuristic the Otter/JSON paths use.
+    explicit_participants = meeting.get("participants") if isinstance(meeting.get("participants"), list) else None
+    if explicit_participants:
+        members = [str(p) for p in explicit_participants if p]
+    else:
+        members = []
+        seen: set[str] = set()
+        for s in segments:
+            sp = s["speaker"]
+            if ANON_SPEAKER_RE.match(sp):
+                continue
+            if sp not in seen:
+                seen.add(sp)
+                members.append(sp)
+
+    provenance: dict = {"source": source, "members": members}
+
+    # session_id: producer's external_id (so re-POSTing the same meeting is
+    # idempotent at the storage layer too, not just the webhook).
+    external_id = meeting.get("external_id")
+    if external_id:
+        provenance["session_id"] = str(external_id)
+
+    # Optional meeting metadata flows through as provenance keys, matching the
+    # "source-specific extras pass through" rule documented on NormalizedInput.
+    for key in ("platform", "url", "title"):
+        v = meeting.get(key)
+        if v:
+            provenance[key] = v
+
+    start_time = meeting.get("start_time")
+    if start_time:
+        provenance["started_at"] = start_time
+        d = _iso_date(start_time)
+        if d:
+            provenance["date"] = d
+    end_time = meeting.get("end_time")
+    if end_time:
+        provenance["ended_at"] = end_time
+
+    # Event metadata for idempotency / audit (the route uses event_id to dedupe
+    # double-deliveries; preserving it here means the audit trail survives on
+    # disk too).
+    if payload.get("event_id"):
+        provenance["event_id"] = str(payload["event_id"])
+    if payload.get("produced_at"):
+        provenance["produced_at"] = payload["produced_at"]
+    if payload.get("api_version"):
+        provenance["ingest_api_version"] = payload["api_version"]
+
+    return NormalizedInput(segments=segments, provenance=provenance, source=source)
+
+
+# ---------------------------------------------------------------------------
 # Filename helpers
 # ---------------------------------------------------------------------------
 

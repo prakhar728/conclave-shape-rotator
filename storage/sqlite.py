@@ -19,28 +19,60 @@ from typing import Any
 _DEFAULT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "conclave.db")
 _DB_PATH = os.environ.get("CONCLAVE_DB_PATH", _DEFAULT_PATH)
 
+# Shared connection used only for `:memory:` databases, which cannot be shared
+# across separate connections (each connect() to ":memory:" gets its own empty
+# DB). File-backed databases instead use one connection per thread (`_local`).
 _conn: sqlite3.Connection | None = None
+_local = threading.local()
 _lock = threading.Lock()
 
 
+def _new_conn() -> sqlite3.Connection:
+    conn = sqlite3.connect(
+        _DB_PATH,
+        check_same_thread=False,
+        isolation_level=None,  # autocommit
+    )
+    conn.row_factory = sqlite3.Row
+    if _DB_PATH != ":memory:":
+        conn.execute("PRAGMA journal_mode=WAL")
+        # Wait (rather than erroring) when another connection holds the write
+        # lock, instead of raising "database is locked" immediately.
+        conn.execute("PRAGMA busy_timeout=5000")
+    conn.execute("PRAGMA foreign_keys=ON")
+    _init_schema(conn)
+    return conn
+
+
 def _get_conn() -> sqlite3.Connection:
+    """Return a SQLite connection safe to use from the current thread.
+
+    FastAPI runs sync endpoints in a threadpool, so a single connection shared
+    across threads would race on its in-memory WAL index — surfacing as the
+    spurious "database disk image is malformed". Giving each thread its own
+    connection lets WAL mode do what it's built for: concurrent readers plus a
+    single serialized writer, with no shared mutable connection state.
+    """
     global _conn
-    if _conn is None:
-        with _lock:
-            if _conn is None:
-                if _DB_PATH != ":memory:":
-                    os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
-                _conn = sqlite3.connect(
-                    _DB_PATH,
-                    check_same_thread=False,
-                    isolation_level=None,  # autocommit
-                )
-                _conn.row_factory = sqlite3.Row
-                if _DB_PATH != ":memory:":
-                    _conn.execute("PRAGMA journal_mode=WAL")
-                _conn.execute("PRAGMA foreign_keys=ON")
-                _init_schema(_conn)
-    return _conn
+    if _DB_PATH == ":memory:":
+        if _conn is None:
+            with _lock:
+                if _conn is None:
+                    _conn = _new_conn()
+        return _conn
+    conn = getattr(_local, "conn", None)
+    # Reopen if this thread has no connection yet, or if _DB_PATH was swapped
+    # out from under us (tests monkeypatch it / reset `_conn` to None between
+    # cases). Comparing the cached path keeps that reset working now that
+    # connections live on the thread-local rather than the `_conn` global.
+    if conn is None or getattr(_local, "path", None) != _DB_PATH:
+        if conn is not None:
+            conn.close()
+        os.makedirs(os.path.dirname(_DB_PATH), exist_ok=True)
+        conn = _new_conn()
+        _local.conn = conn
+        _local.path = _DB_PATH
+    return conn
 
 
 def _init_schema(conn: sqlite3.Connection) -> None:
