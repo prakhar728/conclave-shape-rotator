@@ -70,11 +70,19 @@ def invite_bot(
         status="requested",
     )
 
+    # Per-meeting webhook URL points at our 2.4 receiver. Preferred over
+    # Recato's global POST_MEETING_HOOKS env var so each launch can carry
+    # its own callback (and so Recato doesn't have to be reconfigured
+    # globally for every deploy environment).
+    import os as _os
+    webhook_url = _os.environ.get("RECATO_MEETING_COMPLETED_URL")
+
     try:
         recato_resp = launch_bot(
             platform="google_meet",
             native_meeting_id=meet_code,
             bot_name=DEFAULT_BOT_NAME,
+            webhook_url=webhook_url,
         )
     except RecatoLaunchError as e:
         bot_invitations.update_status(invitation["id"], "failed", completed=True)
