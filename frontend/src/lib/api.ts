@@ -1,0 +1,88 @@
+/**
+ * Thin fetch helper for talking to the FastAPI backend.
+ *
+ * All paths are relative — `/api/...` is rewritten by next.config.ts to
+ * the FastAPI port. The httpOnly `conclave_session` cookie rides along
+ * automatically; we never have to touch it from JS.
+ */
+
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+  constructor(status: number, detail: unknown, message: string) {
+    super(message);
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+export async function apiFetch<T>(
+  path: string,
+  init: RequestInit = {},
+): Promise<T> {
+  const res = await fetch(path, {
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+      ...(init.headers ?? {}),
+    },
+    ...init,
+  });
+  let body: unknown;
+  try {
+    body = await res.json();
+  } catch {
+    body = null;
+  }
+  if (!res.ok) {
+    const detail =
+      typeof body === "object" && body !== null && "detail" in body
+        ? (body as { detail: unknown }).detail
+        : body;
+    throw new ApiError(
+      res.status,
+      detail,
+      `${res.status} ${typeof detail === "string" ? detail : "Request failed"}`,
+    );
+  }
+  return body as T;
+}
+
+// --- Typed endpoints --------------------------------------------------------
+
+export type User = {
+  id: string;
+  email: string;
+  display_name: string | null;
+  created_at: string;
+};
+
+export type Workspace = {
+  id: string;
+  name: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  role?: string;
+};
+
+export type MeResponse = {
+  user: User;
+  workspace: Workspace | null;
+};
+
+export const auth = {
+  sendOtp: (email: string) =>
+    apiFetch<{ ok: boolean }>("/api/auth/v1/send-otp", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+  verifyOtp: (email: string, token: string) =>
+    apiFetch<MeResponse>("/api/auth/v1/verify-otp", {
+      method: "POST",
+      body: JSON.stringify({ email, token }),
+    }),
+  logout: () =>
+    apiFetch<{ ok: boolean }>("/api/auth/v1/logout", { method: "POST" }),
+  me: () => apiFetch<MeResponse>("/api/auth/v1/me"),
+};
