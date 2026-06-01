@@ -20,6 +20,7 @@ def _clean_tables():
 
     conn = _get_conn()
     for table in (
+        "sessions",          # added in 1.4 — must drop before users (FK)
         "meeting_shares",
         "magic_links",
         "bot_invitations",

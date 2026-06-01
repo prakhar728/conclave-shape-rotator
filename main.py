@@ -94,6 +94,10 @@ app.include_router(transcripts_router)
 from auth.routes import router as auth_v1_router
 app.include_router(auth_v1_router)
 
+# Phase 1.5: workspace HTTP surface (list / create / details / meetings).
+from api.workspaces_routes import router as workspaces_router
+app.include_router(workspaces_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles
