@@ -136,3 +136,22 @@ def list_workspace_sessions(workspace_id: str) -> list[Session]:
     yet — Phase 1.7 layers `can_see` on top."""
     from storage import sqlite as _sqlite
     return [_row_to_session(r) for r in _sqlite.list_workspace_transcript_sessions(workspace_id)]
+
+
+def save_session_with_workspace(
+    session: Session,
+    workspace_id: str,
+    owner_user_id: str,
+    visibility: str = "owner-only",
+) -> None:
+    """Save a session AND bind it to a workspace + owner in one go.
+
+    Phase 2.x's Recato webhook + canonical ingest call this so newly-created
+    sessions land already-scoped to the user who invited the bot.
+
+    `save_session` writes the immutable raw + metadata + derived; the
+    workspace columns are then set in a second statement. Both happen on
+    the same connection so they're visible together to subsequent reads.
+    """
+    save_session(session)
+    set_workspace(session.session_id, workspace_id, owner_user_id, visibility)

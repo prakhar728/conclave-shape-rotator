@@ -51,32 +51,100 @@ def _resolve_viewer(viewer: Optional[str]) -> Optional[str]:
     return viewer
 
 
-def can_see(viewer: Optional[str], session: Session) -> bool:
-    """Demo permission rule (§D.1).
+def can_see(
+    viewer: Optional[str],
+    session: Session,
+    row: Optional[dict] = None,
+) -> bool:
+    """Permission rule — dual-mode for the v1 transition.
 
-    1. `visibility == "cohort"` (default) → True for everyone, anonymous
-       included. This keeps existing dashboards working without any
-       viewer threading.
-    2. `visibility == "owner-only"` and viewer is None → False.
-    3. Owner sees their own session.
-    4. A viewer whose `record_id` matches any speaker's `record_id` in
-       `resolved_speakers` sees the session (you can see meetings you
-       spoke in).
-    5. Otherwise False.
+    Phase 1.6 added typed `workspace_id` / `owner_user_id` / `visibility`
+    columns on `transcript_sessions`. New product sessions populate them;
+    legacy cohort sessions (the 13+ historical fixtures) have
+    `workspace_id IS NULL`. This function routes based on which world the
+    row lives in:
 
-    Phase 1.5 supersedes this with the real `auth.py` check; the
-    rule's structure stays the same so the contract doesn't move.
+    - `row` provided AND `row['workspace_id']` is set → **workspace mode**.
+      Delegates to `can_user_see` using the typed columns + workspace
+      membership + `meeting_shares`. `viewer` must be a User dict (or None
+      for anonymous).
+    - Otherwise → **legacy cohort mode**. `viewer` is a record_id string
+      (or None). Matches the pre-1.7 logic exactly so existing cohort
+      dashboards and tests keep working.
+
+    Legacy cohort rule (unchanged from pre-1.7):
+      1. `visibility == "cohort"` → True for everyone.
+      2. `visibility == "owner-only"` and viewer is None → False.
+      3. Owner sees their own session.
+      4. A viewer whose `record_id` matches any speaker's `record_id` in
+         `resolved_speakers` sees the session.
+      5. Otherwise False.
+
+    v1.5 will retire the cohort path once historical fixtures are
+    migrated into a "Shape Rotator Cohort" workspace (see BUILD_DOC §11).
     """
+    if row is not None and row.get("workspace_id"):
+        # Workspace mode — viewer is a User dict or None.
+        return can_user_see(viewer if isinstance(viewer, dict) else None, row)
+
+    # Legacy cohort mode — viewer is a string record_id or None.
     md = session.metadata
     if (md.visibility or "cohort") == "cohort":
         return True
-    if viewer is None:
+    if viewer is None or isinstance(viewer, dict):
         return False
     if md.owner and md.owner == viewer:
         return True
     for sp_meta in (md.resolved_speakers or {}).values():
         if isinstance(sp_meta, dict) and sp_meta.get("record_id") == viewer:
             return True
+    return False
+
+
+def can_user_see(user: Optional[dict], row: dict) -> bool:
+    """Workspace-aware permission check using the typed columns.
+
+    `row` is a transcript_sessions row dict carrying at minimum
+    `session_id`, `workspace_id`, `owner_user_id`, `visibility`.
+    `user` is the authenticated User dict (or None for anonymous).
+
+    Visibility branches:
+      - 'owner-only'  : user.id == row.owner_user_id
+      - 'shared'      : owner OR explicit meeting_shares row for user.email
+      - 'workspace'   : any member of row.workspace_id (reserved for v1.5;
+                        v1 UI doesn't expose this option but the check
+                        works if rows are set to it manually)
+      - 'public-link' : False in v1 (BUILD_DOC §11 — public links deferred)
+      - unknown       : False (defensive; CHECK constraint should prevent)
+    """
+    visibility = row.get("visibility") or "owner-only"
+    owner_user_id = row.get("owner_user_id")
+    workspace_id = row.get("workspace_id")
+
+    if visibility == "public-link":
+        # Deferred to v1.5 — the public branch needs token-link plumbing
+        # that doesn't exist yet. Until then, treat public-link as private.
+        return False
+
+    if user is None:
+        # All remaining branches require an authenticated user.
+        return False
+
+    if owner_user_id and owner_user_id == user["id"]:
+        return True
+
+    if visibility == "owner-only":
+        return False
+
+    if visibility == "shared":
+        # Explicit grant via meeting_shares (Phase 2.x writes these).
+        from infra.workspaces import has_meeting_share
+        return has_meeting_share(row["session_id"], user["email"])
+
+    if visibility == "workspace":
+        from infra.workspaces import is_member
+        return bool(workspace_id) and is_member(workspace_id, user["id"])
+
     return False
 
 
