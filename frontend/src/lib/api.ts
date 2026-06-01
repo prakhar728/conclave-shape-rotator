@@ -86,3 +86,19 @@ export const auth = {
     apiFetch<{ ok: boolean }>("/api/auth/v1/logout", { method: "POST" }),
   me: () => apiFetch<MeResponse>("/api/auth/v1/me"),
 };
+
+export type Meeting = {
+  session_id: string;
+  date: string;
+  source: string;
+  summary: string | null;
+};
+
+export const workspaces = {
+  list: () =>
+    apiFetch<{ workspaces: Workspace[] }>("/api/workspaces"),
+  get: (id: string) =>
+    apiFetch<{ workspace: Workspace; role: string }>(`/api/workspaces/${id}`),
+  meetings: (id: string) =>
+    apiFetch<{ meetings: Meeting[] }>(`/api/workspaces/${id}/meetings`),
+};

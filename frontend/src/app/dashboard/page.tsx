@@ -1,0 +1,137 @@
+/**
+ * /dashboard — primary signed-in view.
+ *
+ * Fetches the current user + default workspace via /api/auth/v1/me, then
+ * the workspace's meetings list. Empty state lands proper in 1.16
+ * (welcome CTA + example meeting); this version just renders the
+ * cards-or-empty branch.
+ *
+ * If /me 401s (cookie missing / expired), redirect to /login. Middleware
+ * catches the no-cookie case at the edge already; this guards the
+ * cookie-present-but-invalid case too.
+ */
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+
+import { AppHeader } from "@/components/app-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ApiError,
+  auth,
+  workspaces,
+  type Meeting,
+  type MeResponse,
+} from "@/lib/api";
+
+export default function DashboardPage() {
+  const router = useRouter();
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const meResp = await auth.me();
+        if (cancelled) return;
+        setMe(meResp);
+        if (meResp.workspace) {
+          const m = await workspaces.meetings(meResp.workspace.id);
+          if (!cancelled) setMeetings(m.meetings);
+        } else {
+          setMeetings([]);
+        }
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Failed to load dashboard");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <p className="text-sm text-destructive">{error}</p>
+      </div>
+    );
+  }
+  if (!me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AppHeader user={me.user} workspace={me.workspace} />
+      <main className="mx-auto max-w-4xl px-6 py-10">
+        <div className="mb-8 flex items-baseline justify-between">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight">Meetings</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {me.workspace?.name ?? "No workspace"}
+            </p>
+          </div>
+        </div>
+
+        {meetings === null ? (
+          <p className="text-sm text-muted-foreground">Loading meetings…</p>
+        ) : meetings.length === 0 ? (
+          <EmptyState />
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {meetings.map((m) => (
+              <li key={m.session_id}>
+                <Link href={`/meeting/${m.session_id}`}>
+                  <Card className="transition-colors hover:border-foreground/20">
+                    <CardHeader>
+                      <CardTitle className="text-base">
+                        {m.summary
+                          ? truncate(m.summary, 120)
+                          : `${m.source} — ${m.date}`}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-xs text-muted-foreground">
+                        {m.date} · {m.source}
+                      </p>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function EmptyState() {
+  // 1.16 will polish this — welcome + example meeting + invite-bot CTA.
+  return (
+    <div className="rounded-lg border border-dashed border-border p-10 text-center">
+      <p className="text-sm font-medium">No meetings yet</p>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Invite the Conclave bot to your next Meet to see it here.
+      </p>
+    </div>
+  );
+}
+
+function truncate(s: string, n: number): string {
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
