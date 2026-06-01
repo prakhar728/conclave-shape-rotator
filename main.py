@@ -107,6 +107,11 @@ app.include_router(bot_router)
 from api.webhooks_recato import router as recato_webhook_router
 app.include_router(recato_webhook_router)
 
+# Phase 2.10: magic-link lookup + consume (public; no auth required to
+# resolve the token, but the meeting itself is still permission-gated).
+from api.magic_link_routes import router as magic_link_router
+app.include_router(magic_link_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles

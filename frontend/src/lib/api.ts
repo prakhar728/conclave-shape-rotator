@@ -142,3 +142,20 @@ export const meetings = {
   get: (sessionId: string) =>
     apiFetch<MeetingView>(`/api/transcripts/sessions/${sessionId}`),
 };
+
+// --- Magic links ----------------------------------------------------------
+
+export type MagicLinkLookup = {
+  meeting_session_id: string | null;
+  user_email: string;
+  consumed_at: string | null;
+};
+
+export const magicLinks = {
+  lookup: (token: string) =>
+    apiFetch<MagicLinkLookup>(`/api/magic-links/${encodeURIComponent(token)}`),
+  consume: (token: string) =>
+    apiFetch<MagicLinkLookup>(`/api/magic-links/${encodeURIComponent(token)}/consume`, {
+      method: "POST",
+    }),
+};

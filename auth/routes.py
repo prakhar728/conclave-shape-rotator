@@ -81,6 +81,18 @@ def verify_otp_route(body: VerifyOtpBody, response: Response, request: Request):
     token = auth_session.issue_session(user["id"])
     auth_session.set_session_cookie(response, token, request=request)
 
+    # Phase 2.11 — auto-grant: any meeting_shares row that was issued to
+    # this user's email (before they ever signed up) gets its user_id
+    # column backfilled. Permission checks key off email already, so this
+    # is denormalization for analytics + future workspace-by-user queries,
+    # not a fresh access grant.
+    from storage.sqlite import _get_conn
+    _get_conn().execute(
+        "UPDATE meeting_shares SET user_id = ? "
+        "WHERE user_email = ? AND user_id IS NULL",
+        (user["id"], body.email),
+    )
+
     return {"user": _user_to_public(user), "workspace": workspace}
 
 
