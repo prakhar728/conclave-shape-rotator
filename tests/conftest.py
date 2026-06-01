@@ -44,6 +44,24 @@ try:
 except Exception:  # noqa: BLE001 — if storage isn't importable, nothing to protect
     pass
 
+# Alembic-owned tables (Phase 1.3+) need an explicit upgrade — they're not
+# in storage.sqlite._init_schema. Run migrations against the per-process
+# test DB so any test touching infra/identity or infra/workspaces sees the
+# `users`/`workspaces`/etc tables. Cheap (~50ms) and runs once at import.
+try:
+    from alembic.config import Config as _AlembicConfig
+    from alembic import command as _alembic_command
+
+    _alembic_cfg = _AlembicConfig(
+        os.path.join(os.path.dirname(__file__), "..", "alembic.ini")
+    )
+    # Point Alembic at the test DB explicitly — env.py reads CONCLAVE_DB_URL.
+    os.environ["CONCLAVE_DB_URL"] = f"sqlite:///{_TEST_DB_PATH}"
+    _alembic_command.upgrade(_alembic_cfg, "head")
+except Exception as _e:  # noqa: BLE001 — alembic optional; legacy tests still pass
+    import sys as _sys
+    print(f"[conftest] alembic upgrade skipped: {_e}", file=_sys.stderr)
+
 DEMO_JSON_PATH = os.path.join(os.path.dirname(__file__), "demo_matrix.json")
 
 
