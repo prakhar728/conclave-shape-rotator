@@ -270,6 +270,9 @@ def list_sessions(
     return [to_card(s) for s in sessions if can_see(v, s)]
 
 
+_EXAMPLE_SESSION_ID = "example-conclave-demo"
+
+
 @router.get("/sessions/{session_id}")
 def get_session(
     session_id: str,
@@ -290,6 +293,15 @@ def get_session(
 
     from auth.session import try_current_user
     user = try_current_user(request)
+
+    # Example/demo session is visible to any authenticated user — it's the
+    # empty-state placeholder seeded by Alembic 0005 (BUILD_DOC §4 D-EBR).
+    # Anonymous viewers still get blocked so the marketing landing page
+    # doesn't accidentally leak it.
+    if session_id == _EXAMPLE_SESSION_ID:
+        if user is None:
+            raise HTTPException(status_code=403, detail="not allowed")
+        return to_view(session)
     # Only consult the workspace columns when there's an authed user — keeps
     # anonymous cohort traffic on the legacy path and means test DBs without
     # the 1.6 columns (some legacy fixtures use init_db without alembic) are

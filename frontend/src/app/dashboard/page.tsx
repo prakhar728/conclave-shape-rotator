@@ -120,14 +120,44 @@ export default function DashboardPage() {
   );
 }
 
+const EXAMPLE_SESSION_ID = "example-conclave-demo";
+
 function EmptyState() {
-  // 1.16 will polish this — welcome + example meeting + invite-bot CTA.
   return (
-    <div className="rounded-lg border border-dashed border-border p-10 text-center">
-      <p className="text-sm font-medium">No meetings yet</p>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Invite the Conclave bot to your next Meet to see it here.
-      </p>
+    <div className="flex flex-col gap-6">
+      <div className="rounded-lg border border-border bg-card p-6">
+        <p className="text-sm font-medium">Welcome to Conclave</p>
+        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+          Conclave gives you a confidential transcript and signal extraction
+          for every meeting you invite our bot to. Transcription happens
+          inside a TEE — operator-blind from end to end.
+        </p>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Inviting the bot from the dashboard lands in the next phase
+          (2.x). For now, take a look at the example below to see what a
+          finished card looks like.
+        </p>
+      </div>
+      <div>
+        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+          Example meeting
+        </p>
+        <Link href={`/meeting/${EXAMPLE_SESSION_ID}`}>
+          <Card className="transition-colors hover:border-foreground/20">
+            <CardHeader>
+              <CardTitle className="text-base">
+                Walkthrough of how a Conclave meeting card looks once your
+                bot has joined a Meet.
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground">
+                2026-05-15 · example
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+      </div>
     </div>
   );
 }
