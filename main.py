@@ -89,6 +89,11 @@ app.include_router(router)
 from api.transcripts_routes import router as transcripts_router
 app.include_router(transcripts_router)
 
+# Phase 1.4: cookie-backed v1 auth surface. Coexists with the legacy
+# /auth/send-otp routes in api/routes.py until the old web/ SPA is retired.
+from auth.routes import router as auth_v1_router
+app.include_router(auth_v1_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles
