@@ -98,6 +98,10 @@ app.include_router(auth_v1_router)
 from api.workspaces_routes import router as workspaces_router
 app.include_router(workspaces_router)
 
+# Phase 2.1: bot invitation + status polling.
+from api.bot_routes import router as bot_router
+app.include_router(bot_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles
