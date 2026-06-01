@@ -14,8 +14,8 @@
  */
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,18 @@ import { auth } from "@/lib/api";
 type Step = "email" | "otp";
 
 export default function LoginPage() {
+  // useSearchParams must be wrapped in Suspense per Next 15+ rules.
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const next = searchParams.get("next") || "/dashboard";
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
@@ -51,7 +62,10 @@ export default function LoginPage() {
     setBusy(true);
     try {
       await auth.verifyOtp(email.trim(), otp.trim());
-      router.push("/dashboard");
+      // Sanity-check `next` so a crafted URL can't push to an external
+      // origin; only same-origin paths are honored.
+      const target = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      router.push(target);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Invalid code");
     } finally {
