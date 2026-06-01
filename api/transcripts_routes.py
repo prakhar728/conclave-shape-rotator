@@ -319,7 +319,13 @@ def get_session(
     if user is not None and row is not None:
         if not can_user_see(user, row):
             raise HTTPException(status_code=403, detail="not allowed")
-        return to_view(session)
+        view = to_view(session)
+        # Decorate with workspace-side metadata the frontend needs to render
+        # owner controls (visibility toggle, add-attendee form) and the
+        # typed visibility value (separate from the legacy JSON one).
+        view["effective_visibility"] = row.get("visibility")
+        view["is_owner"] = row.get("owner_user_id") == user["id"]
+        return view
 
     v = _resolve_viewer(viewer)
     if not can_see(v, session):

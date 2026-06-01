@@ -136,6 +136,11 @@ export type MeetingView = {
     insights: Signal[];
   };
   entities: Entity[];
+  // Phase 2.12 — present only when the viewer is authenticated AND the
+  // session has a workspace_id. Lets the frontend gate owner controls
+  // without an extra round-trip.
+  is_owner?: boolean;
+  effective_visibility?: string;
 };
 
 export const meetings = {
@@ -158,4 +163,31 @@ export const magicLinks = {
     apiFetch<MagicLinkLookup>(`/api/magic-links/${encodeURIComponent(token)}/consume`, {
       method: "POST",
     }),
+};
+
+// --- Meeting owner controls (Phase 2.12, 2.13) ----------------------------
+
+export type MeetingShare = { email: string; granted_at: string };
+
+export const meetingOwner = {
+  setVisibility: (sessionId: string, visibility: "owner-only" | "shared") =>
+    apiFetch<{ ok: boolean; visibility: string }>(
+      `/api/meetings/${sessionId}/visibility`,
+      {
+        method: "POST",
+        body: JSON.stringify({ visibility }),
+      },
+    ),
+  listShares: (sessionId: string) =>
+    apiFetch<{ shares: MeetingShare[] }>(
+      `/api/meetings/${sessionId}/shares`,
+    ),
+  addShare: (sessionId: string, email: string) =>
+    apiFetch<{ ok: boolean; email: string }>(
+      `/api/meetings/${sessionId}/shares`,
+      {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      },
+    ),
 };

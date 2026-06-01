@@ -135,8 +135,77 @@ def bot_status(
     }
 
 
+class VisibilityBody(BaseModel):
+    visibility: str  # 'owner-only' | 'shared'
+
+
+_OWNER_TOGGLE_VISIBILITY = {"owner-only", "shared"}
+
+
+@router.post("/{session_id}/visibility")
+def set_visibility(
+    session_id: str,
+    body: VisibilityBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner-only — toggle a meeting between owner-only and shared.
+
+    'workspace' and 'public-link' aren't UI-exposed in v1 (BUILD_DOC §11);
+    the route rejects them so accidental clients can't escalate visibility.
+    """
+    if body.visibility not in _OWNER_TOGGLE_VISIBILITY:
+        raise HTTPException(
+            status_code=422,
+            detail="visibility must be 'owner-only' or 'shared'",
+        )
+    # Authorize: only the meeting's owner can flip visibility.
+    from transcripts import store as _store
+    fields = _store.get_workspace_fields(session_id)
+    if not fields or fields.get("owner_user_id") != user["id"]:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    _store.set_workspace(
+        session_id=session_id,
+        workspace_id=fields["workspace_id"],
+        owner_user_id=fields["owner_user_id"],
+        visibility=body.visibility,
+    )
+    return {"ok": True, "visibility": body.visibility}
+
+
 class AddShareBody(BaseModel):
     email: EmailStr
+
+
+def _user_owns_meeting(session_id: str, user_id: str) -> bool:
+    """True if the user owns this meeting via the transcript_session row
+    (post-completion case) OR via a bot_invitation (pre-completion case,
+    no webhook yet)."""
+    from transcripts import store as _store
+    fields = _store.get_workspace_fields(session_id)
+    if fields and fields.get("owner_user_id") == user_id:
+        return True
+    inv = bot_invitations.find_by_meeting("google_meet", session_id)
+    if inv is not None and inv["user_id"] == user_id:
+        return True
+    return False
+
+
+@router.get("/{session_id}/shares")
+def list_shares(
+    session_id: str,
+    user: dict = Depends(require_current_user),
+):
+    """Owner-only — list attendees explicitly shared on this meeting."""
+    if not _user_owns_meeting(session_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    from infra.workspaces import list_meeting_shares
+    shares = list_meeting_shares(session_id)
+    return {
+        "shares": [
+            {"email": s["user_email"], "granted_at": s["granted_at"]}
+            for s in shares
+        ]
+    }
 
 
 @router.post("/{session_id}/shares", status_code=201)
@@ -145,14 +214,15 @@ def add_share(
     body: AddShareBody,
     user: dict = Depends(require_current_user),
 ):
-    """Owner adds an attendee to an existing meeting.
+    """Owner adds an attendee to a meeting they own.
 
-    Phase 2.13 — the post-fact share path. After-enrichment email send
-    (2.8) will pick this up when wired.
+    Phase 2.13 — the post-fact share path. Authorizes via either
+    `transcript_sessions.owner_user_id` (post-completion) or
+    `bot_invitations.user_id` (pre-completion, before the webhook fires).
+    Email send happens on the next enrichment run (2.8 reads
+    meeting_shares fresh each time); live per-share email is a v1.5 polish.
     """
-    # Only the inviter can add shares in v1. Workspace-level admin lives in v1.5.
-    inv = bot_invitations.find_by_meeting("google_meet", session_id)
-    if inv is None or inv["user_id"] != user["id"]:
+    if not _user_owns_meeting(session_id, user["id"]):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
     from infra.workspaces import add_meeting_share

@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { OwnerControls } from "@/components/owner-controls";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
@@ -133,6 +134,16 @@ export default function MeetingPage({
           title="Insights"
           signals={meeting.signals_by_kind.insights}
         />
+
+        {meeting.is_owner ? (
+          <OwnerControls
+            sessionId={meeting.session_id}
+            initialVisibility={
+              (meeting.effective_visibility as "owner-only" | "shared") ??
+              "owner-only"
+            }
+          />
+        ) : null}
 
         {meeting.entities.length > 0 ? (
           <section className="mt-8">
