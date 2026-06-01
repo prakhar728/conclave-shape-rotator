@@ -9,9 +9,9 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { Wordmark } from "@/components/wordmark";
 import { auth, type User, type Workspace } from "@/lib/api";
 
 export function AppHeader({
@@ -35,12 +35,7 @@ export function AppHeader({
   return (
     <header className="flex items-center justify-between border-b border-border px-6 py-4">
       <div className="flex items-center gap-4">
-        <Link
-          href="/dashboard"
-          className="text-sm font-semibold tracking-[0.2em] uppercase"
-        >
-          Conclave
-        </Link>
+        <Wordmark href="/dashboard" />
         {workspace ? (
           <>
             <span className="text-muted-foreground">/</span>

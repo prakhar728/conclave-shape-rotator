@@ -19,6 +19,7 @@ import { Suspense, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Wordmark } from "@/components/wordmark";
 import { auth } from "@/lib/api";
 
 type Step = "email" | "otp";
@@ -76,9 +77,9 @@ function LoginInner() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <p className="mb-8 text-xs uppercase tracking-[0.3em] text-muted-foreground">
-          Conclave
-        </p>
+        <div className="mb-8">
+          <Wordmark />
+        </div>
 
         {step === "email" ? (
           <form onSubmit={handleSendOtp} className="flex flex-col gap-4">
