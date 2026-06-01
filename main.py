@@ -102,6 +102,11 @@ app.include_router(workspaces_router)
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)
 
+# Phase 2.4: Recato webhook receiver (replaces the standalone consumer.py
+# bridge for the hosted-product path).
+from api.webhooks_recato import router as recato_webhook_router
+app.include_router(recato_webhook_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles
