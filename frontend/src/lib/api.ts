@@ -94,6 +94,18 @@ export type Meeting = {
   summary: string | null;
 };
 
+export type OpenQuestion = {
+  text: string;
+  said_by: string[];
+  source_quote: string | null;
+  meeting: {
+    session_id: string;
+    date: string;
+    source: string;
+    summary: string | null;
+  };
+};
+
 export const workspaces = {
   list: () =>
     apiFetch<{ workspaces: Workspace[] }>("/api/workspaces"),
@@ -101,6 +113,10 @@ export const workspaces = {
     apiFetch<{ workspace: Workspace; role: string }>(`/api/workspaces/${id}`),
   meetings: (id: string) =>
     apiFetch<{ meetings: Meeting[] }>(`/api/workspaces/${id}/meetings`),
+  openQuestions: (id: string) =>
+    apiFetch<{ questions: OpenQuestion[] }>(
+      `/api/workspaces/${id}/open-questions`,
+    ),
 };
 
 // --- Meeting detail (legacy /transcripts endpoint, dual-mode in 1.7/1.14) ---

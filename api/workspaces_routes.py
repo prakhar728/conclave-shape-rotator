@@ -89,6 +89,77 @@ def list_workspace_meetings(
     }
 
 
+@router.get("/{workspace_id}/open-questions")
+def list_open_questions(
+    workspace_id: str,
+    user: dict = Depends(require_current_user),
+):
+    """Phase 3 — Open Questions Board (BUILD_DOC §4 D-3b).
+
+    Aggregates every `open_question` signal across the workspace's
+    sessions that the caller can see. Flat list, newest meeting first.
+    Per-session visibility is enforced via `can_user_see` so a workspace
+    member doesn't see questions from `owner-only` sessions they don't
+    own.
+
+    Schema decision (3.1): signals stay in the JSON `derived` column;
+    we aggregate in Python at query time. N is small enough through v1
+    that the loop is cheap. When (c)/(a) need fan-out queries at scale,
+    promote `signals` to a typed table — until then JSON is the source
+    of truth.
+    """
+    _require_member(workspace_id, user["id"])
+
+    from api.transcripts_routes import can_user_see
+    from transcripts import store as _store
+
+    sessions = _store.list_workspace_sessions(workspace_id)
+    visible_rows: list[dict] = []
+    for s in sessions:
+        row_fields = _store.get_workspace_fields(s.session_id)
+        row = (
+            {"session_id": s.session_id, **row_fields}
+            if row_fields and row_fields.get("workspace_id")
+            else None
+        )
+        if row is None:
+            # Defensive — workspace-scoped fetch returned a session whose
+            # workspace columns aren't populated. Skip rather than leak.
+            continue
+        if not can_user_see(user, row):
+            continue
+        visible_rows.append((s, row))
+
+    questions: list[dict] = []
+    for session, _row in visible_rows:
+        signals = (session.derived.signals if session.derived else None) or []
+        for sig in signals:
+            if sig.kind != "open_question":
+                continue
+            questions.append(
+                {
+                    "text": sig.text,
+                    "said_by": list(sig.said_by or []),
+                    "source_quote": sig.source_quote,
+                    "meeting": {
+                        "session_id": session.session_id,
+                        "date": session.metadata.date,
+                        "source": session.metadata.source,
+                        "summary": (
+                            session.derived.summary if session.derived else None
+                        ),
+                    },
+                }
+            )
+
+    # Newest first: session_date desc, then by source_id as a stable tiebreaker.
+    questions.sort(
+        key=lambda q: (q["meeting"]["date"], q["meeting"]["session_id"]),
+        reverse=True,
+    )
+    return {"questions": questions}
+
+
 @router.post("/{workspace_id}/members", status_code=501)
 def add_workspace_member(
     workspace_id: str,

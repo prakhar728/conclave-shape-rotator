@@ -10,6 +10,8 @@
 
 import { useRouter } from "next/navigation";
 
+import Link from "next/link";
+
 import { Button } from "@/components/ui/button";
 import { Wordmark } from "@/components/wordmark";
 import { auth, type User, type Workspace } from "@/lib/api";
@@ -45,7 +47,13 @@ export function AppHeader({
           </>
         ) : null}
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-4">
+        <Link
+          href="/questions"
+          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
+        >
+          Questions
+        </Link>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {user.email}
         </span>
