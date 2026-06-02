@@ -179,11 +179,13 @@ function LoginInner() {
  * `redirect_to` with a query param the callback re-reads.
  */
 function GoogleButton({ next }: { next: string }) {
+  // Both env vars are inlined at build time, so server and client see the
+  // same string — no SSR hydration mismatch. NEXT_PUBLIC_BASE_URL must
+  // match an allow-listed entry in Supabase's Redirect URLs.
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) return null;
-  const callback = typeof window !== "undefined"
-    ? `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-    : `/auth/callback?next=${encodeURIComponent(next)}`;
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL;
+  if (!supabaseUrl || !baseUrl) return null;
+  const callback = `${baseUrl}/auth/callback?next=${encodeURIComponent(next)}`;
   const href =
     `${supabaseUrl}/auth/v1/authorize?provider=google` +
     `&redirect_to=${encodeURIComponent(callback)}`;
