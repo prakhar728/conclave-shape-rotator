@@ -200,8 +200,14 @@ def _ingest_from_recato_now(
     """Mirror the webhook receiver's fetch+translate+save path, but
     triggered locally when the user clicks Stop. Recato doesn't fire
     `meeting.completed` for API-deleted bots, so this is how we close
-    the loop in that case."""
-    import os, threading
+    the loop in that case.
+
+    NOTE: we retry the transcript fetch a few times with delay because
+    Recato's stop_bot API returns before the bot subprocess has finished
+    flushing its final segments. Without retries, we'd fetch an empty
+    transcript and bail. Empirical: takes ~3-6 seconds post-stop for the
+    transcript to be complete on Recato's side."""
+    import os, threading, time
     import httpx
 
     from connectors.recato.translator import to_canonical
@@ -210,20 +216,53 @@ def _ingest_from_recato_now(
     base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
     token = os.environ.get("RECATO_API_TOKEN") or ""
     if not base or not token:
+        logger.warning(
+            "post-stop ingest: RECATO env not configured (base=%r token_set=%s)",
+            base, bool(token),
+        )
         return
 
     url = f"{base}/transcripts/google_meet/{session_id}"
-    resp = httpx.get(
-        url,
-        headers={"X-API-Key": token, "Authorization": f"Bearer {token}",
-                 "Accept": "application/json"},
-        timeout=20.0,
-    )
-    if resp.status_code != 200:
+    headers = {"X-API-Key": token, "Authorization": f"Bearer {token}",
+               "Accept": "application/json"}
+
+    # Poll up to 5 times over ~10 seconds while Recato finishes its flush.
+    vexa = None
+    for attempt in range(5):
+        try:
+            resp = httpx.get(url, headers=headers, timeout=20.0)
+        except httpx.HTTPError as e:
+            logger.warning("post-stop ingest fetch error (attempt %d): %s", attempt, e)
+            time.sleep(2)
+            continue
+        if resp.status_code != 200:
+            logger.warning(
+                "post-stop ingest: Recato GET returned %d (attempt %d)",
+                resp.status_code, attempt,
+            )
+            time.sleep(2)
+            continue
+        body = resp.json()
+        segs = body.get("segments") or []
+        if segs:
+            vexa = body
+            logger.info(
+                "post-stop ingest: got %d segments for %s on attempt %d",
+                len(segs), session_id, attempt,
+            )
+            break
+        logger.info(
+            "post-stop ingest: 0 segments for %s, retrying (attempt %d)",
+            session_id, attempt,
+        )
+        time.sleep(2)
+
+    if vexa is None:
+        logger.warning(
+            "post-stop ingest: gave up — no segments after retries for %s",
+            session_id,
+        )
         return
-    vexa = resp.json()
-    if not (vexa.get("segments") or []):
-        return  # empty transcript — nothing to ingest
 
     source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
     canonical = to_canonical(vexa, source=source)
@@ -238,10 +277,10 @@ def _ingest_from_recato_now(
             owner_user_id=inviter_user_id,
             visibility="owner-only",
         )
+        logger.info("post-stop ingest: saved + bound %s, kicking enrichment", sess.session_id)
         # Sync context (the route isn't async), so use a plain thread.
         # _enrich_in_background is itself sync; the webhook handler wraps it
-        # in asyncio.to_thread only because that handler is async. Either
-        # works — daemon thread is the simpler choice here.
+        # in asyncio.to_thread only because that handler is async.
         threading.Thread(
             target=_enrich_in_background, args=(sess.session_id,), daemon=True
         ).start()
@@ -253,6 +292,7 @@ def _ingest_from_recato_now(
             owner_user_id=inviter_user_id,
             visibility="owner-only",
         )
+        logger.info("post-stop ingest: existing session %s — re-bound workspace", existing.session_id)
 
 
 @router.get("/{session_id}/bot-status")
