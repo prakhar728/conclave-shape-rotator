@@ -139,9 +139,9 @@ function EmptyState() {
           inside a TEE — operator-blind from end to end.
         </p>
         <p className="mt-3 text-xs text-muted-foreground">
-          Inviting the bot from the dashboard lands in the next phase
-          (2.x). For now, take a look at the example below to see what a
-          finished card looks like.
+          Click <strong>Invite bot</strong> in the header to add the
+          Conclave bot to a Google Meet. Or take a look at the example
+          below to see what a finished meeting card looks like.
         </p>
       </div>
       <div>
