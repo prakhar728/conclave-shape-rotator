@@ -11,10 +11,13 @@ Endpoints:
 """
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
+
+logger = logging.getLogger(__name__)
 
 from auth.session import require_current_user
 from connectors.recato.launch import (
@@ -172,10 +175,78 @@ def stop_bot_route(
         bot_invitations.update_status(inv["id"], "failed", completed=True)
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Optimistic local flip — Recato should fire the webhook moments later,
-    # which would also flip this; whichever lands first is fine.
+    # IMPORTANT: Recato does NOT fire `meeting.completed` for bots stopped
+    # via DELETE /bots — only for naturally-ended meetings. Without explicit
+    # ingest here, the transcript Recato captured would never reach Conclave
+    # (verified empirically with bot 20 — 3 segments on Recato side, zero
+    # session rows in Conclave). So we do the same fetch+translate+save the
+    # webhook handler does, inline.
+    try:
+        _ingest_from_recato_now(session_id, inviter_user_id=user["id"],
+                                workspace_id=inv["workspace_id"])
+    except Exception:  # noqa: BLE001 — best-effort; don't block the stop UX
+        logger.exception("post-stop ingest failed for %s", session_id)
+
     bot_invitations.update_status(inv["id"], "completed", completed=True)
     return {"ok": True, "status": "completed"}
+
+
+def _ingest_from_recato_now(
+    session_id: str,
+    *,
+    inviter_user_id: str,
+    workspace_id: str,
+) -> None:
+    """Mirror the webhook receiver's fetch+translate+save path, but
+    triggered locally when the user clicks Stop. Recato doesn't fire
+    `meeting.completed` for API-deleted bots, so this is how we close
+    the loop in that case."""
+    import asyncio, os, logging
+    import httpx
+
+    from connectors.recato.translator import to_canonical
+    from transcripts import store as transcripts_store
+
+    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
+    token = os.environ.get("RECATO_API_TOKEN") or ""
+    if not base or not token:
+        return
+
+    url = f"{base}/transcripts/google_meet/{session_id}"
+    resp = httpx.get(
+        url,
+        headers={"X-API-Key": token, "Authorization": f"Bearer {token}",
+                 "Accept": "application/json"},
+        timeout=20.0,
+    )
+    if resp.status_code != 200:
+        return
+    vexa = resp.json()
+    if not (vexa.get("segments") or []):
+        return  # empty transcript — nothing to ingest
+
+    source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
+    canonical = to_canonical(vexa, source=source)
+
+    existing = transcripts_store.load_session(canonical["meeting"]["external_id"])
+    if existing is None:
+        from api.transcripts_routes import _build_and_save_session, _enrich_in_background
+        sess = _build_and_save_session(canonical)
+        transcripts_store.set_workspace(
+            session_id=sess.session_id,
+            workspace_id=workspace_id,
+            owner_user_id=inviter_user_id,
+            visibility="owner-only",
+        )
+        asyncio.create_task(asyncio.to_thread(_enrich_in_background, sess.session_id))
+    else:
+        # Already exists (e.g. webhook beat us). Just ensure workspace bind.
+        transcripts_store.set_workspace(
+            session_id=existing.session_id,
+            workspace_id=workspace_id,
+            owner_user_id=inviter_user_id,
+            visibility="owner-only",
+        )
 
 
 @router.get("/{session_id}/bot-status")
