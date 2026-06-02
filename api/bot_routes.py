@@ -201,7 +201,7 @@ def _ingest_from_recato_now(
     triggered locally when the user clicks Stop. Recato doesn't fire
     `meeting.completed` for API-deleted bots, so this is how we close
     the loop in that case."""
-    import asyncio, os, logging
+    import os, threading
     import httpx
 
     from connectors.recato.translator import to_canonical
@@ -238,7 +238,13 @@ def _ingest_from_recato_now(
             owner_user_id=inviter_user_id,
             visibility="owner-only",
         )
-        asyncio.create_task(asyncio.to_thread(_enrich_in_background, sess.session_id))
+        # Sync context (the route isn't async), so use a plain thread.
+        # _enrich_in_background is itself sync; the webhook handler wraps it
+        # in asyncio.to_thread only because that handler is async. Either
+        # works — daemon thread is the simpler choice here.
+        threading.Thread(
+            target=_enrich_in_background, args=(sess.session_id,), daemon=True
+        ).start()
     else:
         # Already exists (e.g. webhook beat us). Just ensure workspace bind.
         transcripts_store.set_workspace(
