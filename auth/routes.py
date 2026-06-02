@@ -20,6 +20,7 @@ from auth import session as auth_session
 from infra import identity, workspaces
 from infra.supabase_auth import send_otp as _supabase_send_otp
 from infra.supabase_auth import supabase_enabled
+from infra.supabase_auth import validate_access_token as _supabase_validate
 from infra.supabase_auth import verify_otp as _supabase_verify_otp
 
 router = APIRouter(prefix="/auth/v1", tags=["auth-v1"])
@@ -32,6 +33,10 @@ class SendOtpBody(BaseModel):
 class VerifyOtpBody(BaseModel):
     email: EmailStr
     token: str
+
+
+class ExchangeTokenBody(BaseModel):
+    access_token: str
 
 
 def _require_supabase() -> None:
@@ -91,6 +96,55 @@ def verify_otp_route(body: VerifyOtpBody, response: Response, request: Request):
         "UPDATE meeting_shares SET user_id = ? "
         "WHERE user_email = ? AND user_id IS NULL",
         (user["id"], body.email),
+    )
+
+    return {"user": _user_to_public(user), "workspace": workspace}
+
+
+@router.post("/exchange-token")
+def exchange_token_route(
+    body: ExchangeTokenBody, response: Response, request: Request
+):
+    """Exchange a Supabase JWT (OAuth callback OR magic-link redirect) for
+    an internal session cookie.
+
+    Same downstream effect as `/verify-otp` — upsert User, ensure Personal
+    workspace, issue session, set httpOnly cookie, backfill meeting_shares
+    by email. Only differs in how the JWT was obtained: here it arrives
+    pre-validated by Supabase as the result of OAuth or magic-link flow,
+    whereas verify-otp obtains the JWT internally by submitting an OTP code.
+
+    Public — the JWT signature is its own proof of authenticity (verified
+    via JWKS), no other auth required.
+    """
+    _require_supabase()
+
+    try:
+        payload = _supabase_validate(body.access_token.strip())
+    except Exception as e:  # noqa: BLE001
+        raise HTTPException(status_code=401, detail=f"Token validation failed: {e}")
+
+    supabase_user_id = payload["sub"]
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(
+            status_code=401, detail="Token missing email claim — provider didn't share it"
+        )
+
+    user = identity.upsert_user_by_supabase(
+        supabase_id=supabase_user_id, email=email
+    )
+    workspace = workspaces.ensure_personal_workspace(user["id"])
+    token = auth_session.issue_session(user["id"])
+    auth_session.set_session_cookie(response, token, request=request)
+
+    # Mirror /verify-otp's meeting_shares.user_id backfill (Phase 2.11) so the
+    # OAuth path doesn't bypass the auto-grant.
+    from storage.sqlite import _get_conn
+    _get_conn().execute(
+        "UPDATE meeting_shares SET user_id = ? "
+        "WHERE user_email = ? AND user_id IS NULL",
+        (user["id"], email),
     )
 
     return {"user": _user_to_public(user), "workspace": workspace}

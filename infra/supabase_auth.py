@@ -48,6 +48,30 @@ def _get_public_key(kid: str) -> object:
     return _jwks_cache[kid]
 
 
+def validate_access_token(access_token: str) -> dict:
+    """Validate a Supabase JWT (from any provider — OAuth, magic link, OTP)
+    via JWKS. Returns the decoded payload on success; raises on invalid sig,
+    bad audience, missing kid, expired, etc.
+
+    Reusable across the OTP-verify route (which gets the JWT from
+    sign_in_with_otp's response) and the OAuth callback route (which gets
+    the JWT from the URL hash after Supabase's redirect)."""
+    header = jwt.get_unverified_header(access_token)
+    kid = header.get("kid")
+    if not kid:
+        raise ValueError("JWT header missing kid claim")
+    public_key = _get_public_key(kid)
+    payload = jwt.decode(
+        access_token,
+        public_key,
+        algorithms=["ES256"],
+        audience="authenticated",
+    )
+    if not payload.get("sub"):
+        raise ValueError("JWT missing sub claim")
+    return payload
+
+
 def send_otp(email: str) -> None:
     """
     Send a 6-digit OTP email via Supabase.

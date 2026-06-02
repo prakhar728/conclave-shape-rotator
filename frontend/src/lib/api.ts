@@ -82,6 +82,11 @@ export const auth = {
       method: "POST",
       body: JSON.stringify({ email, token }),
     }),
+  exchangeToken: (accessToken: string) =>
+    apiFetch<MeResponse>("/api/auth/v1/exchange-token", {
+      method: "POST",
+      body: JSON.stringify({ access_token: accessToken }),
+    }),
   logout: () =>
     apiFetch<{ ok: boolean }>("/api/auth/v1/logout", { method: "POST" }),
   me: () => apiFetch<MeResponse>("/api/auth/v1/me"),
