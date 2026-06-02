@@ -97,6 +97,7 @@ export type Meeting = {
   date: string;
   source: string;
   summary: string | null;
+  is_processing?: boolean;
 };
 
 export type OpenQuestion = {

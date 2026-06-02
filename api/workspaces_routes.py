@@ -76,17 +76,22 @@ def list_workspace_meetings(
     _require_member(workspace_id, user["id"])
     from transcripts import store as _store
     sessions = _store.list_workspace_sessions(workspace_id)
-    return {
-        "meetings": [
-            {
-                "session_id": s.session_id,
-                "date": s.metadata.date,
-                "source": s.metadata.source,
-                "summary": s.derived.summary if s.derived else None,
-            }
-            for s in sessions
-        ]
-    }
+    meetings = []
+    for s in sessions:
+        summary = s.derived.summary if s.derived else None
+        # A session is "processing" when it's been ingested but enrichment
+        # hasn't filled in the summary yet. The window is ~30s-2min between
+        # webhook arrival and LLM completion. Lets the frontend render a
+        # placeholder card with progress copy instead of an empty one.
+        is_processing = not summary
+        meetings.append({
+            "session_id": s.session_id,
+            "date": s.metadata.date,
+            "source": s.metadata.source,
+            "summary": summary,
+            "is_processing": is_processing,
+        })
+    return {"meetings": meetings}
 
 
 @router.get("/{workspace_id}/open-questions")

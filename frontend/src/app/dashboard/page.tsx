@@ -66,26 +66,26 @@ export default function DashboardPage() {
       }
     }
     loadAll();
-    // Re-poll only the cheap "active" list every 7s so the user sees
-    // live bots come and go. Full reload happens on completed bots
-    // (they fall off active, but the meetings list needs a refresh to pick
-    // up the new card — we trigger it implicitly via a manual refresh below).
+    // Re-poll the cheap "active" list every 7s so the user sees live bots
+    // come and go. Also re-pull the meetings list on every tick when there's
+    // a processing card visible (or when something just fell off active) so
+    // the in-progress card morphs into a real card as soon as enrichment
+    // completes.
     intervalId = setInterval(async () => {
       try {
         const r = await bots.active();
-        if (!cancelled) {
-          // If something fell off the active list, refresh meetings too.
-          setActive((prev) => {
-            const becameTerminal = prev.length > r.active.length;
-            if (becameTerminal && me?.workspace) {
-              workspaces
-                .meetings(me.workspace.id)
-                .then((m) => !cancelled && setMeetings(m.meetings))
-                .catch(() => {});
-            }
-            return r.active;
-          });
-        }
+        if (cancelled) return;
+        setActive((prev) => {
+          const becameTerminal = prev.length > r.active.length;
+          const hasProcessing = (meetings ?? []).some((m) => m.is_processing);
+          if ((becameTerminal || hasProcessing) && me?.workspace) {
+            workspaces
+              .meetings(me.workspace.id)
+              .then((mr) => !cancelled && setMeetings(mr.meetings))
+              .catch(() => {});
+          }
+          return r.active;
+        });
       } catch {
         // Silent — next tick retries.
       }
@@ -187,26 +187,32 @@ export default function DashboardPage() {
           <EmptyState />
         ) : (
           <ul className="flex flex-col gap-3">
-            {meetings.map((m) => (
-              <li key={m.session_id}>
-                <Link href={`/meeting/${m.session_id}`}>
-                  <Card className="transition-colors hover:border-foreground/20">
-                    <CardHeader>
-                      <CardTitle className="text-base">
-                        {m.summary
-                          ? truncate(m.summary, 120)
-                          : `${m.source} — ${m.date}`}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-xs text-muted-foreground">
-                        {m.date} · {m.source}
-                      </p>
-                    </CardContent>
-                  </Card>
-                </Link>
-              </li>
-            ))}
+            {meetings.map((m) =>
+              m.is_processing ? (
+                <li key={m.session_id}>
+                  <ProcessingCard meeting={m} />
+                </li>
+              ) : (
+                <li key={m.session_id}>
+                  <Link href={`/meeting/${m.session_id}`}>
+                    <Card className="transition-colors hover:border-foreground/20">
+                      <CardHeader>
+                        <CardTitle className="text-base">
+                          {m.summary
+                            ? truncate(m.summary, 120)
+                            : `${m.source} — ${m.date}`}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <p className="text-xs text-muted-foreground">
+                          {m.date} · {m.source}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </Link>
+                </li>
+              ),
+            )}
           </ul>
         )}
       </main>
@@ -273,4 +279,51 @@ function humanStatus(s: ActiveInvitation["status"]): string {
     case "failed":
       return "Failed";
   }
+}
+
+// Quirky messages cycled while a meeting is between webhook arrival and
+// LLM enrichment completion. Window is typically 30s-2min. Picked to read
+// like the system is doing real work, not stuck.
+const PROCESSING_MESSAGES = [
+  "Transcribing the audio…",
+  "Sharpening insights…",
+  "Reading between the lines…",
+  "Distilling action items…",
+  "Finding open questions…",
+  "Surfacing what was decided…",
+  "Threading the conversation together…",
+  "Almost there…",
+];
+
+function ProcessingCard({ meeting }: { meeting: Meeting }) {
+  const [phraseIdx, setPhraseIdx] = useState(0);
+  useEffect(() => {
+    const id = setInterval(
+      () => setPhraseIdx((i) => (i + 1) % PROCESSING_MESSAGES.length),
+      2200,
+    );
+    return () => clearInterval(id);
+  }, []);
+  return (
+    <div className="rounded-lg border border-border bg-card p-5">
+      <div className="flex items-center gap-3">
+        <span
+          className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400"
+          aria-hidden
+        />
+        <p className="text-sm font-medium text-foreground">
+          {PROCESSING_MESSAGES[phraseIdx]}
+        </p>
+      </div>
+      <p className="mt-2 text-xs text-muted-foreground">
+        {meeting.date} · {meeting.source} ·{" "}
+        <span className="font-mono">{meeting.session_id}</span>
+      </p>
+      <p className="mt-3 text-xs text-muted-foreground">
+        The card refreshes itself when the LLM finishes — usually under two
+        minutes. You can close this tab; the meeting will be ready when you
+        come back.
+      </p>
+    </div>
+  );
 }
