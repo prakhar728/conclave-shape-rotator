@@ -77,6 +77,41 @@ def launch_bot(
         "bot_name": bot_name,
     }
 
+    # If a signed-in Google profile is mounted into the Recato container at
+    # /tmp/browser-data, Vexa launches the bot via launchPersistentContext
+    # using that profile — bypasses Meet's anti-bot fingerprinting because
+    # the bot now looks like a real signed-in user with cookies + history.
+    # Without this, anonymous Chromium gets flagged ~100% of the time on
+    # recent Google Meet anti-bot updates (verified empirically 2026-06-02).
+    #
+    # `authenticated: true` triggers Vexa's persistent-context code path.
+    # `userdataS3Path` is required by Vexa even in local-only mode (it gates
+    # the persistent-context branch); the value is unused when MINIO_ENDPOINT
+    # is empty — s3Sync returns early.
+    if os.environ.get("CONCLAVE_BOT_AUTHENTICATED", "").lower() in ("1", "true", "yes"):
+        payload["authenticated"] = True
+        payload["userdataS3Path"] = "conclave/bot-profile"
+        # Pre-flight: nuke any leftover Chrome SingletonLock files in the
+        # bind-mounted profile. Chrome creates these on launch and removes
+        # them on clean exit — but on crash/kill they're left behind and
+        # the NEXT bot launch fails with "Failed to create SingletonLock:
+        # File exists". Vexa's own cleanStaleLocks doesn't catch them in
+        # all cases. Cheap to be defensive here. Container name is the
+        # local-dev convention (`vexa-lite`); for prod deploy this becomes
+        # a Recato-side concern, not Conclave's.
+        try:
+            import subprocess
+            subprocess.run(
+                ["docker", "exec", "vexa-lite", "bash", "-c",
+                 "find /tmp/browser-data -maxdepth 2 -name 'Singleton*' -delete 2>/dev/null; "
+                 "find /tmp/browser-data -maxdepth 3 -name 'lockfile' -delete 2>/dev/null; true"],
+                check=False, timeout=5, capture_output=True,
+            )
+        except Exception:
+            # Best-effort. If docker isn't on PATH or vexa-lite isn't named
+            # that, we'll learn from the bot's failure mode same as before.
+            pass
+
     headers = {
         "X-API-Key": token,
         "Authorization": f"Bearer {token}",
