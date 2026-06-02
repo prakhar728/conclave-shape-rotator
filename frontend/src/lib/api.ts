@@ -221,6 +221,11 @@ export const bots = {
     }),
   status: (sessionId: string) =>
     apiFetch<BotStatusResp>(`/api/meetings/${sessionId}/bot-status`),
+  stop: (sessionId: string) =>
+    apiFetch<{ ok: boolean; status: string }>(
+      `/api/meetings/${sessionId}/bot`,
+      { method: "DELETE" },
+    ),
 };
 
 export type MeetingShare = { email: string; granted_at: string };

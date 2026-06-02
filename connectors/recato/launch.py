@@ -76,21 +76,31 @@ def launch_bot(
         "language": language,
         "bot_name": bot_name,
     }
+
+    headers = {
+        "X-API-Key": token,
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
     if webhook_url:
-        # Recato's per-meeting webhook URL field — overrides the global
-        # POST_MEETING_HOOKS for this meeting only. Cleaner than the global
-        # config because each Conclave meeting can use a uniquely-signed URL.
-        payload["webhook_url"] = webhook_url
+        # Vexa/Recato reads per-meeting webhook config from request HEADERS,
+        # not the body — see meeting-api/meeting_api/meetings.py around
+        # `X-User-Webhook-URL`. Passing it on the body is silently ignored.
+        # Verified via the Vexa source after a Phase 2.5 misfire where no
+        # webhook ever fired despite the field being set.
+        headers["X-User-Webhook-URL"] = webhook_url
+        # Webhook secret (HMAC for the inbound side) can ride along too —
+        # we use RECATO_WEBHOOK_SECRET on the receiver, so if we want HMAC
+        # in dev we need to forward the same secret here.
+        webhook_secret = os.environ.get("RECATO_WEBHOOK_SECRET")
+        if webhook_secret:
+            headers["X-User-Webhook-Secret"] = webhook_secret
 
     try:
         resp = httpx.post(
             f"{base}/bots",
             json=payload,
-            headers={
-                "X-API-Key": token,
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            },
+            headers=headers,
             timeout=timeout_s,
         )
     except httpx.HTTPError as e:
@@ -104,3 +114,44 @@ def launch_bot(
         return resp.json()
     except Exception as e:  # noqa: BLE001
         raise RecatoLaunchError(f"Recato response not JSON: {e}") from e
+
+
+def stop_bot(
+    *,
+    platform: str = "google_meet",
+    native_meeting_id: str,
+    timeout_s: float = 30.0,
+) -> dict:
+    """DELETE the bot for a meeting. Recato/Vexa keys this by (platform,
+    native_meeting_id) — not by the bot's internal id. Triggers Recato's
+    own meeting-completed flow, so the webhook fires the same way it would
+    if the user kicked the bot from Meet directly.
+
+    Returns the JSON body (typically `{"status": "deleted"}` or similar).
+    """
+    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
+    token = os.environ.get("RECATO_API_TOKEN") or ""
+    if not base or not token:
+        raise RecatoLaunchError(
+            "Recato is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
+        )
+    try:
+        resp = httpx.delete(
+            f"{base}/bots/{platform}/{native_meeting_id}",
+            headers={
+                "X-API-Key": token,
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/json",
+            },
+            timeout=timeout_s,
+        )
+    except httpx.HTTPError as e:
+        raise RecatoLaunchError(f"Recato unreachable: {e}") from e
+    if resp.status_code >= 400:
+        raise RecatoLaunchError(
+            f"Recato {resp.status_code}: {resp.text[:300]}"
+        )
+    try:
+        return resp.json() if resp.content else {"status": "deleted"}
+    except Exception:  # noqa: BLE001
+        return {"status": "deleted"}

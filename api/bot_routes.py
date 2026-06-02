@@ -22,6 +22,7 @@ from connectors.recato.launch import (
     RecatoLaunchError,
     launch_bot,
     parse_meet_input,
+    stop_bot,
 )
 from infra import bot_invitations, workspaces
 
@@ -109,6 +110,39 @@ def invite_bot(
         "meeting_session_id": meet_code,
         "status": "joining",
     }
+
+
+@router.delete("/{session_id}/bot")
+def stop_bot_route(
+    session_id: str,
+    user: dict = Depends(require_current_user),
+):
+    """Stop the Conclave bot mid-meeting (or mid-stuck-state).
+
+    Authorizes against the bot_invitation (only the inviter can stop).
+    Calls Recato's DELETE /bots/{platform}/{id} which triggers Recato's
+    own meeting-completion flow — the same webhook path fires as if the
+    user had kicked the bot from Meet UI, so no special ingest plumbing
+    is needed here.
+    """
+    inv = bot_invitations.find_by_meeting("google_meet", session_id)
+    if inv is None or inv["user_id"] != user["id"]:
+        raise HTTPException(status_code=404, detail="No invitation for this meeting")
+    if inv["status"] in ("completed", "failed"):
+        return {"ok": True, "status": inv["status"], "note": "already terminal"}
+
+    try:
+        stop_bot(platform="google_meet", native_meeting_id=session_id)
+    except RecatoLaunchError as e:
+        # Even if Recato can't be reached, mark the invitation as failed
+        # so the user isn't stuck looking at a forever-joining state.
+        bot_invitations.update_status(inv["id"], "failed", completed=True)
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Optimistic local flip — Recato should fire the webhook moments later,
+    # which would also flip this; whichever lands first is fine.
+    bot_invitations.update_status(inv["id"], "completed", completed=True)
+    return {"ok": True, "status": "completed"}
 
 
 @router.get("/{session_id}/bot-status")

@@ -133,7 +133,16 @@ export default function InvitePage() {
           </p>
         </div>
 
-        {live ? <LivePanel live={live} /> : (
+        {live ? (
+          <LivePanel
+            live={live}
+            onStopped={() =>
+              setLive((cur) =>
+                cur ? { ...cur, status: "completed" } : cur,
+              )
+            }
+          />
+        ) : (
           <form onSubmit={handleInvite} className="flex flex-col gap-4">
             <div>
               <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
@@ -177,9 +186,33 @@ export default function InvitePage() {
   );
 }
 
-function LivePanel({ live }: { live: LiveState }) {
+function LivePanel({
+  live,
+  onStopped,
+}: {
+  live: LiveState;
+  onStopped: () => void;
+}) {
   const isTerminal = TERMINAL.includes(live.status);
   const isFailure = live.status === "failed";
+  const [stopping, setStopping] = useState(false);
+  const [stopError, setStopError] = useState<string | null>(null);
+
+  async function handleStop() {
+    if (!confirm("Stop the bot and end transcription? This will wrap up the meeting on Conclave's side.")) {
+      return;
+    }
+    setStopping(true);
+    setStopError(null);
+    try {
+      await bots.stop(live.sessionId);
+      onStopped();
+    } catch (e) {
+      setStopError(e instanceof Error ? e.message : "Failed to stop");
+    } finally {
+      setStopping(false);
+    }
+  }
 
   return (
     <div className="rounded-lg border border-border bg-card p-6">
@@ -205,7 +238,7 @@ function LivePanel({ live }: { live: LiveState }) {
             ? "The bot couldn't join. Most often this is admit-prompt timeout (the meeting host needs to let it in)."
             : "Done. The transcript is processing — it'll appear on your dashboard shortly."}
       </p>
-      <div className="mt-6 flex gap-3">
+      <div className="mt-6 flex flex-wrap gap-3">
         <Link
           href="/dashboard"
           className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
@@ -220,7 +253,19 @@ function LivePanel({ live }: { live: LiveState }) {
             View meeting
           </Link>
         ) : null}
+        {!isTerminal ? (
+          <button
+            onClick={handleStop}
+            disabled={stopping}
+            className="inline-flex h-8 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-3 text-sm font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50"
+          >
+            {stopping ? "Stopping…" : "Stop bot"}
+          </button>
+        ) : null}
       </div>
+      {stopError ? (
+        <p className="mt-3 text-xs text-destructive">{stopError}</p>
+      ) : null}
     </div>
   );
 }
