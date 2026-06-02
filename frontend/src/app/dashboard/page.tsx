@@ -21,7 +21,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
   auth,
+  bots,
   workspaces,
+  type ActiveInvitation,
   type Meeting,
   type MeResponse,
 } from "@/lib/api";
@@ -30,15 +32,24 @@ export default function DashboardPage() {
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
+  const [active, setActive] = useState<ActiveInvitation[]>([]);
   const [error, setError] = useState<string | null>(null);
 
+  // Initial load + active-list polling so "Live now" reflects state changes
+  // (status transitions, completions) without needing the user to refresh.
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    async function loadAll() {
       try {
-        const meResp = await auth.me();
+        const [meResp, activeResp] = await Promise.all([
+          auth.me(),
+          bots.active().catch(() => ({ active: [] as ActiveInvitation[] })),
+        ]);
         if (cancelled) return;
         setMe(meResp);
+        setActive(activeResp.active);
         if (meResp.workspace) {
           const m = await workspaces.meetings(meResp.workspace.id);
           if (!cancelled) setMeetings(m.meetings);
@@ -53,11 +64,52 @@ export default function DashboardPage() {
         }
         setError(err instanceof Error ? err.message : "Failed to load dashboard");
       }
-    })();
+    }
+    loadAll();
+    // Re-poll only the cheap "active" list every 7s so the user sees
+    // live bots come and go. Full reload happens on completed bots
+    // (they fall off active, but the meetings list needs a refresh to pick
+    // up the new card — we trigger it implicitly via a manual refresh below).
+    intervalId = setInterval(async () => {
+      try {
+        const r = await bots.active();
+        if (!cancelled) {
+          // If something fell off the active list, refresh meetings too.
+          setActive((prev) => {
+            const becameTerminal = prev.length > r.active.length;
+            if (becameTerminal && me?.workspace) {
+              workspaces
+                .meetings(me.workspace.id)
+                .then((m) => !cancelled && setMeetings(m.meetings))
+                .catch(() => {});
+            }
+            return r.active;
+          });
+        }
+      } catch {
+        // Silent — next tick retries.
+      }
+    }, 7000);
     return () => {
       cancelled = true;
+      if (intervalId) clearInterval(intervalId);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  async function handleStop(sessionId: string) {
+    if (!confirm("Stop the bot for this meeting?")) return;
+    try {
+      await bots.stop(sessionId);
+      setActive((prev) => prev.filter((a) => a.session_id !== sessionId));
+      if (me?.workspace) {
+        const m = await workspaces.meetings(me.workspace.id);
+        setMeetings(m.meetings);
+      }
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to stop bot");
+    }
+  }
 
   if (error) {
     return (
@@ -92,6 +144,42 @@ export default function DashboardPage() {
             Invite bot
           </Link>
         </div>
+
+        {active.length > 0 ? (
+          <section className="mb-8">
+            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              Live now
+            </p>
+            <ul className="flex flex-col gap-2">
+              {active.map((a) => (
+                <li
+                  key={a.invitation_id}
+                  className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="h-2 w-2 rounded-full bg-emerald-500"
+                      aria-hidden
+                    />
+                    <div>
+                      <p className="font-mono text-sm">{a.session_id}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {humanStatus(a.status)} · started{" "}
+                        {a.created_at.split("T")[1]?.slice(0, 5) ?? a.created_at}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleStop(a.session_id)}
+                    className="inline-flex h-7 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20"
+                  >
+                    Stop
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
 
         {meetings === null ? (
           <p className="text-sm text-muted-foreground">Loading meetings…</p>
@@ -170,4 +258,19 @@ function EmptyState() {
 
 function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+function humanStatus(s: ActiveInvitation["status"]): string {
+  switch (s) {
+    case "requested":
+      return "Queueing bot";
+    case "joining":
+      return "Joining meeting";
+    case "active":
+      return "Transcribing";
+    case "completed":
+      return "Wrapped";
+    case "failed":
+      return "Failed";
+  }
 }

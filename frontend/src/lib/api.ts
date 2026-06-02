@@ -209,6 +209,16 @@ export type BotStatusResp = {
   completed_at: string | null;
 };
 
+export type ActiveInvitation = {
+  invitation_id: string;
+  session_id: string;
+  platform: string;
+  status: BotStatus;
+  bot_name: string;
+  recato_bot_id: number | null;
+  created_at: string;
+};
+
 export const bots = {
   invite: (params: {
     meet_url_or_code: string;
@@ -226,6 +236,8 @@ export const bots = {
       `/api/meetings/${sessionId}/bot`,
       { method: "DELETE" },
     ),
+  active: () =>
+    apiFetch<{ active: ActiveInvitation[] }>("/api/meetings/active"),
 };
 
 export type MeetingShare = { email: string; granted_at: string };

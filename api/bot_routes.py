@@ -112,6 +112,39 @@ def invite_bot(
     }
 
 
+@router.get("/active")
+def list_active_invitations(user: dict = Depends(require_current_user)):
+    """List the current user's non-terminal bot invitations.
+
+    The dashboard's "Live now" section surfaces these so the user can see
+    everything currently transcribing (and stop it if needed) without
+    needing to remember which tab they invited from.
+    """
+    from storage.sqlite import _get_conn
+    rows = _get_conn().execute(
+        "SELECT id, native_meeting_id, platform, status, bot_name, "
+        "recato_bot_id, created_at "
+        "FROM bot_invitations "
+        "WHERE user_id = ? AND status NOT IN ('completed', 'failed') "
+        "ORDER BY created_at DESC",
+        (user["id"],),
+    ).fetchall()
+    return {
+        "active": [
+            {
+                "invitation_id": r["id"],
+                "session_id": r["native_meeting_id"],
+                "platform": r["platform"],
+                "status": r["status"],
+                "bot_name": r["bot_name"],
+                "recato_bot_id": r["recato_bot_id"],
+                "created_at": r["created_at"],
+            }
+            for r in rows
+        ]
+    }
+
+
 @router.delete("/{session_id}/bot")
 def stop_bot_route(
     session_id: str,
