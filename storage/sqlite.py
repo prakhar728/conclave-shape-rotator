@@ -40,6 +40,10 @@ def _new_conn() -> sqlite3.Connection:
         # lock, instead of raising "database is locked" immediately.
         conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
+    # sqlite-vec (Phase 3.5a) — soft load: queries against chunks_vec fail
+    # with a clear OperationalError when unavailable; the app still boots.
+    from storage.vec import load_vec_extension
+    load_vec_extension(conn)
     _init_schema(conn)
     return conn
 
