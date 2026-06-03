@@ -14,11 +14,23 @@ venv/
 /plan
 /plans/
 eval_results/
-scripts/
+# Phase 3.5.0 C3+: scripts/ stays ignored by default but eval-harness
+# CLIs are real artifacts. Negation needs the dir-then-contents dance:
+# a bare "scripts/" would stop git from descending at all.
+!scripts/
+scripts/*
+!scripts/eval_extraction_bakeoff.py
 !alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
 !tests/fixtures/voxterm_session.json
+# Phase 3.5.0: track ground-truth yamls (the contract for C3/C13/C24)
+# and reference .md docs (CONVENTIONS, etc.); the transcripts they cite
+# stay ignored — share locally / via non-git path.
+!tests/fixtures/transcripts/
+tests/fixtures/transcripts/*
+!tests/fixtures/transcripts/*.expected.yaml
+!tests/fixtures/transcripts/*.md
 .agents/
 skills-lock.json
 data/*.db

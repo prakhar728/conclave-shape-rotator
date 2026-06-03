@@ -1,0 +1,153 @@
+transcript: "Elocute Transcript May 26.txt"
+shape: "founder-demo-feedback"
+notes: |
+  A cohort presentation and feedback session centered on Albiona's Elocute speaking-practice app, with discussion of user traction, positioning, monetization, retention loops, privacy-sensitive use cases, and adjacent communication products before transitioning into Wiki's biotech data collaboration presentation.
+entities:
+  - type: person
+    canonical_name: "Albiona Hoti"
+    raw_mentions: ["Albiona Hoti"]
+    turn_ids: [11, 19, 21, 22, 24, 26, 28, 29, 30, 31, 33, 40, 42, 44, 46, 51, 53, 55, 57, 61, 63, 65, 67, 69, 76, 78, 80, 83, 84, 85, 87, 88, 89, 91, 93, 98, 100, 102, 105, 107, 109]
+  - type: person
+    canonical_name: "Andrew Miller"
+    raw_mentions: ["Andrew Miller"]
+    turn_ids: [0, 1, 2, 3, 5, 8, 9, 10, 13, 14, 17, 18, 52, 112, 114, 117, 121, 123, 127, 128, 131, 133, 134, 136]
+  - type: person
+    canonical_name: "Wiki"
+    raw_mentions: ["Wiki"]
+    turn_ids: [5, 7, 8, 35, 112, 113, 116, 118, 120, 122, 124, 126, 129, 136, 137]
+  - type: person
+    canonical_name: "LSDan"
+    raw_mentions: ["LSDan"]
+    turn_ids: [25, 27, 37, 39, 48, 50, 54, 56, 58, 60, 62, 64, 66, 68, 73, 82, 108, 111]
+  - type: person
+    canonical_name: "shawmakesmagic"
+    raw_mentions: ["shawmakesmagic"]
+    turn_ids: [34, 36, 38, 43, 45, 47, 74, 75, 81, 92, 94, 96, 99]
+  - type: person
+    canonical_name: "Kristel Alliksaar"
+    raw_mentions: ["Kristel Alliksaar"]
+    turn_ids: [16, 41, 72, 95, 97, 104, 106, 119]
+  - type: person
+    canonical_name: "Christian"
+    raw_mentions: ["Christian"]
+    turn_ids: [0, 1, 3, 8]
+  - type: person
+    canonical_name: "Chloe"
+    raw_mentions: ["Chloe"]
+    turn_ids: [3, 8]
+  - type: project
+    canonical_name: "Elocute"
+    raw_mentions: ["Elocute", "Elocute app", "elocute"]
+    turn_ids: [22, 24, 40, 53, 61, 65, 83, 107]
+  - type: project
+    canonical_name: "Wiki Gen"
+    raw_mentions: ["wiki gen site", "wiki gen"]
+    turn_ids: [123, 137]
+  - type: tool
+    canonical_name: "MCP"
+    raw_mentions: ["MCP"]
+    turn_ids: [40]
+  - type: company
+    canonical_name: "Instagram"
+    raw_mentions: ["Instagram"]
+    turn_ids: [24, 65]
+  - type: company
+    canonical_name: "TikTok"
+    raw_mentions: ["TikTok"]
+    turn_ids: [24, 91]
+  - type: tool
+    canonical_name: "Benchling"
+    raw_mentions: ["Benchling"]
+    turn_ids: [137]
+  - type: company
+    canonical_name: "Mithril Biosciences"
+    raw_mentions: ["Mithril Biosciences"]
+    turn_ids: [137]
+obligations:
+  - type: commitment
+    description: "Wiki will keep the organizers updated by email while sorting out travel and flight dates."
+    source_quote: "I'm trying to get to New York, though, so I'll just keep in touch by email."
+    turn_ids: [7]
+    owner_raw_text: "Wiki"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Albiona needs to add support for users uploading or supplying their own practice tasks, pitches, or subject material."
+    source_quote: "That's one of the requirements that I need to really say how to"
+    turn_ids: [25, 27, 28, 39, 48]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Albiona needs to turn Elocute from usage into revenue by adding a payment wall or subscription-style monetization."
+    source_quote: "My next process is going from people using something to needing something, and then adding a wall for payments there."
+    turn_ids: [29, 31, 44, 47, 48, 54, 56, 59, 60]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: commitment
+    description: "Albiona intends to build an MCP-based flow so users can bring topics from their LLM conversations into Elocute."
+    source_quote: "I've been exploring the MCP journey... I will definitely do it right away."
+    turn_ids: [40]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Albiona needs to create a callback or onboarding loop such as email, SMS, or dashboard reminders to bring users back after sign-up."
+    source_quote: "Did I make a mistake online not having the company with email, so that people can come in."
+    turn_ids: [24, 65, 66, 68, 70]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: commitment
+    description: "Albiona wants to increase Elocute from about 500 users to 1000 users."
+    source_quote: "For now I have 500 users and 134 power users. I want to increase this number to 1000."
+    turn_ids: [24]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: open_question
+    description: "The group raises whether Elocute should handle higher-stakes private or company data and how that privacy story should be communicated."
+    source_quote: "It all depends on the stakes, if for them it's high stakes like fascinating, then they would hear."
+    turn_ids: [104, 105, 106, 107]
+    owner_raw_text: null
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Albiona needs to sharpen Elocute's positioning around the user's insecurity, desire, or concrete public-speaking outcome."
+    source_quote: "What is their deep like insecurity or fear, desire or want, and then you're just like public speaking is the solution to that."
+    turn_ids: [45, 75, 94, 98]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: "open"
+queries:
+  - q: "What is Elocute and what user problem does it target?"
+    intent: "factoid"
+    relevant_turn_ids: [22, 24]
+  - q: "How many users and power users did Elocute have during the presentation?"
+    intent: "factoid"
+    relevant_turn_ids: [24]
+  - q: "What feedback does Elocute give after a speaking practice session?"
+    intent: "factoid"
+    relevant_turn_ids: [22, 24, 46]
+  - q: "What upload-your-own-topic or pitch-practice feature did participants request?"
+    intent: "factoid"
+    relevant_turn_ids: [25, 27, 28, 39, 48]
+  - q: "What monetization ideas were discussed for Elocute?"
+    intent: "aggregate"
+    relevant_turn_ids: [29, 31, 33, 44, 45, 47, 48, 54, 56, 59, 60]
+  - q: "What retention or callback problems did the group identify?"
+    intent: "aggregate"
+    relevant_turn_ids: [62, 65, 66, 68, 70]
+  - q: "What future products or adjacent use cases did Albiona describe after Elocute?"
+    intent: "aggregate"
+    relevant_turn_ids: [61, 76, 80, 83, 88, 91, 107]
+  - q: "How did the group advise Albiona to position Elocute emotionally for users?"
+    intent: "relational"
+    relevant_turn_ids: [45, 75, 81, 94, 98]
+  - q: "What is Wiki Gen trying to solve for biotech researchers and enterprises?"
+    intent: "factoid"
+    relevant_turn_ids: [123, 124, 126, 137]
+  - q: "Why does Wiki say biotech data discovery and collaboration are difficult today?"
+    intent: "aggregate"
+    relevant_turn_ids: [137]
