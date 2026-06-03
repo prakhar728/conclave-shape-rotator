@@ -1,57 +1,235 @@
-# Hand-coded ground truth — Phase 3.5.0 (C2).
-#
-# Source transcript: "Dstack Intro Salon Session Transcript_May_20.txt"
-# Shape (Survey §3 Step 1): workshop
-#
-# This file is consumed by:
-#   - C3  bake-off harness  (Q1 extraction prompt shape — per-type F1)
-#   - C13 extraction regression  (within 5pp of bake-off F1)
-#   - C24 search NDCG@10 baseline  (Q3 reranker decision)
-#
-# Filled in C2. Empty stub committed in C1.
-#
-# Schema mirrors the v2 `obligations` + `entities` data model
-# (see KB-AND-GRAPH-ROADMAP-v2.md §3 "Data model").
-
 transcript: "Dstack Intro Salon Session Transcript_May_20.txt"
-shape: workshop
-
+shape: "technical-demo-salon"
 notes: |
-  TODO(C2): one-paragraph characterization — cohort, register, expected
-  entity density, anything the labeler should know that isn't obvious
-  from the transcript itself.
-
-# ---------------------------------------------------------------------------
-# entities
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: person | project | topic | company | tool
-#     canonical_name: "..."
-#     raw_mentions: ["...", "..."]   # surface forms as they appear
-#     turn_ids: [12, 47]             # turns where mentioned
-
-entities: []
-
-# ---------------------------------------------------------------------------
-# obligations  (single table, Q2 — type enum)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: action | decision | commitment | open_question | blocker
-#     description: "..."             # what the obligation is
-#     source_quote: "..."            # verbatim from transcript
-#     turn_ids: [...]
-#     owner_raw_text: "..."          # null if unowned
-#     due_date_raw: "..."            # null if absent
-#     status_inferred: open | resolved | unclear
-
-obligations: []
-
-# ---------------------------------------------------------------------------
-# queries  (5–10 per transcript; feeds C24 NDCG@10 eval set)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - q: "..."                       # the search query
-#     intent: factoid | aggregate | relational | temporal
-#     relevant_turn_ids: [...]       # gold-relevant turns (chunks)
-
-queries: []
+  A loose salon session starts with setup and audio issues, then becomes a detailed DStack walkthrough led by Hang Yin, followed by Andrew Miller's demo of a DStack web host multiplexing layer and a discussion of private inference, service mesh, attestation, deployment ergonomics, and remaining security and governance questions.
+entities:
+  - type: person
+    canonical_name: "Hang Yin"
+    raw_mentions: ["Hang Yin", "Hank", "Han", "huh"]
+    turn_ids: [2, 3, 5, 7, 10, 14, 20, 22, 24, 26, 28, 30, 32, 34, 36, 39, 44, 46, 49, 51, 52, 53, 55, 57, 63, 66, 71, 73, 75, 77, 83, 86, 87, 88, 91, 99, 101, 104, 106, 108, 111, 122, 124, 126, 128, 130, 134, 136, 138, 140]
+  - type: person
+    canonical_name: "Andrew Miller"
+    raw_mentions: ["Andrew Miller", "Andrew"]
+    turn_ids: [21, 27, 29, 31, 38, 61, 67, 76, 89, 90, 92, 94, 96, 102, 105, 107, 109, 113, 117, 119, 121, 123, 127, 132]
+  - type: person
+    canonical_name: "LSDan"
+    raw_mentions: ["LSDan", "LSD"]
+    turn_ids: [0, 4, 6, 8, 12, 16, 25, 33, 35, 37, 40, 42, 45, 48, 50, 52, 54, 56, 59, 62, 65, 68, 70, 72, 77, 78, 80, 82, 85, 87, 89, 98, 100, 112, 114, 131, 133, 135, 137, 139]
+  - type: person
+    canonical_name: "DMART"
+    raw_mentions: ["DMART"]
+    turn_ids: [87]
+  - type: project
+    canonical_name: "DStack"
+    raw_mentions: ["DStack", "Dstack", "D stack", "DSTAC", "DSAC", "distack", "dista", "the stack"]
+    turn_ids: [8, 32, 34, 35, 36, 38, 39, 46, 73, 75, 77, 82, 85, 90, 92, 94, 96, 99, 101, 102, 105, 106, 107, 108, 109, 117, 119, 123, 124, 126, 127, 128, 130, 135]
+  - type: topic
+    canonical_name: "Trusted execution environments"
+    raw_mentions: ["trusted execution environment", "TE", "te", "TTE", "tee", "Intel TDX", "TDX"]
+    turn_ids: [73, 75, 77, 91, 99, 108, 124, 126, 128, 130]
+  - type: topic
+    canonical_name: "Confidential virtual machines"
+    raw_mentions: ["CVM", "CVMs", "CVMS", "CBM", "CDM", "CE"]
+    turn_ids: [8, 73, 75, 77, 90, 92, 96, 99, 102, 105, 106, 107, 108, 109, 117, 119, 120, 121, 123, 124, 126, 127, 128, 130]
+  - type: topic
+    canonical_name: "Remote attestation"
+    raw_mentions: ["remote attestation", "attestation", "attest station", "test station", "proofs", "proof", "measurements"]
+    turn_ids: [73, 77, 90, 92, 96, 99, 101, 105, 107, 108, 117, 119, 124, 128, 130]
+  - type: tool
+    canonical_name: "Docker Compose"
+    raw_mentions: ["Docker Compose", "Docker compose", "Docker interface", "compose file", "compose hash"]
+    turn_ids: [73, 75, 77, 128, 130]
+  - type: tool
+    canonical_name: "Jupyter Notebook"
+    raw_mentions: ["Jupyter Notebook", "Jupyter notebook", "Jupyter demo"]
+    turn_ids: [36, 73, 75, 77]
+  - type: company
+    canonical_name: "Phala"
+    raw_mentions: ["Phala", "Phala cloud", "Phala Cloud", "Fola"]
+    turn_ids: [73, 75, 77, 90, 99, 124]
+  - type: tool
+    canonical_name: "Phala CLI"
+    raw_mentions: ["Phala landing line", "main line", "CLI", "Phala deploy", "Phala status", "Phala CRI"]
+    turn_ids: [73, 75, 77]
+  - type: tool
+    canonical_name: "DStack SDK"
+    raw_mentions: ["Dstack SDK", "DStack SDK", "SDK", "DST client"]
+    turn_ids: [73]
+  - type: tool
+    canonical_name: "KMS"
+    raw_mentions: ["KMS", "key MS", "key provider", "key derivation"]
+    turn_ids: [73, 128, 130]
+  - type: tool
+    canonical_name: "DStack ingress"
+    raw_mentions: ["Dstack ingress", "ingress", "Dstack Gateway Endpoint"]
+    turn_ids: [73, 75, 77, 123, 124]
+  - type: project
+    canonical_name: "DStack examples"
+    raw_mentions: ["Dstack examples"]
+    turn_ids: [73]
+  - type: topic
+    canonical_name: "Private inference"
+    raw_mentions: ["private inference", "private inference providers", "AI model", "LLM", "GPU models"]
+    turn_ids: [38, 99, 108, 124]
+  - type: project
+    canonical_name: "DStack web host"
+    raw_mentions: ["Dstack web post", "Dstack web host", "web host", "multiplexing layer", "app runner"]
+    turn_ids: [90, 96, 99, 102, 105, 107, 117, 119, 123]
+  - type: project
+    canonical_name: "TimeLock demo"
+    raw_mentions: ["TimeLog", "timelock", "time lock", "time block", "time lock encryption demo", "Tiddlock", "Timelock"]
+    turn_ids: [90, 94, 96, 105, 117]
+  - type: tool
+    canonical_name: "Deno"
+    raw_mentions: ["Dino", "Deno", "ENO"]
+    turn_ids: [96, 102, 105, 107]
+  - type: tool
+    canonical_name: "runsc and gVisor"
+    raw_mentions: ["run SC", "run sc", "run secure C", "GVisor", "GVSor", "GVS"]
+    turn_ids: [96, 102, 105, 107]
+  - type: tool
+    canonical_name: "SSH"
+    raw_mentions: ["SSH", "SS age", "SSH side part", "SSH key"]
+    turn_ids: [73, 90, 96, 107, 123]
+  - type: project
+    canonical_name: "Service mesh"
+    raw_mentions: ["service mesh", "high availability stack", "mesh network", "mesh"]
+    turn_ids: [36, 38, 39, 46, 124, 126, 127, 128, 130]
+  - type: tool
+    canonical_name: "Terraform"
+    raw_mentions: ["Terraform", "Terraform init", "Terraform apply", "Terraform plugin", "Terraform deploy"]
+    turn_ids: [124, 126]
+  - type: tool
+    canonical_name: "Consul"
+    raw_mentions: ["console", "Consul"]
+    turn_ids: [124, 126, 128]
+  - type: tool
+    canonical_name: "Patroni"
+    raw_mentions: ["Patroni", "PatronI", "Petroni"]
+    turn_ids: [124, 126]
+  - type: tool
+    canonical_name: "Postgres"
+    raw_mentions: ["Postgres", "Post-Grest"]
+    turn_ids: [124, 126]
+  - type: tool
+    canonical_name: "Envoy"
+    raw_mentions: ["envoy proxy", "invoice proxy", "Envoy sidecar proxy"]
+    turn_ids: [128]
+  - type: company
+    canonical_name: "Flashbots"
+    raw_mentions: ["Flash Boats", "Flash Bots"]
+    turn_ids: [77, 107]
+  - type: company
+    canonical_name: "HashiCorp"
+    raw_mentions: ["HashiCorp"]
+    turn_ids: [124]
+  - type: tool
+    canonical_name: "ChatGPT API"
+    raw_mentions: ["ChatGPT", "Chat GP GPT API", "Open Auto"]
+    turn_ids: [124]
+  - type: company
+    canonical_name: "Near AI"
+    raw_mentions: ["near AI"]
+    turn_ids: [99]
+obligations:
+  - type: action
+    description: "LSDan will try to show a vanilla DStack setup in a future session after the machine is online."
+    source_quote: "We can do a vanilla Dstack at some point in the future. Still working on getting that machine online"
+    turn_ids: [35]
+    owner_raw_text: "LSDan"
+    due_date_raw: null
+    status_inferred: open
+  - type: action
+    description: "The organizers may share the recorded DStack intro and hold a follow-up session later in the program if needed."
+    source_quote: "we'll share this with other people, and maybe we can do a follow-up session later in the program if we need"
+    turn_ids: [85]
+    owner_raw_text: "LSDan"
+    due_date_raw: null
+    status_inferred: open
+  - type: commitment
+    description: "Hang Yin committed to confirm the exact meeting time by the end of the day."
+    source_quote: "I can confirm the exact time today at the end of today."
+    turn_ids: [87, 88]
+    owner_raw_text: "Hang Yin"
+    due_date_raw: "today at the end of today"
+    status_inferred: open
+  - type: open_question
+    description: "Hang Yin and Andrew Miller should consider whether to merge Hang's proxy and launcher proof of concept with Andrew's DStack web host work."
+    source_quote: "Maybe we can just join the two things together."
+    turn_ids: [99, 101]
+    owner_raw_text: "Hang Yin and Andrew Miller"
+    due_date_raw: null
+    status_inferred: open
+  - type: action
+    description: "Andrew Miller still needs to analyze the DStack web host threat model around co-tenant dev apps, side channels, and isolation modes."
+    source_quote: "that is like a threat model analysis, I think, still to do through this."
+    turn_ids: [105]
+    owner_raw_text: "Andrew Miller"
+    due_date_raw: null
+    status_inferred: open
+  - type: action
+    description: "Andrew Miller identified proprietary sandbox support with expressible limits as a natural next addition to the DStack web host."
+    source_quote: "It's only got the two modes that would be a natural next thing to add."
+    turn_ids: [108, 109]
+    owner_raw_text: "Andrew Miller"
+    due_date_raw: null
+    status_inferred: open
+  - type: commitment
+    description: "Hang Yin plans to make the service mesh repository publicly accessible soon."
+    source_quote: "it's still private. I will, I will very soon. I will market public access accessible"
+    turn_ids: [124]
+    owner_raw_text: "Hang Yin"
+    due_date_raw: "very soon"
+    status_inferred: open
+  - type: commitment
+    description: "Hang Yin plans to polish the service mesh repo, expose the dashboard, and share it in the DStack Telegram group."
+    source_quote: "once I have polished this repo more, and the dashboard is exposed, I think I'm going to share that with the in the Dstack Telegram group"
+    turn_ids: [126]
+    owner_raw_text: "Hang Yin"
+    due_date_raw: null
+    status_inferred: open
+  - type: commitment
+    description: "Hang Yin offered to discuss service mesh deployments and help people set them up."
+    source_quote: "if anyone wants who wants to run a cluster of the TES, we can discuss, so I can share my experience, and also like help you to set up the service mesh if you want."
+    turn_ids: [126]
+    owner_raw_text: "Hang Yin"
+    due_date_raw: null
+    status_inferred: open
+  - type: open_question
+    description: "Andrew Miller asked what minimal changes would allow smart-contract-gated policy for different DStack accounts joining a service mesh."
+    source_quote: "what's the minimal amount of changes to this as a starting point that would make it where you could have a smart contract gated policy"
+    turn_ids: [127, 128, 130]
+    owner_raw_text: "Andrew Miller and Hang Yin"
+    due_date_raw: null
+    status_inferred: resolved
+queries:
+  - q: "What was the intended format and goal of the DStack intro salon?"
+    intent: factoid
+    relevant_turn_ids: [7, 8, 36, 73]
+  - q: "How does DStack let a developer deploy an application to a trusted execution environment?"
+    intent: aggregate
+    relevant_turn_ids: [73, 75, 77]
+  - q: "How are Docker Compose, Jupyter Notebook, encrypted secrets, and KMS used in the demo?"
+    intent: relational
+    relevant_turn_ids: [36, 73, 75, 77]
+  - q: "How does DStack remote attestation work and what measurements are discussed?"
+    intent: aggregate
+    relevant_turn_ids: [73, 96, 119, 128, 130]
+  - q: "What DStack examples and deployment options did Hang Yin mention?"
+    intent: aggregate
+    relevant_turn_ids: [73, 75, 77]
+  - q: "What was Andrew Miller's DStack web host demo trying to solve?"
+    intent: factoid
+    relevant_turn_ids: [90, 96, 99, 105, 107, 119, 123]
+  - q: "What security concerns remain for multiplexing attested and dev-mode apps inside one CVM?"
+    intent: relational
+    relevant_turn_ids: [96, 105, 107, 119, 123]
+  - q: "What did Hang Yin show about private inference and GPU TEE attestation?"
+    intent: factoid
+    relevant_turn_ids: [38, 99, 124]
+  - q: "How is the DStack service mesh designed and deployed?"
+    intent: aggregate
+    relevant_turn_ids: [36, 38, 39, 46, 124, 126, 128, 130]
+  - q: "What follow-up work or commitments came out of the session?"
+    intent: temporal
+    relevant_turn_ids: [35, 85, 87, 88, 99, 101, 105, 108, 109, 124, 126, 127, 128, 130]

@@ -1,57 +1,201 @@
-# Hand-coded ground truth — Phase 3.5.0 (C2).
-#
-# Source transcript: "Project Intros Agents Day 3 Transcript_May_21.txt"
-# Shape (Survey §3 Step 1): project-intro
-#
-# This file is consumed by:
-#   - C3  bake-off harness  (Q1 extraction prompt shape — per-type F1)
-#   - C13 extraction regression  (within 5pp of bake-off F1)
-#   - C24 search NDCG@10 baseline  (Q3 reranker decision)
-#
-# Filled in C2. Empty stub committed in C1.
-#
-# Schema mirrors the v2 `obligations` + `entities` data model
-# (see KB-AND-GRAPH-ROADMAP-v2.md §3 "Data model").
-
 transcript: "Project Intros Agents Day 3 Transcript_May_21.txt"
-shape: project-intro
-
+shape: "technical-project-critiques"
 notes: |
-  TODO(C2): one-paragraph characterization — cohort, register, expected
-  entity density, anything the labeler should know that isn't obvious
-  from the transcript itself.
-
-# ---------------------------------------------------------------------------
-# entities
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: person | project | topic | company | tool
-#     canonical_name: "..."
-#     raw_mentions: ["...", "..."]   # surface forms as they appear
-#     turn_ids: [12, 47]             # turns where mentioned
-
-entities: []
-
-# ---------------------------------------------------------------------------
-# obligations  (single table, Q2 — type enum)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: action | decision | commitment | open_question | blocker
-#     description: "..."             # what the obligation is
-#     source_quote: "..."            # verbatim from transcript
-#     turn_ids: [...]
-#     owner_raw_text: "..."          # null if unowned
-#     due_date_raw: "..."            # null if absent
-#     status_inferred: open | resolved | unclear
-
-obligations: []
-
-# ---------------------------------------------------------------------------
-# queries  (5–10 per transcript; feeds C24 NDCG@10 eval set)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - q: "..."                       # the search query
-#     intent: factoid | aggregate | relational | temporal
-#     relevant_turn_ids: [...]       # gold-relevant turns (chunks)
-
-queries: []
+  A long cohort project-introduction session with four agent-infrastructure demos, dense technical exposition, and peer critique around context management, confidential cohort analytics, routing work-in-public exhaust, and durable AI workflow orchestration. The register is exploratory and product-oriented: presenters describe prototypes and adoption signals, while the room probes trust models, privacy policy, evaluation, GTM, workflow ergonomics, and next steps.
+entities:
+  - type: person
+    canonical_name: "Shashank"
+    raw_mentions: ["shashank"]
+    turn_ids: [9, 11, 13, 15, 17, 19, 21, 23, 25, 89, 91, 93, 95]
+  - type: person
+    canonical_name: "Prakhar"
+    raw_mentions: ["prakhar"]
+    turn_ids: [27, 29, 32, 34, 38, 40, 42, 44, 46, 50, 52, 54, 56, 58, 60, 76, 78, 80, 84]
+  - type: person
+    canonical_name: "Andrew Miller"
+    raw_mentions: ["Andrew Miller", "Andrew"]
+    turn_ids: [2, 6, 10, 18, 28, 75, 82, 86, 88, 90, 92, 96, 101, 104, 107, 109, 111, 114, 150]
+  - type: person
+    canonical_name: "James Barnes"
+    raw_mentions: ["James Barnes", "James"]
+    turn_ids: [1, 3, 8, 12, 16, 39, 41, 59, 64, 72, 74, 77, 79, 83, 97, 99, 116, 126, 128, 132, 136, 146, 148]
+  - type: person
+    canonical_name: "Kristel Alliksaar"
+    raw_mentions: ["Kristel Alliksaar", "Kristel"]
+    turn_ids: [7, 55, 57, 61, 81, 100, 130]
+  - type: person
+    canonical_name: "Dmarz"
+    raw_mentions: ["Dmarz"]
+    turn_ids: [22, 30, 33, 35, 37, 65]
+  - type: person
+    canonical_name: "Gonzo"
+    raw_mentions: ["gonzo"]
+    turn_ids: [43, 45, 47, 49, 51, 53, 66, 71, 110, 112]
+  - type: person
+    canonical_name: "Will"
+    raw_mentions: ["fucory", "Will"]
+    turn_ids: [67, 103, 105, 108, 117, 119, 121, 123, 125, 127, 129, 131, 133, 135, 137, 140, 143, 145, 149]
+  - type: person
+    canonical_name: "LSDan"
+    raw_mentions: ["LSDan"]
+    turn_ids: [4, 24, 63, 70, 85, 98, 120, 122, 124, 147]
+  - type: person
+    canonical_name: "Wiki"
+    raw_mentions: ["Wiki"]
+    turn_ids: [139, 141]
+  - type: project
+    canonical_name: "Context indexer and mindmap"
+    raw_mentions: ["indexer", "middleman", "mindmap", "Mindmap"]
+    turn_ids: [9]
+  - type: project
+    canonical_name: "Conclave"
+    raw_mentions: ["Conclave", "concrete"]
+    turn_ids: [27, 29, 32, 38, 40, 42, 46, 54, 56, 60, 76, 80, 84]
+  - type: project
+    canonical_name: "Router"
+    raw_mentions: ["router", "router project", "Router MCP server", "router write entry tool", "router dot teleport dot computer"]
+    turn_ids: [86, 88, 92, 96, 97, 98, 101, 104, 107, 109, 111, 112]
+  - type: project
+    canonical_name: "Smithers"
+    raw_mentions: ["Smithers", "SMITHERS", "Smithers' workflows", "SMITHERS skill", "Smith workflow"]
+    turn_ids: [119, 121, 123, 125, 127, 129, 131, 133, 135, 137, 140, 143, 145, 149]
+  - type: project
+    canonical_name: "JJ Hub"
+    raw_mentions: ["JJ Hub", "HotHub"]
+    turn_ids: [121, 143, 149]
+  - type: topic
+    canonical_name: "Context management"
+    raw_mentions: ["context", "context window", "sliding window", "retriever", "sub agents", "task decomposition"]
+    turn_ids: [9, 13, 15, 17, 19, 29, 131, 133, 135]
+  - type: topic
+    canonical_name: "Privacy and PII"
+    raw_mentions: ["PII", "personally identifiable information", "privacy", "private", "terms and conditions", "policy"]
+    turn_ids: [9, 10, 11, 25, 27, 49, 50, 52, 53, 54, 55, 56, 57, 60, 65, 72, 74, 76, 78, 80, 81, 84, 88]
+  - type: topic
+    canonical_name: "Cohort analytics"
+    raw_mentions: ["cohort", "cohort programs", "cohort organizer", "coordinators", "feedback loop", "weekly goals"]
+    turn_ids: [27, 32, 34, 38, 40, 41, 42, 46, 84, 86, 88, 100, 101]
+  - type: topic
+    canonical_name: "Hackathon novelty"
+    raw_mentions: ["hackathon novelty", "Habitat novelty", "novelty score", "Frontier hackathon"]
+    turn_ids: [27, 46]
+  - type: tool
+    canonical_name: "MCP"
+    raw_mentions: ["MCP", "NCP", "ACP"]
+    turn_ids: [12, 86, 88, 119, 129]
+  - type: tool
+    canonical_name: "React"
+    raw_mentions: ["React", "React workflow", "UI framework, React"]
+    turn_ids: [119, 121, 122]
+  - type: tool
+    canonical_name: "Codex"
+    raw_mentions: ["Codex", "code X", "codecs", "Connex"]
+    turn_ids: [131, 137, 140]
+  - type: tool
+    canonical_name: "Claude"
+    raw_mentions: ["Claude", "Claude code", "Clog Code", "Cloud Code", "clock code", "Claw"]
+    turn_ids: [13, 15, 119, 121, 140]
+  - type: company
+    canonical_name: "Phala"
+    raw_mentions: ["Phala"]
+    turn_ids: [56]
+  - type: company
+    canonical_name: "Solana"
+    raw_mentions: ["Solana"]
+    turn_ids: [27]
+obligations:
+  - type: decision
+    description: "The session will use roughly twenty-five minutes per project intro because there are four intros in a two-hour slot."
+    source_quote: "We have two hours for four project intros, so we should do the same, like 25 minute."
+    turn_ids: [6]
+    owner_raw_text: null
+    due_date_raw: null
+    status_inferred: "resolved"
+  - type: action
+    description: "Kristel will warn presenters when ten minutes have passed so they can start wrapping up."
+    source_quote: "let you know when the 10 minutes has passed, then you can start to back up next question."
+    turn_ids: [7]
+    owner_raw_text: "Kristel Alliksaar"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Shashank wants attendees to share agents and workflows so he can build a repository and connect useful workflows to people who need them."
+    source_quote: "I want to just have a repository of what people are building, so I could connect them as per their needs."
+    turn_ids: [9]
+    owner_raw_text: "I"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Shashank is looking for connections to people deeply building workflows for multi-agent systems and for technical or GTM critique."
+    source_quote: "if you have connections with someone else who's using for deeply building their workflows for the multi-agent systems that would be really helpful to talk to them, or just drilling me on tech or GTM would be helpful."
+    turn_ids: [9]
+    owner_raw_text: "you"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: blocker
+    description: "The OpenCloud sub-agent architecture cannot yet wait for a response, and the team is waiting on an open PR to make the workflow possible end-to-end."
+    source_quote: "we have an open PR on the repo, we're just getting some feedback, and hopefully, if that's merged, then I can do it fully into it."
+    turn_ids: [15]
+    owner_raw_text: "we"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Prakhar's next few weeks are focused on talking to cohort members, running feedback loops, and learning what information they will share publicly versus privately."
+    source_quote: "for the next few weeks, our main focus could be like talking to you guys, understanding what the influence you might feel and what you might be comfortable giving information to the public as compared to what information you might keep private to yourself"
+    turn_ids: [27]
+    owner_raw_text: "our main focus"
+    due_date_raw: "the next few weeks"
+    status_inferred: "open"
+  - type: action
+    description: "Prakhar needs to research earlier always-listening products and privacy reactions to answer the concern better."
+    source_quote: "I'll have to, I think, research more into it to understand how to answer that better."
+    turn_ids: [50]
+    owner_raw_text: "I"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Prakhar will ask each person what information can be used and in what ways, then derive person-specific policy."
+    source_quote: "I can ask them whether you're fine with putting this particular information or not, and whether you want to be used this way, and then a policy can be made for a particular person"
+    turn_ids: [84]
+    owner_raw_text: "I"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "LSDan will share the Smithers link."
+    source_quote: "Yeah, I'll share the link to the seller."
+    turn_ids: [147]
+    owner_raw_text: "I"
+    due_date_raw: null
+    status_inferred: "open"
+  - type: action
+    description: "Andrew says the group should wrap for yoga and notes the next day's tea, product-market-fit whiteboard session, and dinner schedule."
+    source_quote: "should wrap up for we have a yoga schedule session next... Tina's sessions on a whiteboard session about the fighting product market fit. We'll start at 430 tomorrow"
+    turn_ids: [150]
+    owner_raw_text: "we"
+    due_date_raw: "tomorrow"
+    status_inferred: "resolved"
+queries:
+  - q: "Which projects were introduced during the session, and who presented them?"
+    intent: "factoid"
+    relevant_turn_ids: [9, 27, 86, 119]
+  - q: "How does Shashank's context indexer and mindmap decide what context an agent should receive?"
+    intent: "relational"
+    relevant_turn_ids: [9, 13, 15, 17, 19, 25]
+  - q: "What does Conclave do for cohort programs and organizers?"
+    intent: "factoid"
+    relevant_turn_ids: [27, 29, 32, 34, 38, 40, 42, 46]
+  - q: "What privacy and trust questions were raised about Conclave?"
+    intent: "aggregate"
+    relevant_turn_ids: [49, 50, 52, 53, 54, 55, 56, 57, 60, 65, 72, 74, 76, 80, 81, 84]
+  - q: "What problems does the Router project solve for teams and public work logs?"
+    intent: "factoid"
+    relevant_turn_ids: [86, 88, 92, 96, 97, 98, 101, 107, 109, 111, 112]
+  - q: "How does Smithers provide durable workflow orchestration for agents?"
+    intent: "relational"
+    relevant_turn_ids: [119, 121, 123, 125, 127, 129]
+  - q: "What feedback did presenters receive about productization, business model, or GTM?"
+    intent: "aggregate"
+    relevant_turn_ids: [18, 30, 35, 37, 38, 91, 144, 145, 148, 149]
+  - q: "What follow-up actions and schedule items were mentioned near the end of the session?"
+    intent: "temporal"
+    relevant_turn_ids: [84, 145, 146, 147, 149, 150]
