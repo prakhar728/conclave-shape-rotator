@@ -1,64 +1,234 @@
 # Hand-coded ground truth — Phase 3.5.0 (C2).
 #
-# Source transcript: "Elocute Transcript May 26.txt"
-# Shape (Survey §3 Step 1): operational sync  (deviates from §3 "1-on-1";
-#   chosen for obligation-density to stress-test Q1 bake-off — rationale
-#   documented in C4 transcripts/EVAL.md)
+# Source transcript: "Elocute Transcript May 26.txt"  (139 parsed segments)
+#
+# C2 status: WORKED EXAMPLE filled in by Claude. The other two yamls
+# in this directory (project-intros-agents-day3, dstack-intro-salon)
+# are stubs awaiting human hand-coding using this file + CONVENTIONS.md
+# as the contract.
 #
 # This file is consumed by:
 #   - C3  bake-off harness  (Q1 extraction prompt shape — per-type F1)
 #   - C13 extraction regression  (within 5pp of bake-off F1)
 #   - C24 search NDCG@10 baseline  (Q3 reranker decision)
-#
-# Filled in C2. Empty stub committed in C1.
-#
-# Schema mirrors the v2 `obligations` + `entities` data model
-# (see KB-AND-GRAPH-ROADMAP-v2.md §3 "Data model").
 
 transcript: "Elocute Transcript May 26.txt"
-shape: operational-sync
+shape: ops-sync-then-pitches
 
 notes: |
-  TODO(C2): one-paragraph characterization — cohort, register, expected
-  entity density. Picked over a true 1-on-1 to give the eval set an
-  obligation-dense register (action items, owners, deadlines, blockers) —
-  the shape where Conclave's primary value prop lives and where Q1's
-  bake-off needs to discriminate. Cost of the deviation: §3 "1-on-1" is
-  not represented in the eval set; if Q1 results show prompt-shape
-  sensitivity to register, revisit by adding a true 1-on-1 transcript
-  in C2-or-later.
+  Hybrid register, decided after reading the file end-to-end:
+    turns   0– 22 — Andrew Miller running ops/logistics on the day's
+                    schedule (Christian, Chloe, Wiki travel; AV setup).
+    turns  21–111 — Albiona Hoti pitches Elocute (her articulation-
+                    practice app, 524 users, exploring monetization).
+                    Deep audience Q&A, dominated by LSDan + shawmakesmagic.
+    turns 112–138 — Wiki (wikigen) starts presenting; transcript cuts
+                    off mid-pitch around biotech data discovery.
+  Honest assessment: this is closer to project-intros register than the
+  "operational sync" label I gave it in C1. Kept anyway because (a) the
+  ops-sync opening exercises action-item extraction on real schedule
+  logistics, (b) the Albiona Q&A has obligation-dense feature-request
+  + monetization-decision content that Day-3 Agents doesn't show in the
+  same depth, (c) re-swapping would burn the C2 budget further.
 
-# ---------------------------------------------------------------------------
-# entities
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: person | project | topic | company | tool
-#     canonical_name: "..."
-#     raw_mentions: ["...", "..."]   # surface forms as they appear
-#     turn_ids: [12, 47]             # turns where mentioned
+# ===========================================================================
+# entities  — see CONVENTIONS.md §entities[] row schema
+# ===========================================================================
 
-entities: []
+entities:
+  - type: person
+    canonical_name: "Andrew Miller"
+    raw_mentions: ["Andrew Miller"]
+    turn_ids: [0, 1, 2, 3, 5, 8, 9, 10, 13, 14, 17, 18, 52, 112, 114, 117, 121, 123, 127, 128, 131, 133, 134, 136]
 
-# ---------------------------------------------------------------------------
-# obligations  (single table, Q2 — type enum)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - type: action | decision | commitment | open_question | blocker
-#     description: "..."             # what the obligation is
-#     source_quote: "..."            # verbatim from transcript
-#     turn_ids: [...]
-#     owner_raw_text: "..."          # null if unowned
-#     due_date_raw: "..."            # null if absent
-#     status_inferred: open | resolved | unclear
+  - type: person
+    canonical_name: "Albiona Hoti"
+    raw_mentions: ["Albiona Hoti", "Albiona"]
+    turn_ids: [11, 19, 21, 22, 24, 26, 28, 29, 30, 31, 33, 40, 42, 44, 46, 51, 53, 55, 57, 61, 63, 65, 67, 69, 76, 78, 80, 82, 84, 86, 88, 91, 93, 98, 100, 102, 105, 107, 109]
 
-obligations: []
+  - type: person
+    canonical_name: "Wiki"
+    raw_mentions: ["Wiki"]
+    turn_ids: [7, 12, 35, 113, 116, 118, 120, 122, 124, 126, 129, 137]
 
-# ---------------------------------------------------------------------------
-# queries  (5–10 per transcript; feeds C24 NDCG@10 eval set)
-# ---------------------------------------------------------------------------
-# Each entry:
-#   - q: "..."                       # the search query
-#     intent: factoid | aggregate | relational | temporal
-#     relevant_turn_ids: [...]       # gold-relevant turns (chunks)
+  - type: person
+    canonical_name: "LSDan"
+    raw_mentions: ["LSDan"]
+    turn_ids: [25, 27, 37, 39, 48, 50, 54, 56, 58, 60, 62, 64, 66, 68, 73, 108, 111]
 
-queries: []
+  - type: person
+    canonical_name: "Kristel Alliksaar"
+    raw_mentions: ["Kristel Alliksaar"]
+    turn_ids: [16, 41, 72, 95, 97, 104, 106, 119]
+
+  - type: person
+    canonical_name: "Shaw Walters"
+    raw_mentions: ["shawmakesmagic"]
+    turn_ids: [34, 36, 38, 43, 45, 47, 74, 75, 92, 94, 96, 99]
+
+  - type: person
+    canonical_name: "Christian"
+    raw_mentions: ["Christian"]
+    turn_ids: [0, 1]
+
+  - type: person
+    canonical_name: "Chloe"
+    raw_mentions: ["Chloe"]
+    turn_ids: [3, 8]
+
+  - type: project
+    canonical_name: "Elocute"
+    raw_mentions: ["Elocute", "elocute"]
+    turn_ids: [21, 24, 51, 80, 86]
+
+  - type: project
+    canonical_name: "Wikigen"
+    raw_mentions: ["wiki gen site", "wikigen", "Wiki Gen"]
+    turn_ids: [123, 126]
+
+  - type: project
+    canonical_name: "How They See You"
+    raw_mentions: ["How they see you", "Howell Base Ace"]
+    turn_ids: [76, 80]
+    # Albiona's next planned app — posture/conviction-score companion to Elocute.
+    # raw_mentions includes "Howell Base Ace" which is a related earlier marketing
+    # artefact she described; she conflates the two on the call.
+
+  - type: topic
+    canonical_name: "MCP"
+    raw_mentions: ["MCP", "MCP journey"]
+    turn_ids: [40]
+
+  - type: topic
+    canonical_name: "monetization"
+    raw_mentions: ["monetization", "wall for payments", "pay for", "subscriptions"]
+    turn_ids: [29, 31, 39, 48, 54, 56, 58, 60, 65]
+
+  - type: topic
+    canonical_name: "TEE (trusted execution environment)"
+    raw_mentions: ["TE version", "TE", "Phala"]
+    turn_ids: [60]
+
+  - type: company
+    canonical_name: "Tools Masters Club"
+    raw_mentions: ["Tools Masters Club"]
+    turn_ids: [21]
+
+# ===========================================================================
+# obligations  — Q2 single table with type enum.
+# See CONVENTIONS.md §obligations[] row schema.
+# ===========================================================================
+
+obligations:
+  # ---- ops-sync section (turns 0–22) -------------------------------------
+  - type: action
+    description: "Andrew Miller will adjust the day's presenter schedule given Christian's absence and Chloe's remote/family situation — defer presenters who aren't ready and continue with whoever is."
+    source_quote: "Abby was number three on the schedule. Ali is still rendering her slides, and Christian is not present yet, and Chloe hasn't joined, so you know, I guess maybe you're helping whoever is ready first."
+    turn_ids: [8]
+    owner_raw_text: "Andrew Miller"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: commitment
+    description: "Wiki will email logistics for his flight to New York and stay in touch about scheduling his presentation."
+    source_quote: "I'm trying to get to New York, though, so I'll just keep in touch by email, and then with presenting, if I have a little bit notice of when I'm put on the schedule, that'll also be really good."
+    turn_ids: [7]
+    owner_raw_text: "Wiki"
+    due_date_raw: null
+    status_inferred: open
+
+  # ---- Albiona's Elocute pitch + Q&A (turns 22–111) ----------------------
+  - type: decision
+    description: "Albiona has set Elocute as her top priority for the Shape Rotator cohort."
+    source_quote: "I'm going to, for this cohort, the main goal is, the top priority is Elocute app, which is an articulation, like practicing your articulation in like two to three minutes period of time."
+    turn_ids: [21]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: decision
+    description: "Albiona's monetization plan: ship the free version, get users hooked, then introduce a paywall in a redesigned version."
+    source_quote: "My next process is going from people using something to needing something, and then adding a wall for payments there."
+    turn_ids: [31]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: open_question
+    description: "How can Albiona grow Elocute's user base — content positioning, finding indexable channels (e.g. subreddits)? She names this explicitly as her current bottleneck."
+    source_quote: "My current bottom left is, how can I talk more about the app? How can I get more users? How can I position the app to be found by people who actually index?"
+    turn_ids: [24]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: action
+    description: "Albiona will build MCP integration for Elocute so users can practice articulation via their existing LLM chat threads."
+    source_quote: "I will definitely do it right away, because I can get immediately people more like chatting to the whole LLMs and be like all the topics that they want to practice."
+    turn_ids: [40]
+    owner_raw_text: "Albiona Hoti"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: commitment
+    description: "LSDan would pay for Elocute if he could upload his own pitch text (dynamic, written) and practice on it."
+    source_quote: "I would pay for what it's worth, for first of all being put in my own pocket, and then maybe I'll set up a CTE server that subjects related to what I'm talking about, so that I can speak intelligently about such related to the product."
+    turn_ids: [39]
+    owner_raw_text: "LSDan"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: commitment
+    description: "LSDan would also pay for narrower metrics and for higher usage caps over time."
+    source_quote: "I'm probably willing to pay for the more narrow metrics, so more specific metrics, I'm also probably willing to pay for more use."
+    turn_ids: [48]
+    owner_raw_text: "LSDan"
+    due_date_raw: null
+    status_inferred: open
+
+  - type: open_question
+    description: "How do you actually enforce discipline — i.e. follow through on a decision once made — when it's tempting to drift into already-comfortable areas? Raised by Kristel; not resolved on call."
+    source_quote: "You have decided something, but now I'm actually acting differently. What I was deciding, this is super important to put this detector in place, but how, how do we really do it?"
+    turn_ids: [41]
+    owner_raw_text: null
+    due_date_raw: null
+    status_inferred: open
+
+  # ---- Wiki's wikigen pitch (turns 112–138, cut off) ---------------------
+  - type: blocker
+    description: "Wiki's screen-share / projection laptop ran out of power mid-presentation; the AV setup is unable to render his slides for several minutes."
+    source_quote: "Our little presentation laptop just ran out of power, despite being plugged in. I don't know, it rung with a second."
+    turn_ids: [128]
+    owner_raw_text: "Andrew Miller"
+    due_date_raw: null
+    status_inferred: resolved
+
+# ===========================================================================
+# queries  — feeds C24 NDCG@10 (Q3 reranker decision).
+# See CONVENTIONS.md §queries[] row schema.
+# ===========================================================================
+
+queries:
+  - q: "What is Albiona's main bottleneck for Elocute?"
+    intent: factoid
+    relevant_turn_ids: [24]
+
+  - q: "How does Albiona plan to monetize Elocute?"
+    intent: aggregate
+    relevant_turn_ids: [29, 31, 51, 53]
+
+  - q: "What features would LSDan pay for in Elocute?"
+    intent: aggregate
+    relevant_turn_ids: [39, 48, 54, 56]
+
+  - q: "Why did Wiki ask to defer his presentation?"
+    intent: factoid
+    relevant_turn_ids: [7]
+
+  - q: "What is Albiona's next product idea after Elocute?"
+    intent: temporal
+    relevant_turn_ids: [76, 78, 80]
+
+  - q: "How are MCP and Elocute related?"
+    intent: relational
+    relevant_turn_ids: [40]

@@ -19,11 +19,13 @@ scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
 !tests/fixtures/voxterm_session.json
-# Phase 3.5.0: track ground-truth yamls (the contract for C3/C13/C24);
-# the transcripts they cite stay ignored — share locally / via non-git path.
+# Phase 3.5.0: track ground-truth yamls (the contract for C3/C13/C24)
+# and reference .md docs (CONVENTIONS, etc.); the transcripts they cite
+# stay ignored — share locally / via non-git path.
 !tests/fixtures/transcripts/
 tests/fixtures/transcripts/*
 !tests/fixtures/transcripts/*.expected.yaml
+!tests/fixtures/transcripts/*.md
 .agents/
 skills-lock.json
 data/*.db
