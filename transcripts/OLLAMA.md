@@ -1,7 +1,20 @@
 # Ollama prereqs for the 3.5 KB pipeline
 
 > Phase 3.5.0 C2.5 (see discoveries/KB-AND-GRAPH-BUILD-PLAN.md).
-> Captured 2026-06-03.
+> Captured 2026-06-03. **Corrected during C3** — see "Backend reality
+> check" below.
+
+## Backend reality check (C3 correction)
+
+The LLM table below describes the **`CONCLAVE_LLM_BACKEND=ollama`
+(local dev)** path. The repo's `.env` currently sets
+`CONCLAVE_LLM_BACKEND=redpill`, so `config.get_llm()` actually serves
+**RedPill (Phala TEE-hosted) `google/gemma-3-27b-it`** — the same
+backend v1 production enrichment uses. The C3 bake-off ran on this
+backend, which is the right call: Q1's locked prompt shape should be
+chosen on the model that will run it in production. The Ollama models
+below remain the local/offline path and the embedding stack (C8/C23)
+is Ollama-served regardless of LLM backend.
 
 ## What the pipeline needs
 

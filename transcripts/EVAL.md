@@ -1,0 +1,162 @@
+# EVAL.md — Phase 3.5 decision records
+
+> **This file is a real artifact, not a scratch file** (BUILD-PLAN ground
+> rule 7). It accrues decision records: C4 (locked prompt shape + F1),
+> C24 (NDCG@10 baseline), C25 (reranker decision), C36 (smoke journey),
+> C39 (final perf budgets). Each append is a decision record with
+> numbers. Future-you reads this when something needs re-evaluation.
+>
+> Distinct from `transcripts/eval/EVAL_v2.2.md` (v1 enrichment-prompt
+> eval) — this file covers the Phase 3.5 KB pipeline.
+
+---
+
+## C4 — Q1 extraction prompt shape (2026-06-03)
+
+### Decision
+
+**Q1 LOCKED: `one_prompt`** — one schema-guided extraction call per
+chunk emitting entities + all five obligation types (Survey D14
+Primary). per_type is rejected: it costs ~6× per meeting at ingest and
+scored *worse* on the headline metric (macro-F1 0.10 vs 0.12), worse
+type-agnostic (0.14 vs 0.22), and worse on entities (0.45 vs 0.50).
+
+**With a mandatory caveat triggered by the pre-registered rule:** both
+arms scored below the 0.25 usability floor. Extraction prompts MUST be
+iterated before C13 productionizes them (see "Why absolute F1 is low"
+— part eval-design artifact, part real quality gap). C13's regression
+test should be re-baselined after prompt iteration, not pinned to
+these numbers.
+
+### Eval set provenance
+
+3 transcripts from the May-2026 Shape Rotator cohort fixtures, pinned in
+C1 (commit d3c3680, Elocute swap 24c9380):
+
+| slug | transcript | shape | gold counts (e/o/q) |
+|---|---|---|---|
+| project-intros-agents-day3 | Project Intros Agents Day 3 (May 21) | technical-project-critiques | 25 / 10 / 8 |
+| dstack-intro-salon | Dstack Intro Salon (May 20) | technical-demo-salon | 32 / 10 / 10 |
+| elocute | Elocute (May 26) | founder-demo-feedback | 15 / 8 / 10 |
+
+**Ground truth is Codex-labelled** (C2.7, commit 07785fc): OpenAI Codex
+CLI (gpt-5.5, reasoning=high) labelled each transcript from the
+bare-schema `tests/fixtures/transcripts/LABELER_PROMPT.md` with no
+worked examples and no access to other yamls. Rationale: GPT-family
+ground truth is cross-family from BOTH the extractor being graded AND
+the (Claude) prompt author — breaks the self-grading loop without
+requiring ~6h of human annotation.
+
+**The standing caveat that inherits to every consumer of these
+fixtures:** F1 against this ground truth measures *agreement with
+Codex*, not accuracy against human judgment. Relative comparisons
+(prompt shape A vs B on the same truth) are sound; absolute numbers
+should never be quoted as extraction accuracy. If a customer-facing
+accuracy claim is ever needed, re-code the eval set with human
+annotators first (Q7 wedge re-code is the natural moment).
+
+Cross-validation note: a discarded independent hand-labelling of
+elocute (Claude, commit 59829a9) converged with Codex on the anchor
+obligations (Wiki email commitment t7, MCP integration action t40,
+monetization decision t29/31), which is the best available signal that
+the Codex labels are not idiosyncratic.
+
+### Bake-off methodology
+
+- Script: `scripts/eval_extraction_bakeoff.py`; logic in
+  `transcripts/extract_bakeoff.py` (strategies) +
+  `transcripts/eval_bakeoff.py` (scoring).
+- **Strategies:** `one_prompt` (1 call/chunk emitting entities + all 5
+  obligation types; Survey D14 Primary) vs `per_type` (1 entities call
+  + 5 per-type calls per chunk; D14 Fallback, ~6× cost).
+- **Model/backend:** RedPill (Phala TEE-hosted) `google/gemma-3-27b-it`
+  — the v1 production backend (`CONCLAVE_LLM_BACKEND=redpill` in .env).
+  Deviation from roadmap §3.5a.4's nominal qwen2.5:14b is deliberate:
+  the locked prompt shape should be chosen on the model that will run
+  it in production. (See `transcripts/OLLAMA.md` "Backend reality
+  check".)
+- **Chunking:** turn-id-annotated turns packed to ~4k heuristic tokens,
+  2-turn overlap (`extract_bakeoff.chunk_turns`). Turn ids rendered as
+  `[N] speaker: text`; the model echoes them back.
+- **Matching (fuzzy by necessity):** greedy one-to-one assignment;
+  obligation pair score = 0.7 × token-set Jaccard on description +
+  0.3 × turn-id Jaccard, threshold 0.35; matched within same-type
+  buckets for per-type F1, plus a type-agnostic pass to expose pure
+  type-confusion cost. Entities matched type-agnostically on max name
+  similarity across canonical + surface forms (exact=1.0,
+  containment=0.9, else token-set), threshold 0.5.
+- **Headline metric:** obligation macro-F1 over types with gold
+  support. Tie-breakers: entity F1, then cost (per_type must clearly
+  win to justify ~6× ingest calls).
+
+### Results
+
+Full tables in `tests/fixtures/transcripts/bakeoff_results.md`
+(re-scored after fixing a punctuation-insensitivity bug in the
+token-set matcher; predictions dumped to
+`bakeoff_predictions_*.json`, re-scorable via `--rescore`).
+
+Aggregate (all transcripts pooled):
+
+| metric | one_prompt | per_type |
+|---|---|---|
+| obligation F1: action (n=16) | 0.11 | 0.20 |
+| obligation F1: decision (n=1) | 0.00 | 0.00 |
+| obligation F1: commitment (n=7) | 0.00 | 0.20 |
+| obligation F1: open_question (n=3) | 0.00 | 0.04 |
+| obligation F1: blocker (n=1) | 0.50 | 0.05 |
+| **obligation macro-F1** | **0.12** | **0.10** |
+| obligation F1 (type-agnostic) | 0.22 | 0.14 |
+| entity F1 | 0.50 | 0.45 |
+
+Wall-clock per transcript (RedPill gemma-3-27b): one_prompt 164–339s,
+per_type 372–726s. Volume: one_prompt emitted 22–47 obligations per
+transcript, per_type 58–88 (gold: 8–10) — per_type's per-type prompts
+each re-harvest the chunk, multiplying over-extraction.
+
+### Why absolute F1 is low (diagnosis, not excuse)
+
+1. **Granularity mismatch (largest factor).** Codex's gold labels are
+   *consolidated*: one obligation spanning 5–9 turns ("Albiona needs a
+   callback/onboarding loop — email, SMS, dashboard"), 8–10 per
+   transcript. The extractor emits *granular* per-turn obligations
+   (20–47), often correct in content but fragmented. Greedy 1:1
+   matching counts every fragment beyond the first as a false
+   positive. Verified by spot-check: the extractor DID find the
+   email/SMS onboarding obligation, the MCP action (t40), the Wiki
+   flight-dates commitment (t7) — they match gold semantically but
+   are sliced differently.
+2. **Type confusion.** Type-agnostic F1 nearly doubles one_prompt's
+   score (0.12 → 0.22): the extractor finds obligations but labels
+   action/commitment/decision differently than Codex. Consistent with
+   Survey T2's warning that these labels have low inter-annotator
+   agreement — Codex and gemma are effectively two annotators
+   disagreeing.
+3. **Gold sparsity.** 28 obligations across 3 transcripts is thin;
+   single-instance types (decision n=1, blocker n=1) make those
+   per-type F1 cells coin-flips.
+
+Implications for C13: (a) add consolidation instructions to the locked
+one_prompt shape (merge repeated obligations before emitting), (b)
+consider scoring matches at type-agnostic level for regression
+purposes with type-accuracy as a separate metric, (c) re-baseline
+after prompt iteration.
+
+### What would change the decision
+
+per_type's only wins were action (0.20 vs 0.11) and commitment (0.20
+vs 0.00) — both drowned by its precision collapse elsewhere and 6×
+cost. If C13's prompt iteration hits a ceiling on action/commitment
+recall specifically, a *hybrid* (one_prompt + one targeted commitment
+pass) is the first escalation, not full per_type.
+
+### Decision rule (pre-registered)
+
+Committed before seeing numbers, to keep the call honest:
+
+- per_type wins **only if** its obligation macro-F1 beats one_prompt
+  by ≥ 0.10 — the ~6× ingest cost needs a visible quality gap.
+- Anything less → **one_prompt** (cheaper, simpler, one schema).
+- If both macro-F1 < 0.25: neither shape is usable as-is → fall back
+  to one_prompt + manual review tooling per BUILD-PLAN "When something
+  deviates", and revisit prompts before C13.
