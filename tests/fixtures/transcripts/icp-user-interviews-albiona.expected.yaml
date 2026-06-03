@@ -1,0 +1,59 @@
+# Hand-coded ground truth — Phase 3.5.0 (C2).
+#
+# Source transcript: "Ideal Customer Profiling User Interviews Transcript from Albiona.txt"
+# Shape (Survey §3 Step 1): one-on-one  (user interview register)
+#
+# This file is consumed by:
+#   - C3  bake-off harness  (Q1 extraction prompt shape — per-type F1)
+#   - C13 extraction regression  (within 5pp of bake-off F1)
+#   - C24 search NDCG@10 baseline  (Q3 reranker decision)
+#
+# Filled in C2. Empty stub committed in C1.
+#
+# Schema mirrors the v2 `obligations` + `entities` data model
+# (see KB-AND-GRAPH-ROADMAP-v2.md §3 "Data model").
+
+transcript: "Ideal Customer Profiling User Interviews Transcript from Albiona.txt"
+shape: one-on-one
+
+notes: |
+  TODO(C2): one-paragraph characterization — cohort, register, expected
+  entity density, anything the labeler should know that isn't obvious
+  from the transcript itself. Obligation-light by nature (interview
+  register); expect extraction quality to be tested by graceful
+  degradation rather than recall on a dense obligation deck.
+
+# ---------------------------------------------------------------------------
+# entities
+# ---------------------------------------------------------------------------
+# Each entry:
+#   - type: person | project | topic | company | tool
+#     canonical_name: "..."
+#     raw_mentions: ["...", "..."]   # surface forms as they appear
+#     turn_ids: [12, 47]             # turns where mentioned
+
+entities: []
+
+# ---------------------------------------------------------------------------
+# obligations  (single table, Q2 — type enum)
+# ---------------------------------------------------------------------------
+# Each entry:
+#   - type: action | decision | commitment | open_question | blocker
+#     description: "..."             # what the obligation is
+#     source_quote: "..."            # verbatim from transcript
+#     turn_ids: [...]
+#     owner_raw_text: "..."          # null if unowned
+#     due_date_raw: "..."            # null if absent
+#     status_inferred: open | resolved | unclear
+
+obligations: []
+
+# ---------------------------------------------------------------------------
+# queries  (5–10 per transcript; feeds C24 NDCG@10 eval set)
+# ---------------------------------------------------------------------------
+# Each entry:
+#   - q: "..."                       # the search query
+#     intent: factoid | aggregate | relational | temporal
+#     relevant_turn_ids: [...]       # gold-relevant turns (chunks)
+
+queries: []
