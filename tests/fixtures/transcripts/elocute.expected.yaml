@@ -1,7 +1,9 @@
 # Hand-coded ground truth — Phase 3.5.0 (C2).
 #
-# Source transcript: "Ideal Customer Profiling User Interviews Transcript from Albiona.txt"
-# Shape (Survey §3 Step 1): one-on-one  (user interview register)
+# Source transcript: "Elocute Transcript May 26.txt"
+# Shape (Survey §3 Step 1): operational sync  (deviates from §3 "1-on-1";
+#   chosen for obligation-density to stress-test Q1 bake-off — rationale
+#   documented in C4 transcripts/EVAL.md)
 #
 # This file is consumed by:
 #   - C3  bake-off harness  (Q1 extraction prompt shape — per-type F1)
@@ -13,15 +15,18 @@
 # Schema mirrors the v2 `obligations` + `entities` data model
 # (see KB-AND-GRAPH-ROADMAP-v2.md §3 "Data model").
 
-transcript: "Ideal Customer Profiling User Interviews Transcript from Albiona.txt"
-shape: one-on-one
+transcript: "Elocute Transcript May 26.txt"
+shape: operational-sync
 
 notes: |
   TODO(C2): one-paragraph characterization — cohort, register, expected
-  entity density, anything the labeler should know that isn't obvious
-  from the transcript itself. Obligation-light by nature (interview
-  register); expect extraction quality to be tested by graceful
-  degradation rather than recall on a dense obligation deck.
+  entity density. Picked over a true 1-on-1 to give the eval set an
+  obligation-dense register (action items, owners, deadlines, blockers) —
+  the shape where Conclave's primary value prop lives and where Q1's
+  bake-off needs to discriminate. Cost of the deviation: §3 "1-on-1" is
+  not represented in the eval set; if Q1 results show prompt-shape
+  sensitivity to register, revisit by adding a true 1-on-1 transcript
+  in C2-or-later.
 
 # ---------------------------------------------------------------------------
 # entities
