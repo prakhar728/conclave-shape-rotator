@@ -14,7 +14,12 @@ venv/
 /plan
 /plans/
 eval_results/
-scripts/
+# Phase 3.5.0 C3+: scripts/ stays ignored by default but eval-harness
+# CLIs are real artifacts. Negation needs the dir-then-contents dance:
+# a bare "scripts/" would stop git from descending at all.
+!scripts/
+scripts/*
+!scripts/eval_extraction_bakeoff.py
 !alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
