@@ -329,3 +329,23 @@ export const kb = {
     );
   },
 };
+
+// --- Hybrid search (Phase 3.5c) ---------------------------------------------
+
+export type SearchResult = {
+  chunk_id: string;
+  session_id: string;
+  score: number;
+  snippet: string;
+  context_header: string | null;
+  turn_ids: number[];
+  meeting: { session_id: string; date: string | null; summary: string | null };
+};
+
+export const search = {
+  query: (workspaceId: string, query: string, topK = 20) =>
+    apiFetch<{ results: SearchResult[] }>(
+      `/api/workspaces/${workspaceId}/search`,
+      { method: "POST", body: JSON.stringify({ query, top_k: topK }) },
+    ),
+};

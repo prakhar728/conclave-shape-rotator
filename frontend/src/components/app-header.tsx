@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import { SearchBox } from "@/components/search-box";
 import { Wordmark } from "@/components/wordmark";
 import { auth, type User, type Workspace } from "@/lib/api";
 
@@ -48,6 +49,7 @@ export function AppHeader({
         ) : null}
       </div>
       <div className="flex items-center gap-4">
+        {workspace ? <SearchBox workspaceId={workspace.id} /> : null}
         <Link
           href="/entities"
           className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
