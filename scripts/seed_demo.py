@@ -50,11 +50,19 @@ def main() -> int:
 
     rc = 0
     for sid in DEMO_IDS:
-        if store.load_session(sid) is None:
+        session = store.load_session(sid)
+        if session is None:
             print(f"[skip] {sid}: not seeded (run alembic upgrade head; "
                   "fixture transcripts must be present)")
             rc = 1
             continue
+        # v1 enrichment FIRST — the meeting detail page renders summary/
+        # signals/entity-chips from `derived`, which 0009 seeds empty.
+        # (Found by manual QA 2026-06-04: demo meeting pages were bare.)
+        if not (session.derived and session.derived.summary):
+            from transcripts.enrich import enrich_pending
+            report = enrich_pending(session_id=sid)
+            print(f"[enrich] {sid}: {report}")
         m = index_session(sid, with_headers=args.headers)
         if not m:
             print(f"[fail] {sid}: indexing failed")
