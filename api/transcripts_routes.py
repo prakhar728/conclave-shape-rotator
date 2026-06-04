@@ -605,6 +605,15 @@ def _enrich_in_background(session_id: str) -> None:
     except Exception:
         logger.exception("kb indexing failed for session %s", session_id)
 
+    # Phase 3.5b — KB extraction: extract → importance → ER → upsert.
+    # Behind ENABLE_KB_PIPELINE (default off): extract_session() is a no-op
+    # unless the flag is set, so rollback is one env-var flip, not a revert.
+    try:
+        from transcripts.kb_extract import extract_session
+        extract_session(session_id)
+    except Exception:
+        logger.exception("kb extraction failed for session %s", session_id)
+
 
 def _send_attendee_magic_links(session_id: str) -> None:
     """Issue + send magic links to every meeting_shares row for this session.
