@@ -160,3 +160,32 @@ Committed before seeing numbers, to keep the call honest:
 - If both macro-F1 < 0.25: neither shape is usable as-is → fall back
   to one_prompt + manual review tooling per BUILD-PLAN "When something
   deviates", and revisit prompts before C13.
+
+---
+
+## C13 — extraction prompt re-baseline (2026-06-04)
+
+The consolidation + entity-discipline iteration mandated by the C4
+usability-floor trigger, measured as bake-off strategy `one_prompt_v2`
+(same chunking as the original arms; full tables in
+`tests/fixtures/transcripts/bakeoff_results_v2.md`):
+
+| metric | one_prompt (C4) | one_prompt_v2 (C13) |
+|---|---|---|
+| entity F1 | 0.50 | **0.62** |
+| obligation F1, type-agnostic | 0.22 | **0.26** |
+| obligation macro-F1 (per-type) | 0.12 | 0.03 |
+
+Reading: the prompt iteration improved *what gets found* (entities,
+obligations-as-content) and worsened per-type label agreement with
+Codex — consistent with Survey T2 (action/commitment/decision labels
+have low inter-annotator agreement; Codex and gemma are two annotators
+disagreeing). Per implication (b) recorded at C4, the regression
+baseline is therefore pinned on the metrics that reflect user-visible
+quality:
+
+**C27 regression baseline: type-agnostic obligation F1 ≥ 0.21,
+entity F1 ≥ 0.55** (C13 numbers minus 0.05 slack). Per-type
+macro-F1 is reported but non-blocking. Type-accuracy-given-match is
+the metric to watch when revisiting D13 (five tables vs enum) at the
+two-annotator-agreement trigger.
