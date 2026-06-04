@@ -23,11 +23,7 @@ export function SearchBox({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    if (!q.trim()) {
-      setResults(null);
-      setOpen(false);
-      return;
-    }
+    if (!q.trim()) return; // clearing is handled in onChange, not here
     timer.current = setTimeout(async () => {
       try {
         const resp = await search.query(workspaceId, q.trim(), 5);
@@ -63,7 +59,14 @@ export function SearchBox({ workspaceId }: { workspaceId: string }) {
     <div ref={boxRef} className="relative hidden md:block">
       <input
         value={q}
-        onChange={(e) => setQ(e.target.value)}
+        onChange={(e) => {
+          const v = e.target.value;
+          setQ(v);
+          if (!v.trim()) {
+            setResults(null);
+            setOpen(false);
+          }
+        }}
         onKeyDown={(e) => {
           if (e.key === "Enter") goToFullSearch();
           if (e.key === "Escape") setOpen(false);

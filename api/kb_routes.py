@@ -483,6 +483,105 @@ def search_workspace(
     return {"results": results}
 
 
+# ---------------------------------------------------------------------------
+# v1.5 — /ask: grounded answer synthesis (ONE LLM call, flag-gated)
+# ---------------------------------------------------------------------------
+
+import os as _os
+
+
+def ask_enabled() -> bool:
+    return _os.environ.get("ENABLE_ASK", "").strip().lower() in ("1", "true", "yes")
+
+
+class AskBody(BaseModel):
+    question: str = Field(min_length=3, max_length=500)
+
+
+@router.post("/{workspace_id}/ask")
+def ask_workspace(
+    workspace_id: str,
+    body: AskBody,
+    user: dict = Depends(require_current_user),
+):
+    """Natural-language Q&A over the caller's meetings.
+
+    Context assembly = the existing hybrid search (chunks) + current
+    obligations, BOTH through the same visibility filter as every other
+    route; then ONE synthesis call via config.get_llm() (RedPill =
+    TEE-served by default — no third-party API). Disabled unless
+    ENABLE_ASK is set: the default deployment keeps the strict
+    no-LLM-on-query-path posture.
+    """
+    if not ask_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
+    _require_member(workspace_id, user["id"])
+    sids = _visible_session_ids(workspace_id, user)
+    if not sids:
+        from transcripts.answer import NOT_FOUND_ANSWER
+        return {"answer": NOT_FOUND_ANSWER, "citations": [], "grounded": False}
+
+    # --- context: chunks via the same hybrid legs as /search -------------
+    from infra.rrf import rrf_fuse
+    from storage import kb
+
+    fts_hits = kb.fts_search_chunks(body.question, limit=30, session_ids=sids)
+    vec_hits: list[dict] = []
+    try:
+        from transcripts.embed import embed_texts
+        qvec = embed_texts([body.question], kind="query")[0]
+        vec_hits = kb.vec_search_chunks(qvec, k=30, session_ids=sids)
+    except Exception:  # noqa: BLE001 — embedder down → lexical-only context
+        pass
+    fused = rrf_fuse([
+        [h["chunk_id"] for h in fts_hits],
+        [h["chunk_id"] for h in vec_hits],
+    ])[:8]
+
+    from storage.sqlite import _get_conn
+    chunks: list[dict] = []
+    if fused:
+        ids = [cid for cid, _ in fused]
+        qs = ",".join("?" * len(ids))
+        rows = _get_conn().execute(
+            f"SELECT id, session_id, text, context_header FROM chunks WHERE id IN ({qs})",
+            ids,
+        ).fetchall()
+        by_id = {r["id"]: r for r in rows}
+        chunks = [
+            {"chunk_id": cid, "session_id": by_id[cid]["session_id"],
+             "text": by_id[cid]["text"],
+             "context_header": by_id[cid]["context_header"]}
+            for cid, _ in fused if cid in by_id
+        ]
+
+    # --- context: obligations, ranked by term overlap with the question ---
+    from storage import kb_graph
+    q_terms = {t for t in body.question.lower().split() if len(t) > 3}
+    scored = []
+    for o in kb_graph.current_obligations(session_ids=sids):
+        hay = f"{o['description']} {o.get('owner_raw_text') or ''}".lower()
+        overlap = sum(1 for t in q_terms if t in hay)
+        if overlap:
+            scored.append((overlap, o.get("importance") or 0, o))
+    scored.sort(key=lambda t: (-t[0], -t[1]))
+    obligations = [o for _, _, o in scored[:10]]
+
+    # --- ONE synthesis call ------------------------------------------------
+    from transcripts.answer import answer_question
+    from transcripts.llm import LLMUnavailable
+    try:
+        result = answer_question(body.question, chunks, obligations)
+    except LLMUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"answer model unavailable: {exc}")
+
+    return {
+        "answer": result.answer,
+        "citations": result.citations,
+        "grounded": result.grounded,
+    }
+
+
 @router.get("/{workspace_id}/obligations/{obligation_id}")
 def obligation_detail(
     workspace_id: str,
