@@ -198,6 +198,93 @@ def list_obligations(
     return {"obligations": rows}
 
 
+# ---------------------------------------------------------------------------
+# C23 — hybrid search (BM25 + dense, RRF-fused)
+# ---------------------------------------------------------------------------
+
+from pydantic import BaseModel, Field
+
+
+class SearchBody(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    top_k: int = Field(default=20, ge=1, le=200)
+
+
+@router.post("/{workspace_id}/search")
+def search_workspace(
+    workspace_id: str,
+    body: SearchBody,
+    user: dict = Depends(require_current_user),
+):
+    """Hybrid chunk search: FTS5 BM25 + sqlite-vec dense, fused via RRF.
+
+    Query path is LLM-free (operator-blind): one local nomic embedding
+    of the query + two SQLite index scans + ~20 lines of fusion math.
+    Dense degrades gracefully to BM25-only when the embedder is down.
+    """
+    _require_member(workspace_id, user["id"])
+    sids = _visible_session_ids(workspace_id, user)
+    if not sids:
+        return {"results": []}
+
+    from infra.rrf import rrf_fuse
+    from storage import kb
+
+    fetch_k = max(body.top_k * 3, 50)
+    fts_hits = kb.fts_search_chunks(body.query, limit=fetch_k, session_ids=sids)
+
+    vec_hits: list[dict] = []
+    try:
+        from transcripts.embed import embed_texts
+        qvec = embed_texts([body.query], kind="query")[0]
+        vec_hits = kb.vec_search_chunks(qvec, k=fetch_k, session_ids=sids)
+    except Exception:  # noqa: BLE001 — embedder down → BM25-only
+        pass
+
+    fused = rrf_fuse([
+        [h["chunk_id"] for h in fts_hits],
+        [h["chunk_id"] for h in vec_hits],
+    ])[: body.top_k]
+    if not fused:
+        return {"results": []}
+
+    from storage.sqlite import _get_conn
+    ids = [cid for cid, _ in fused]
+    qs = ",".join("?" * len(ids))
+    rows = _get_conn().execute(
+        "SELECT id, session_id, turn_ids, text, context_header"
+        f" FROM chunks WHERE id IN ({qs})",
+        ids,
+    ).fetchall()
+    by_id = {r["id"]: r for r in rows}
+
+    from transcripts import store as _store
+    session_meta: dict[str, dict] = {}
+    results = []
+    for cid, score in fused:
+        r = by_id.get(cid)
+        if r is None:
+            continue
+        sid = r["session_id"]
+        if sid not in session_meta:
+            sess = _store.load_session(sid)
+            session_meta[sid] = {
+                "date": sess.metadata.date if sess else None,
+                "summary": (sess.derived.summary if sess and sess.derived else None),
+            }
+        text = r["text"]
+        results.append({
+            "chunk_id": cid,
+            "session_id": sid,
+            "score": score,
+            "snippet": text[:400] + ("…" if len(text) > 400 else ""),
+            "context_header": r["context_header"] or None,
+            "turn_ids": json.loads(r["turn_ids"] or "[]"),
+            "meeting": {"session_id": sid, **session_meta[sid]},
+        })
+    return {"results": results}
+
+
 @router.get("/{workspace_id}/obligations/{obligation_id}")
 def obligation_detail(
     workspace_id: str,
