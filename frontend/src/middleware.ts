@@ -28,6 +28,7 @@ const PROTECTED_PREFIXES = [
   "/entity",
   "/obligations",
   "/search",
+  "/graph",
 ];
 const AUTH_PAGES = new Set(["/login", "/signup"]);
 

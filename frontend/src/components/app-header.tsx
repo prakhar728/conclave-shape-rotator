@@ -62,6 +62,12 @@ export function AppHeader({
         >
           Obligations
         </Link>
+        <Link
+          href="/graph"
+          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
+        >
+          Graph
+        </Link>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {user.email}
         </span>
