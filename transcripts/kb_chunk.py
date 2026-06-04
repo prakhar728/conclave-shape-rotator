@@ -29,6 +29,15 @@ CHUNK_TOKEN_CEILING = 6000
 #: 54k; min(54k × 0.4, 6k) = 6k. Local qwen at 8k ctx → 3.2k budget.
 DEFAULT_MODEL_CTX = 54_000
 
+#: The embedder is the real binding constraint for retrieval chunks:
+#: Ollama's nomic-embed-text GGUF is architecturally capped at 2048
+#: (nomic-bert.context_length — the 8192 advertised for nomic v1.5
+#: elsewhere is NOT available via Ollama; num_ctx override rejected,
+#: verified empirically 2026-06-04). Budget takes 0.6 × this to leave
+#: room for the search_document: prefix, the context header, and
+#: chars/4-heuristic underestimation on real transcript text.
+EMBED_MODEL_CTX = 2048
+
 #: Trailing turns carried into the next chunk.
 OVERLAP_TURNS = 2
 
@@ -44,8 +53,17 @@ class KBChunk:
     token_count: int = 0
 
 
-def chunk_budget(model_ctx: int = DEFAULT_MODEL_CTX) -> int:
-    return min(int(model_ctx * 0.4), CHUNK_TOKEN_CEILING)
+def chunk_budget(
+    model_ctx: int = DEFAULT_MODEL_CTX,
+    embed_ctx: int = EMBED_MODEL_CTX,
+) -> int:
+    """min(extraction window, embeddable window, hard ceiling).
+
+    With Ollama-nomic's 2048 cap this resolves to ~1228 heuristic
+    tokens (~5KB text) — also a better retrieval granularity than the
+    6k extraction-window-sized chunks the roadmap formula alone gives.
+    """
+    return min(int(model_ctx * 0.4), int(embed_ctx * 0.6), CHUNK_TOKEN_CEILING)
 
 
 def estimate_tokens(text: str) -> int:

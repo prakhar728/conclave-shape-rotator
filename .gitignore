@@ -20,6 +20,7 @@ eval_results/
 !scripts/
 scripts/*
 !scripts/eval_extraction_bakeoff.py
+!scripts/chunk_and_embed_existing.py
 !alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/

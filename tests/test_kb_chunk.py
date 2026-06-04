@@ -24,8 +24,11 @@ SMALL = [
 
 
 def test_budget_ceiling():
-    assert chunk_budget(1_000_000) == CHUNK_TOKEN_CEILING
-    assert chunk_budget(8_000) == 3_200  # 0.4 × ctx below ceiling
+    # The embedder cap (2048 × 0.6 = 1228) binds for any realistic
+    # extraction ctx; lifting embed_ctx exposes the other two terms.
+    assert chunk_budget(1_000_000) == 1228
+    assert chunk_budget(1_000_000, embed_ctx=100_000) == CHUNK_TOKEN_CEILING
+    assert chunk_budget(8_000, embed_ctx=100_000) == 3_200  # 0.4 × ctx
 
 
 def test_small_transcript_single_chunk():
