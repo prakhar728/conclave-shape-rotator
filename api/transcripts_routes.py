@@ -595,6 +595,16 @@ def _enrich_in_background(session_id: str) -> None:
     except Exception:
         logger.exception("post-enrich email blast failed for session %s", session_id)
 
+    # Phase 3.5a — KB indexing: chunk → context-header → embed → FTS/vec.
+    # Same isolation contract as the email blast: never poisons enrichment,
+    # and the C11 backfill can redo it any time (save_chunks is idempotent,
+    # embeddings upsert).
+    try:
+        from transcripts.kb_pipeline import index_session
+        index_session(session_id)
+    except Exception:
+        logger.exception("kb indexing failed for session %s", session_id)
+
 
 def _send_attendee_magic_links(session_id: str) -> None:
     """Issue + send magic links to every meeting_shares row for this session.
