@@ -152,12 +152,17 @@ export default function MeetingPage({
             </h2>
             <ul className="flex flex-wrap gap-2">
               {meeting.entities.map((e, idx) => (
-                <li
-                  key={`${e.name}-${idx}`}
-                  className="rounded-full border border-border px-3 py-1 text-xs"
-                >
-                  <span className="text-foreground">{e.name}</span>
-                  <span className="ml-2 text-muted-foreground">{e.type}</span>
+                <li key={`${e.name}-${idx}`}>
+                  {/* 3.5b C21 — chips link to the entity page. The KB
+                      entity may not exist (pipeline flag off / older
+                      sessions); the entity page 404-states gracefully. */}
+                  <Link
+                    href={`/entity/${encodeURIComponent(e.name)}`}
+                    className="inline-block rounded-full border border-border px-3 py-1 text-xs transition-colors hover:border-foreground/40"
+                  >
+                    <span className="text-foreground">{e.name}</span>
+                    <span className="ml-2 text-muted-foreground">{e.type}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
