@@ -199,6 +199,136 @@ def list_obligations(
 
 
 # ---------------------------------------------------------------------------
+# C28 — knowledge graph (3.5d)
+# ---------------------------------------------------------------------------
+
+#: Render caps (3.5d.13) — the filter panel lets users dig past these.
+GRAPH_MAX_ENTITIES = 100
+GRAPH_MAX_SPEAKERS = 50
+
+
+@router.get("/{workspace_id}/graph")
+def workspace_graph(
+    workspace_id: str,
+    as_of: Optional[str] = Query(default=None, description="ISO date — include meetings on/before"),
+    types: Optional[str] = Query(default=None, description="comma-separated entity types"),
+    min_mentions: int = Query(default=1, ge=1),
+    user: dict = Depends(require_current_user),
+):
+    """Force-directed graph data: {nodes, edges}.
+
+    Node kinds: meeting, entity, speaker. Edges: entity—meeting
+    (weight = mention count in that meeting), speaker—meeting
+    (weight = turn count). ``as_of`` is the bi-temporal lens applied at
+    meeting granularity (meetings dated after as_of drop out, taking
+    their edges with them); obligations/facts validity windows refine
+    this further in v1.5 when facts land on the graph.
+
+    Caps: top 100 entities / top 50 speakers by weight (3.5d.13).
+    Computed per-request — corpus is small; cache when it isn't.
+    """
+    _require_member(workspace_id, user["id"])
+    sids = _visible_session_ids(workspace_id, user)
+    if not sids:
+        return {"nodes": [], "edges": []}
+
+    from transcripts import store as _store
+    sessions = []
+    for sid in sids:
+        s = _store.load_session(sid)
+        if s is None:
+            continue
+        if as_of and (s.metadata.date or "") > as_of:
+            continue
+        sessions.append(s)
+    if not sessions:
+        return {"nodes": [], "edges": []}
+    kept_sids = [s.session_id for s in sessions]
+
+    type_filter = None
+    if types:
+        type_filter = {t.strip() for t in types.split(",") if t.strip()}
+
+    from storage.sqlite import _get_conn
+    conn = _get_conn()
+    qs = ",".join("?" * len(kept_sids))
+    rows = conn.execute(
+        "SELECT e.id, e.type, e.canonical_name, m.session_id,"
+        " COUNT(m.id) AS cnt"
+        f" FROM entities e JOIN entity_mentions m ON m.entity_id = e.id"
+        f" WHERE m.session_id IN ({qs})"
+        " GROUP BY e.id, m.session_id",
+        kept_sids,
+    ).fetchall()
+
+    # entity totals for cap + min_mentions
+    totals: dict[str, int] = {}
+    meta: dict[str, dict] = {}
+    per_meeting: dict[tuple[str, str], int] = {}
+    for r in rows:
+        if type_filter and r["type"] not in type_filter:
+            continue
+        totals[r["id"]] = totals.get(r["id"], 0) + r["cnt"]
+        meta[r["id"]] = {"type": r["type"], "name": r["canonical_name"]}
+        per_meeting[(r["id"], r["session_id"])] = r["cnt"]
+    kept_entities = {
+        eid for eid, total in sorted(
+            totals.items(), key=lambda t: -t[1]
+        )[:GRAPH_MAX_ENTITIES]
+        if total >= min_mentions
+    }
+
+    from infra.speakers import aggregate_speakers
+    speakers = aggregate_speakers(sessions)
+    kept_speakers = dict(sorted(
+        speakers.items(), key=lambda kv: -kv[1]["turn_count"],
+    )[:GRAPH_MAX_SPEAKERS])
+
+    nodes = []
+    for s in sessions:
+        nodes.append({
+            "id": f"meeting:{s.session_id}",
+            "kind": "meeting",
+            "label": (s.derived.summary[:60] if s.derived and s.derived.summary
+                      else s.session_id),
+            "date": s.metadata.date,
+        })
+    for eid in kept_entities:
+        nodes.append({
+            "id": f"entity:{eid}",
+            "kind": "entity",
+            "label": meta[eid]["name"],
+            "entity_type": meta[eid]["type"],
+            "weight": totals[eid],
+        })
+    for key, rec in kept_speakers.items():
+        nodes.append({
+            "id": f"speaker:{key}",
+            "kind": "speaker",
+            "label": rec["name"],
+            "weight": rec["turn_count"],
+        })
+
+    edges = []
+    for (eid, sid), cnt in per_meeting.items():
+        if eid in kept_entities and sid in kept_sids:
+            edges.append({
+                "source": f"entity:{eid}",
+                "target": f"meeting:{sid}",
+                "weight": cnt,
+            })
+    for key, rec in kept_speakers.items():
+        for sid in rec["session_ids"]:
+            if sid in kept_sids:
+                edges.append({
+                    "source": f"speaker:{key}",
+                    "target": f"meeting:{sid}",
+                    "weight": 1,
+                })
+    return {"nodes": nodes, "edges": edges}
+
+
+# ---------------------------------------------------------------------------
 # C23 — hybrid search (BM25 + dense, RRF-fused)
 # ---------------------------------------------------------------------------
 
