@@ -272,6 +272,15 @@ def list_sessions(
 
 _EXAMPLE_SESSION_ID = "example-conclave-demo"
 
+#: Demo sessions seeded by Alembic 0009 (3.5e) — same any-authed-user
+#: visibility contract as the 0005 example session.
+DEMO_SESSION_IDS = frozenset({
+    _EXAMPLE_SESSION_ID,
+    "demo-elocute",
+    "demo-dstack-intro-salon",
+    "demo-project-intros-agents-day3",
+})
+
 
 @router.get("/sessions/{session_id}")
 def get_session(
@@ -298,7 +307,7 @@ def get_session(
     # empty-state placeholder seeded by Alembic 0005 (BUILD_DOC §4 D-EBR).
     # Anonymous viewers still get blocked so the marketing landing page
     # doesn't accidentally leak it.
-    if session_id == _EXAMPLE_SESSION_ID:
+    if session_id in DEMO_SESSION_IDS:
         if user is None:
             raise HTTPException(status_code=403, detail="not allowed")
         return to_view(session)
@@ -604,6 +613,15 @@ def _enrich_in_background(session_id: str) -> None:
         index_session(session_id)
     except Exception:
         logger.exception("kb indexing failed for session %s", session_id)
+
+    # Phase 3.5b — KB extraction: extract → importance → ER → upsert.
+    # Behind ENABLE_KB_PIPELINE (default off): extract_session() is a no-op
+    # unless the flag is set, so rollback is one env-var flip, not a revert.
+    try:
+        from transcripts.kb_extract import extract_session
+        extract_session(session_id)
+    except Exception:
+        logger.exception("kb extraction failed for session %s", session_id)
 
 
 def _send_attendee_magic_links(session_id: str) -> None:

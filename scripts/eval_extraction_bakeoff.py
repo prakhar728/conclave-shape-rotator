@@ -25,14 +25,41 @@ sys.path.insert(0, str(REPO))
 import yaml  # noqa: E402
 
 from transcripts.sources import read_file  # noqa: E402
-from transcripts.extract_bakeoff import extract_one_prompt, extract_per_type  # noqa: E402
+from transcripts.extract_bakeoff import (  # noqa: E402
+    chunk_turns,
+    extract_one_prompt,
+    extract_per_type,
+    render_chunk,
+)
 from transcripts.eval_bakeoff import score_transcript, render_report  # noqa: E402
 
 FIXTURE_DIR = REPO / "tests" / "fixtures" / "transcripts"
 
+
+def extract_one_prompt_v2(segments, *, llm=None, model=None):
+    """C13's production prompt (consolidation + entity discipline),
+    run through the same chunking as the original bake-off arms so the
+    comparison isolates the prompt change."""
+    from transcripts.extract import (
+        extract_from_chunk, merge_entities, dedupe_obligations,
+    )
+    entities, obligations = [], []
+    for chunk in chunk_turns(segments):
+        r = extract_from_chunk(
+            render_chunk(chunk), turn_count=len(segments), llm=llm, model=model,
+        )
+        entities.extend(r.entities)
+        obligations.extend(r.obligations)
+    return {
+        "entities": merge_entities(entities),
+        "obligations": dedupe_obligations(obligations),
+    }
+
+
 STRATEGIES = {
     "one_prompt": extract_one_prompt,
     "per_type": extract_per_type,
+    "one_prompt_v2": extract_one_prompt_v2,
 }
 
 
