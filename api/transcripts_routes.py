@@ -272,6 +272,15 @@ def list_sessions(
 
 _EXAMPLE_SESSION_ID = "example-conclave-demo"
 
+#: Demo sessions seeded by Alembic 0009 (3.5e) — same any-authed-user
+#: visibility contract as the 0005 example session.
+DEMO_SESSION_IDS = frozenset({
+    _EXAMPLE_SESSION_ID,
+    "demo-elocute",
+    "demo-dstack-intro-salon",
+    "demo-project-intros-agents-day3",
+})
+
 
 @router.get("/sessions/{session_id}")
 def get_session(
@@ -298,7 +307,7 @@ def get_session(
     # empty-state placeholder seeded by Alembic 0005 (BUILD_DOC §4 D-EBR).
     # Anonymous viewers still get blocked so the marketing landing page
     # doesn't accidentally leak it.
-    if session_id == _EXAMPLE_SESSION_ID:
+    if session_id in DEMO_SESSION_IDS:
         if user is None:
             raise HTTPException(status_code=403, detail="not allowed")
         return to_view(session)

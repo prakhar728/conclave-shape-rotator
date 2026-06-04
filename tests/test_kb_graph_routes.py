@@ -123,7 +123,11 @@ def test_graph_as_of_filter(client):
     r = client.get(f"/api/workspaces/{wsid}/graph", params={"as_of": "2026-06-02"})
     body = r.json()
     meeting_ids = {n["id"] for n in body["nodes"] if n["kind"] == "meeting"}
-    assert meeting_ids == {"meeting:kb-g-1"}  # kb-g-2 dated after as_of
+    # kb-g-2 (dated 2026-06-03) drops out; kb-g-1 stays. Demo sessions
+    # (0009-seeded, May dates, any-authed-user) may legitimately appear,
+    # so assert membership rather than set equality.
+    assert "meeting:kb-g-1" in meeting_ids
+    assert "meeting:kb-g-2" not in meeting_ids
     # edges into the dropped meeting are gone too
     assert all(e["target"] != "meeting:kb-g-2" for e in body["edges"])
 

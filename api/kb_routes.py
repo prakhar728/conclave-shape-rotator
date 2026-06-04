@@ -28,8 +28,9 @@ router = APIRouter(prefix="/api/workspaces", tags=["kb"])
 # ---------------------------------------------------------------------------
 
 def _visible_session_ids(workspace_id: str, user: dict) -> list[str]:
-    """Session ids in this workspace the caller may see (can_user_see)."""
-    from api.transcripts_routes import can_user_see
+    """Session ids in this workspace the caller may see (can_user_see),
+    plus the 0009 demo sessions (any-authed-user contract) when seeded."""
+    from api.transcripts_routes import DEMO_SESSION_IDS, can_user_see
     from transcripts import store as _store
 
     out: list[str] = []
@@ -40,6 +41,19 @@ def _visible_session_ids(workspace_id: str, user: dict) -> list[str]:
         row = {"session_id": s.session_id, **fields}
         if can_user_see(user, row):
             out.append(s.session_id)
+
+    # Demo sessions (3.5e): shared with every authenticated user so
+    # entities / obligations / search / graph have substance on a
+    # fresh account. Only ids that actually exist in this DB.
+    from storage.sqlite import _get_conn
+    seeded = _get_conn().execute(
+        "SELECT session_id FROM transcript_sessions"
+        f" WHERE session_id IN ({','.join('?' * len(DEMO_SESSION_IDS))})",
+        list(DEMO_SESSION_IDS),
+    ).fetchall()
+    for r in seeded:
+        if r["session_id"] not in out and r["session_id"] != "example-conclave-demo":
+            out.append(r["session_id"])
     return out
 
 
