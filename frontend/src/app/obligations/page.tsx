@@ -1,0 +1,193 @@
+/**
+ * /obligations — workspace obligations board (Phase 3.5b C22).
+ *
+ * Replaces v1's "Open Questions" board: every current obligation
+ * (bi-temporally live, valid_to IS NULL server-side) across meetings
+ * the caller can see, grouped by type with status + type filters.
+ * Sorted by importance server-side.
+ */
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState } from "react";
+
+import { AppHeader } from "@/components/app-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  ApiError,
+  auth,
+  kb,
+  type KBObligation,
+  type MeResponse,
+} from "@/lib/api";
+
+const TYPES = [
+  "action",
+  "decision",
+  "commitment",
+  "open_question",
+  "blocker",
+] as const;
+const STATUSES = ["open", "resolved", "unclear"] as const;
+
+export default function ObligationsPage() {
+  const router = useRouter();
+  const [me, setMe] = useState<MeResponse | null>(null);
+  const [obligations, setObligations] = useState<KBObligation[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [typeFilter, setTypeFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const meResp = await auth.me();
+        if (cancelled) return;
+        setMe(meResp);
+        if (!meResp.workspace) {
+          setObligations([]);
+          return;
+        }
+        const resp = await kb.obligations(meResp.workspace.id);
+        if (!cancelled) setObligations(resp.obligations);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError && err.status === 401) {
+          router.push("/login");
+          return;
+        }
+        setError(err instanceof Error ? err.message : "Failed to load");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
+
+  const visible = useMemo(() => {
+    if (!obligations) return null;
+    let out = obligations;
+    if (typeFilter) out = out.filter((o) => o.type === typeFilter);
+    if (statusFilter) out = out.filter((o) => o.status_inferred === statusFilter);
+    return out;
+  }, [obligations, typeFilter, statusFilter]);
+
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <p className="text-sm text-destructive">{error}</p>
+      </div>
+    );
+  }
+  if (!me) {
+    return (
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <AppHeader user={me.user} workspace={me.workspace} />
+      <main className="mx-auto max-w-3xl px-6 py-10">
+        <div className="mb-6">
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Obligations
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {visible === null
+              ? "Loading…"
+              : `${visible.length} current across your meetings.`}
+          </p>
+        </div>
+
+        <div className="mb-6 flex flex-wrap items-center gap-2">
+          {TYPES.map((t) => (
+            <button
+              key={t}
+              onClick={() => setTypeFilter(typeFilter === t ? null : t)}
+              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+                typeFilter === t
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t.replace("_", " ")}
+            </button>
+          ))}
+          <span className="mx-1 text-border">|</span>
+          {STATUSES.map((s) => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(statusFilter === s ? null : s)}
+              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+                statusFilter === s
+                  ? "border-foreground bg-foreground text-background"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {visible === null ? (
+          <p className="text-sm text-muted-foreground">Loading obligations…</p>
+        ) : visible.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border p-10 text-center">
+            <p className="text-sm font-medium">Nothing here yet</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Obligations appear once the knowledge pipeline processes your
+              meetings{typeFilter || statusFilter ? " — or try clearing the filters" : ""}.
+            </p>
+          </div>
+        ) : (
+          <ul className="flex flex-col gap-3">
+            {visible.map((o) => (
+              <li key={o.id}>
+                <Link href={`/meeting/${o.session_id}`}>
+                  <Card className="transition-colors hover:border-foreground/20">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base font-medium">
+                        {o.description}
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <span className="rounded-full border border-border px-2 py-0.5 capitalize text-foreground">
+                          {o.type.replace("_", " ")}
+                        </span>
+                        <span className="capitalize">{o.status_inferred}</span>
+                        {o.owner_raw_text ? (
+                          <>
+                            <span>·</span>
+                            <span>{o.owner_raw_text}</span>
+                          </>
+                        ) : null}
+                        {o.due_date_raw ? (
+                          <>
+                            <span>·</span>
+                            <span>due {o.due_date_raw}</span>
+                          </>
+                        ) : null}
+                        {o.importance ? (
+                          <>
+                            <span>·</span>
+                            <span>importance {o.importance}/10</span>
+                          </>
+                        ) : null}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+      </main>
+    </div>
+  );
+}
