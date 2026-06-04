@@ -213,6 +213,58 @@ def list_obligations(
 
 
 # ---------------------------------------------------------------------------
+# C38 — ingest cost metrics (3.5f)
+# ---------------------------------------------------------------------------
+
+@router.get("/{workspace_id}/ingest-metrics")
+def ingest_metrics(
+    workspace_id: str,
+    session_id: Optional[str] = Query(default=None),
+    user: dict = Depends(require_current_user),
+):
+    """Ingest cost visibility (roadmap §7): per-stage mean LLM calls +
+    median ms across the caller's visible sessions, or per-session rows
+    when ``session_id`` is passed (must be visible to the caller)."""
+    _require_member(workspace_id, user["id"])
+    sids = _visible_session_ids(workspace_id, user)
+    if not sids:
+        return {"stages": [], "rows": []}
+
+    from storage.sqlite import _get_conn
+    conn = _get_conn()
+    if session_id is not None:
+        if session_id not in set(sids):
+            raise HTTPException(status_code=404, detail="Session not found")
+        rows = conn.execute(
+            "SELECT stage, llm_call_count, ms_elapsed, items_in, items_out,"
+            " created_at FROM ingest_metrics WHERE session_id = ?"
+            " ORDER BY id",
+            (session_id,),
+        ).fetchall()
+        return {"rows": [dict(r) for r in rows]}
+
+    qs = ",".join("?" * len(sids))
+    rows = conn.execute(
+        "SELECT stage, AVG(llm_call_count) AS mean_llm_calls,"
+        " AVG(ms_elapsed) AS mean_ms, COUNT(*) AS runs"
+        f" FROM ingest_metrics WHERE session_id IN ({qs})"
+        " GROUP BY stage ORDER BY stage",
+        sids,
+    ).fetchall()
+    return {
+        "stages": [
+            {
+                "stage": r["stage"],
+                "mean_llm_calls": round(r["mean_llm_calls"], 2),
+                "mean_ms": round(r["mean_ms"]),
+                "runs": r["runs"],
+            }
+            for r in rows
+        ]
+    }
+
+
+# ---------------------------------------------------------------------------
 # C28 — knowledge graph (3.5d)
 # ---------------------------------------------------------------------------
 
