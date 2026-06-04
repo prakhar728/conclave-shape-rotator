@@ -227,12 +227,12 @@ def ingest_metrics(
     when ``session_id`` is passed (must be visible to the caller)."""
     _require_member(workspace_id, user["id"])
     sids = _visible_session_ids(workspace_id, user)
-    if not sids:
-        return {"stages": [], "rows": []}
 
     from storage.sqlite import _get_conn
     conn = _get_conn()
     if session_id is not None:
+        # Visibility check FIRST — an empty visible-set must still 404 a
+        # probe for someone else's session id, not 200-empty past it.
         if session_id not in set(sids):
             raise HTTPException(status_code=404, detail="Session not found")
         rows = conn.execute(
@@ -243,6 +243,8 @@ def ingest_metrics(
         ).fetchall()
         return {"rows": [dict(r) for r in rows]}
 
+    if not sids:
+        return {"stages": []}
     qs = ",".join("?" * len(sids))
     rows = conn.execute(
         "SELECT stage, AVG(llm_call_count) AS mean_llm_calls,"

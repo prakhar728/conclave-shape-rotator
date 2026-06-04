@@ -13,11 +13,19 @@ from transcripts.models import Derived, RawSegment, Session, SessionMetadata
 @pytest.fixture(autouse=True)
 def _clean():
     from tests.conftest import reset_workspace_domain_tables
-    conn = _get_conn()
-    conn.execute("DELETE FROM ingest_metrics WHERE session_id LIKE 'kb-im-%'")
-    conn.execute("DELETE FROM transcript_sessions WHERE session_id LIKE 'kb-im-%'")
+
+    def _purge():
+        conn = _get_conn()
+        conn.execute("DELETE FROM ingest_metrics WHERE session_id LIKE 'kb-im-%'")
+        conn.execute("DELETE FROM transcript_sessions WHERE session_id LIKE 'kb-im-%'")
+
+    _purge()
     reset_workspace_domain_tables()
     yield
+    # Teardown too: a kb-im row left bound to a recycled workspace id
+    # would leak into the next test file's freshly-created workspace
+    # (ids are not collision-proof across reset_workspace_domain_tables).
+    _purge()
 
 
 @pytest.fixture
