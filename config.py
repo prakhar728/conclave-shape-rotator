@@ -1,5 +1,27 @@
 from __future__ import annotations
+
+import os
+
 from pydantic_settings import BaseSettings
+
+# ---------------------------------------------------------------------------
+# Telemetry kill-switch (operator-blind invariant)
+# ---------------------------------------------------------------------------
+# LangChain/LangSmith tracing ships full prompts — transcript content — to
+# api.smith.langchain.com when LANGCHAIN_TRACING_V2 / LANGSMITH_TRACING is
+# set. That is exactly the third-party exfiltration this product promises
+# cannot happen, so it is force-disabled in code: no env var, .env line, or
+# deploy-image config can re-enable it. (Found live 2026-06-04: a stale
+# tracing key in .env had every LLM call POSTing prompts to LangSmith —
+# rejected only because the key was invalid.)
+# This module is imported by every LLM entry point (config.get_llm), so the
+# guard runs before any langchain client is constructed.
+for _var in ("LANGCHAIN_TRACING_V2", "LANGSMITH_TRACING", "LANGCHAIN_API_KEY",
+             "LANGSMITH_API_KEY", "LANGCHAIN_ENDPOINT", "LANGSMITH_ENDPOINT",
+             "LANGCHAIN_PROJECT", "LANGSMITH_PROJECT"):
+    os.environ.pop(_var, None)
+os.environ["LANGCHAIN_TRACING_V2"] = "false"
+os.environ["LANGSMITH_TRACING"] = "false"
 
 
 class Settings(BaseSettings):
