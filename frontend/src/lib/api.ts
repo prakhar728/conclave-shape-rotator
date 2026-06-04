@@ -349,3 +349,25 @@ export const search = {
       { method: "POST", body: JSON.stringify({ query, top_k: topK }) },
     ),
 };
+
+// --- /ask — grounded answers (v1.5, flag-gated server-side) -----------------
+
+export type AskCitation = {
+  kind: "chunk" | "obligation";
+  id: string;
+  session_id: string;
+};
+
+export type AskResponse = {
+  answer: string;
+  citations: AskCitation[];
+  grounded: boolean;
+};
+
+export const ask = {
+  question: (workspaceId: string, question: string) =>
+    apiFetch<AskResponse>(`/api/workspaces/${workspaceId}/ask`, {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    }),
+};

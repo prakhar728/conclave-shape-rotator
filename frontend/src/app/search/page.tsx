@@ -11,8 +11,10 @@ import { AppHeader } from "@/components/app-header";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
+  ask,
   auth,
   search,
+  type AskResponse,
   type MeResponse,
   type SearchResult,
 } from "@/lib/api";
@@ -33,6 +35,20 @@ function SearchPageInner() {
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState(q);
+  // /ask: null = not requested, "loading", "unavailable" (flag off), or response
+  const [answer, setAnswer] = useState<AskResponse | "loading" | "unavailable" | null>(null);
+
+  async function runAsk() {
+    if (!me?.workspace || !q.trim()) return;
+    setAnswer("loading");
+    try {
+      const resp = await ask.question(me.workspace.id, q.trim());
+      setAnswer(resp);
+    } catch (err) {
+      // 404 = ENABLE_ASK off server-side → hide the feature quietly
+      setAnswer(err instanceof ApiError && err.status === 404 ? "unavailable" : null);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +112,50 @@ function SearchPageInner() {
             autoFocus
           />
         </form>
+
+        {/* /ask — grounded answer card (server flag-gated; hidden on 404) */}
+        {q.trim() !== "" && answer !== "unavailable" ? (
+          <div className="mb-6">
+            {answer === null ? (
+              <button
+                onClick={runAsk}
+                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+              >
+                ✨ Ask your meetings this question
+              </button>
+            ) : answer === "loading" ? (
+              <Card>
+                <CardContent className="py-4">
+                  <p className="text-sm text-muted-foreground">
+                    Reading your meetings…
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card className="border-foreground/20">
+                <CardContent className="py-4">
+                  <p className="text-sm leading-relaxed">{answer.answer}</p>
+                  {answer.citations.length > 0 ? (
+                    <p className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                      <span>Sources:</span>
+                      {Array.from(
+                        new Set(answer.citations.map((c) => c.session_id)),
+                      ).map((sid) => (
+                        <Link
+                          key={sid}
+                          href={`/meeting/${sid}`}
+                          className="underline hover:text-foreground"
+                        >
+                          {sid}
+                        </Link>
+                      ))}
+                    </p>
+                  ) : null}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        ) : null}
 
         {q.trim() === "" ? (
           <p className="text-sm text-muted-foreground">

@@ -33,6 +33,10 @@ type GraphNode = {
 };
 type GraphEdge = { source: string; target: string; weight: number };
 
+/** Node as react-force-graph hands it back: our fields + sim coords. */
+type SimNode = GraphNode & { x: number; y: number };
+type SimLink = GraphEdge;
+
 const COLORS: Record<string, string> = {
   meeting: "#71717a",   // zinc-500
   entity: "#0ea5e9",    // sky-500 (primary-ish)
@@ -131,7 +135,8 @@ export default function GraphPage() {
   }, [data]);
 
   const paintNode = useCallback(
-    (node: any, ctx: CanvasRenderingContext2D, scale: number) => {
+    (nodeObj: object, ctx: CanvasRenderingContext2D, scale: number) => {
+      const node = nodeObj as SimNode;
       const r = Math.min(3 + Math.sqrt(node.weight ?? 1), 10);
       const isHighlit = highlighted.has(node.id);
       const isNeighbor =
@@ -163,7 +168,8 @@ export default function GraphPage() {
   );
 
   const handleClick = useCallback(
-    (node: any) => {
+    (nodeObj: object) => {
+      const node = nodeObj as SimNode;
       if (node.kind === "meeting") {
         router.push(`/meeting/${String(node.id).replace("meeting:", "")}`);
       } else if (node.kind === "entity") {
@@ -299,16 +305,17 @@ export default function GraphPage() {
           <ForceGraph2D
             graphData={graphData}
             nodeCanvasObject={paintNode}
-            nodePointerAreaPaint={(node: any, color, ctx) => {
+            nodePointerAreaPaint={(nodeObj: object, color, ctx) => {
+              const node = nodeObj as SimNode;
               ctx.beginPath();
               ctx.arc(node.x, node.y, 10, 0, 2 * Math.PI);
               ctx.fillStyle = color;
               ctx.fill();
             }}
             linkColor={() => "rgba(113,113,122,0.25)"}
-            linkWidth={(l: any) => Math.min(0.5 + l.weight * 0.4, 3)}
+            linkWidth={(l: object) => Math.min(0.5 + (l as SimLink).weight * 0.4, 3)}
             onNodeClick={handleClick}
-            onNodeHover={(n: any) => setHoverNode(n ? n.id : null)}
+            onNodeHover={(n: object | null) => setHoverNode(n ? (n as SimNode).id : null)}
             cooldownTicks={120}
           />
         )}
