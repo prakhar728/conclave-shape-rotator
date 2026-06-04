@@ -24,6 +24,9 @@ const PROTECTED_PREFIXES = [
   "/meeting",
   "/invite",
   "/questions",
+  "/entities",
+  "/entity",
+  "/obligations",
 ];
 const AUTH_PAGES = new Set(["/login", "/signup"]);
 

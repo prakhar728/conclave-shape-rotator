@@ -265,3 +265,67 @@ export const meetingOwner = {
       },
     ),
 };
+
+// --- KB surface (Phase 3.5b — entities + obligations) -----------------------
+
+export type KBEntity = {
+  id: string;
+  type: "person" | "project" | "topic" | "company" | "tool";
+  canonical_name: string;
+  raw_mentions: string[];
+  mention_count: number;
+  meeting_count: number;
+};
+
+export type KBObligation = {
+  id: string;
+  session_id: string;
+  turn_ids: number[];
+  type: "action" | "decision" | "commitment" | "open_question" | "blocker";
+  description: string;
+  source_quote: string;
+  owner_entity_id: string | null;
+  owner_raw_text: string | null;
+  due_date_raw: string | null;
+  status_inferred: "open" | "resolved" | "unclear";
+  importance: number | null;
+  ingested_at: string;
+};
+
+export type KBEntityDetail = {
+  entity: Omit<KBEntity, "meeting_count">;
+  meetings: {
+    session_id: string;
+    date: string | null;
+    summary: string | null;
+    turn_ids: number[];
+  }[];
+  obligations: KBObligation[];
+};
+
+export const kb = {
+  entities: (workspaceId: string, params?: { type?: string }) => {
+    const q = params?.type ? `?type=${encodeURIComponent(params.type)}` : "";
+    return apiFetch<{ entities: KBEntity[] }>(
+      `/api/workspaces/${workspaceId}/entities${q}`,
+    );
+  },
+  entity: (workspaceId: string, name: string) =>
+    apiFetch<KBEntityDetail>(
+      `/api/workspaces/${workspaceId}/entities/${encodeURIComponent(name)}`,
+    ),
+  obligations: (
+    workspaceId: string,
+    params?: { type?: string; status?: string; owner_entity_id?: string },
+  ) => {
+    const search = new URLSearchParams();
+    if (params?.type) search.set("type", params.type);
+    if (params?.status) search.set("status", params.status);
+    if (params?.owner_entity_id)
+      search.set("owner_entity_id", params.owner_entity_id);
+    const q = search.toString();
+    return apiFetch<{ obligations: KBObligation[] }>(
+      `/api/workspaces/${workspaceId}/obligations${q ? `?${q}` : ""}`,
+    );
+  },
+};

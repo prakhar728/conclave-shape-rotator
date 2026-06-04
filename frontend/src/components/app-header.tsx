@@ -49,10 +49,16 @@ export function AppHeader({
       </div>
       <div className="flex items-center gap-4">
         <Link
-          href="/questions"
+          href="/entities"
           className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
         >
-          Questions
+          Entities
+        </Link>
+        <Link
+          href="/obligations"
+          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
+        >
+          Obligations
         </Link>
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {user.email}
