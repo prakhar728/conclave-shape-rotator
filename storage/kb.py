@@ -192,13 +192,19 @@ _FTS_TOKEN_RE = re.compile(r"[A-Za-z0-9]+")
 
 
 def _fts_sanitize(query: str) -> str:
-    """User text → safe FTS5 MATCH expression: quoted terms, implicit AND.
+    """User text → safe FTS5 MATCH expression: quoted terms, OR-joined.
 
     Strips FTS operators/punctuation outright — search-box input should
     never be able to throw a MATCH syntax error.
+
+    OR (not implicit AND) because natural-language queries carry
+    stopwords that rarely co-occur in one chunk; BM25's rank already
+    rewards multi-term matches, so OR recall + rank ordering is the
+    right BM25 idiom. (Found by C24: the FTS leg scored NDCG 0.000 on
+    question-shaped eval queries under AND semantics.)
     """
     terms = _FTS_TOKEN_RE.findall(query)
-    return " ".join(f'"{t}"' for t in terms)
+    return " OR ".join(f'"{t}"' for t in terms)
 
 
 def fts_search_chunks(

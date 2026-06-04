@@ -189,3 +189,38 @@ entity F1 ≥ 0.55** (C13 numbers minus 0.05 slack). Per-type
 macro-F1 is reported but non-blocking. Type-accuracy-given-match is
 the metric to watch when revisiting D13 (five tables vs enum) at the
 two-annotator-agreement trigger.
+
+---
+
+## C24/C25 — search NDCG@10 baseline + Q3 reranker decision (2026-06-04)
+
+Eval: the 28 C2 queries against the live hybrid index (chunks from the
+real cohort sessions; `scripts/eval_search_quality.py`; binary chunk
+relevance = chunk turn_ids ∩ gold relevant_turn_ids; per-session
+retrieval scope).
+
+| configuration | NDCG@10 (n=28) |
+|---|---|
+| **hybrid (FTS5 + vec, RRF k=60)** | **0.814** |
+| FTS5 BM25 only | 0.835 |
+| dense (nomic 256-dim) only | 0.693 |
+
+Found + fixed during measurement: `_fts_sanitize` originally joined
+terms with implicit AND — natural-language questions scored NDCG 0.000
+on the FTS leg because stopwords had to co-occur in one chunk. OR-join
+restored BM25 semantics (recall via OR, ordering via rank) and lifted
+hybrid 0.693 → 0.814.
+
+**Q3 DECISION: ship WITHOUT the cross-encoder reranker.** Pre-registered
+rule (C4 §Bake-off methodology / roadmap 3.5c.4): add BGE only if
+NDCG@10 < 0.6. We're at 0.814. No reranker, no +50-200ms per query,
+no third model in the enclave. Revisit if real users complain about
+top-10 quality (the feature-flag escalation stays cheap).
+
+Honest caveat on FTS-only beating hybrid by 0.02: the gold queries are
+Codex-written and tend to quote transcript vocabulary, which favors
+lexical matching; dense retrieval earns its place on paraphrase
+queries this eval under-represents. Hybrid stays (Survey D7), n=28 is
+too small to read a 0.02 gap as signal.
+
+**C27 regression floor: hybrid NDCG@10 ≥ 0.75** (0.814 − ~0.06 slack).

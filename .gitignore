@@ -21,6 +21,7 @@ eval_results/
 scripts/*
 !scripts/eval_extraction_bakeoff.py
 !scripts/chunk_and_embed_existing.py
+!scripts/eval_search_quality.py
 !alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
