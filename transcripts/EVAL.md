@@ -224,3 +224,36 @@ queries this eval under-represents. Hybrid stays (Survey D7), n=28 is
 too small to read a 0.02 gap as signal.
 
 **C27 regression floor: hybrid NDCG@10 ≥ 0.75** (0.814 − ~0.06 slack).
+
+---
+
+## C36/C39 — smoke journey + perf sanity (2026-06-04)
+
+Programmatic journey against the REAL DB via TestClient (fresh signup,
+demo content from migration 0009 + seed_demo.py):
+
+1. signup → personal workspace ✓
+2. /entities → 74 rows, 5ms (top: DStack, Andrew Miller, LSDan…) ✓
+3. /entities/DStack → 3 meetings ✓
+4. /obligations → 123 current rows ✓
+5. /search "deploying applications in trusted execution environments"
+   → 20 results, top hit demo-dstack-intro-salon, **84ms** ✓
+6. /graph → 3 meetings + 74 entities + 13 speakers, 107 edges, **7ms** ✓
+7. meeting view via graph node (demo session, authed) ✓ ;
+   anonymous request 403 ✓
+8. /ingest-metrics → per-stage means present ✓
+
+Perf vs roadmap budgets (3.5f.5): search 84ms (< 500ms no-reranker
+budget) · graph 7ms live / <1s enforced at 50 synthetic meetings by
+tests/test_graph_perf.py. Suite: 522 passed (target 450+).
+
+Ingest cost reality (roadmap §7 had only estimates): per-session stage
+means now queryable via /ingest-metrics; extraction ≈1 call/chunk,
+importance ≈1/10 items, upsert ≈1/obligation — matching the budget
+table's "~3-7× baseline" prediction. Demo+cohort extraction across 8
+sessions produced 210 entities / 518 obligations / 1977 mentions.
+
+Known v1 demo caveats: cohort + demo copies of the same 3 transcripts
+both exist (entity duplicates across session families are expected and
+ER-merged within type+name); context headers off by default for cost
+(--headers flag exists on both backfill + seed scripts).
