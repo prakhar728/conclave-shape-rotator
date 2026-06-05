@@ -37,11 +37,35 @@ type GraphEdge = { source: string; target: string; weight: number };
 type SimNode = GraphNode & { x: number; y: number };
 type SimLink = GraphEdge;
 
-const COLORS: Record<string, string> = {
-  meeting: "#71717a",   // zinc-500
-  entity: "#0ea5e9",    // sky-500 (primary-ish)
-  speaker: "#f59e0b",   // amber-500 (accent)
+/**
+ * Node palette lives in globals.css as --signal-* vars (UI-NOW.md §1) so
+ * the canvas shares the theme's color language. Canvas needs concrete
+ * strings at draw time, so we read the vars once after mount —
+ * getComputedStyle doesn't exist during SSR/prerender.
+ */
+type GraphColors = {
+  meeting: string;
+  entity: string;
+  speaker: string;
+  /** search-hit glow (mint) */
+  mint: string;
+  /** dimmed nodes, labels, links */
+  muted: string;
 };
+
+function readGraphColors(): GraphColors {
+  const css = getComputedStyle(document.documentElement);
+  const v = (name: string) => css.getPropertyValue(name).trim();
+  return {
+    meeting: v("--signal-meeting"),
+    entity: v("--signal-entity"),
+    speaker: v("--signal-speaker"),
+    mint: v("--accent-mint"),
+    muted: v("--muted-foreground"),
+  };
+}
+
+const NODE_KINDS = ["meeting", "entity", "speaker"] as const;
 const ENTITY_TYPES = ["person", "project", "topic", "company", "tool"];
 
 export default function GraphPage() {
@@ -66,6 +90,12 @@ export default function GraphPage() {
   const neighborsRef = useRef<Map<string, Set<string>>>(new Map());
 
   const [legendOpen, setLegendOpen] = useState(true);
+
+  // Theme palette for the canvas — read lazily on the client (see
+  // readGraphColors); null during SSR/prerender where there's no DOM.
+  const [colors] = useState<GraphColors | null>(() =>
+    typeof window === "undefined" ? null : readGraphColors(),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -136,6 +166,7 @@ export default function GraphPage() {
 
   const paintNode = useCallback(
     (nodeObj: object, ctx: CanvasRenderingContext2D, scale: number) => {
+      if (!colors) return;
       const node = nodeObj as SimNode;
       const r = Math.min(3 + Math.sqrt(node.weight ?? 1), 10);
       const isHighlit = highlighted.has(node.id);
@@ -146,25 +177,26 @@ export default function GraphPage() {
       const dimmed = (hoverNode && !isNeighbor) as boolean;
 
       if (isHighlit) {
+        // Search-hit glow — mint (UI-NOW.md §3). "40" = 25% alpha hex suffix.
         ctx.beginPath();
         ctx.arc(node.x, node.y, r + 3, 0, 2 * Math.PI);
-        ctx.fillStyle = "rgba(14,165,233,0.25)";
+        ctx.fillStyle = `${colors.mint}40`;
         ctx.fill();
       }
       ctx.beginPath();
       ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
       ctx.fillStyle = dimmed
-        ? "rgba(113,113,122,0.25)"
-        : COLORS[node.kind] ?? "#999";
+        ? `${colors.muted}40`
+        : colors[node.kind as (typeof NODE_KINDS)[number]] ?? colors.muted;
       ctx.fill();
 
       if (scale > 1.2 && !dimmed) {
         ctx.font = `${10 / scale}px sans-serif`;
-        ctx.fillStyle = "#525252";
+        ctx.fillStyle = colors.muted;
         ctx.fillText(node.label ?? "", node.x + r + 2, node.y + 3);
       }
     },
-    [highlighted, hoverNode],
+    [highlighted, hoverNode, colors],
   );
 
   const handleClick = useCallback(
@@ -231,7 +263,7 @@ export default function GraphPage() {
                 }}
                 className={`rounded-full border px-2 py-0.5 capitalize ${
                   enabledTypes.has(t)
-                    ? "border-foreground text-foreground"
+                    ? "border-primary/60 text-primary"
                     : "border-border text-muted-foreground"
                 }`}
               >
@@ -275,11 +307,16 @@ export default function GraphPage() {
                 ✕
               </button>
             </div>
-            {Object.entries(COLORS).map(([kind, color]) => (
+            {NODE_KINDS.map((kind) => (
               <p key={kind} className="flex items-center gap-2 capitalize">
                 <span
-                  className="inline-block h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: color }}
+                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                    kind === "meeting"
+                      ? "bg-signal-meeting"
+                      : kind === "entity"
+                        ? "bg-signal-entity"
+                        : "bg-signal-speaker"
+                  }`}
                 />
                 {kind}
               </p>
@@ -301,7 +338,7 @@ export default function GraphPage() {
               processed your meetings.
             </p>
           </div>
-        ) : (
+        ) : colors === null ? null : (
           <ForceGraph2D
             graphData={graphData}
             nodeCanvasObject={paintNode}
@@ -312,7 +349,7 @@ export default function GraphPage() {
               ctx.fillStyle = color;
               ctx.fill();
             }}
-            linkColor={() => "rgba(113,113,122,0.25)"}
+            linkColor={() => `${colors.muted}33`}
             linkWidth={(l: object) => Math.min(0.5 + (l as SimLink).weight * 0.4, 3)}
             onNodeClick={handleClick}
             onNodeHover={(n: object | null) => setHoverNode(n ? (n as SimNode).id : null)}
