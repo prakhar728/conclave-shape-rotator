@@ -39,6 +39,12 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  /* Enclave Emerald brand constants (UI-NOW.md §1) */
+  --color-accent-mint: var(--accent-mint);
+  --color-signal-speaker: var(--signal-speaker);
+  --color-signal-entity: var(--signal-entity);
+  --color-signal-meeting: var(--signal-meeting);
+  --color-attested: var(--attested);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -84,37 +90,45 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* ───── Enclave Emerald (UI-NOW.md §1, locked 2026-06-04) ───── */
+  --background: #0A0F0D;            /* near-black, faintly green canvas */
+  --foreground: #ECFDF5;            /* mint-white */
+  --card: #111816;
+  --card-foreground: #ECFDF5;
+  --popover: #111816;
+  --popover-foreground: #ECFDF5;
+  --primary: #34D399;               /* emerald — buttons, active, links */
+  --primary-foreground: #04120C;    /* text on emerald */
+  --secondary: #1A2420;
+  --secondary-foreground: #ECFDF5;
+  --muted: #1A2420;
+  --muted-foreground: #8BA39B;
+  --accent: #1A2420;
+  --accent-foreground: #ECFDF5;
+  --destructive: #F87171;
+  --border: #1F2A26;                /* hairlines */
+  --input: #243029;                 /* field borders */
+  --ring: #34D399;                  /* emerald focus rings */
+  --chart-1: #34D399;               /* emerald */
+  --chart-2: #38BDF8;               /* sky */
+  --chart-3: #F59E0B;               /* amber */
+  --chart-4: #A7F3D0;               /* mint */
+  --chart-5: #64748B;               /* slate */
+  --sidebar: #111816;
+  --sidebar-foreground: #ECFDF5;
+  --sidebar-primary: #34D399;
+  --sidebar-primary-foreground: #04120C;
+  --sidebar-accent: #1A2420;
+  --sidebar-accent-foreground: #ECFDF5;
+  --sidebar-border: #1F2A26;
+  --sidebar-ring: #34D399;
+
+  /* Brand constants — non-shadcn (UI-NOW.md §1 table 2) */
+  --accent-mint: #A7F3D0;           /* hover glow, graph search-hit glow */
+  --signal-speaker: #F59E0B;        /* amber — speakers */
+  --signal-entity: #38BDF8;         /* sky — entities */
+  --signal-meeting: #64748B;        /* slate — meetings */
+  --attested: #34D399;              /* verified/TEE trust (= primary) */
 }
 
 @layer base {
