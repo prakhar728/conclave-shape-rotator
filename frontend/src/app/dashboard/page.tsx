@@ -22,6 +22,7 @@ import {
   ApiError,
   auth,
   bots,
+  kb,
   workspaces,
   type ActiveInvitation,
   type Meeting,
@@ -34,6 +35,9 @@ export default function DashboardPage() {
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
   const [active, setActive] = useState<ActiveInvitation[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Stat-card counts — best-effort, non-blocking (null = still loading).
+  const [entityCount, setEntityCount] = useState<number | null>(null);
+  const [obligationCount, setObligationCount] = useState<number | null>(null);
 
   // Initial load + active-list polling so "Live now" reflects state changes
   // (status transitions, completions) without needing the user to refresh.
@@ -51,6 +55,13 @@ export default function DashboardPage() {
         setMe(meResp);
         setActive(activeResp.active);
         if (meResp.workspace) {
+          // Stat counts ride along but never block the meetings list.
+          kb.entities(meResp.workspace.id)
+            .then((r) => !cancelled && setEntityCount(r.entities.length))
+            .catch(() => !cancelled && setEntityCount(0));
+          kb.obligations(meResp.workspace.id)
+            .then((r) => !cancelled && setObligationCount(r.obligations.length))
+            .catch(() => !cancelled && setObligationCount(0));
           const m = await workspaces.meetings(meResp.workspace.id);
           if (!cancelled) setMeetings(m.meetings);
         } else {
@@ -116,20 +127,44 @@ export default function DashboardPage() {
 
   return (
     <AppShell user={me.user} workspace={me.workspace}>
-      <main className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-10 flex items-baseline justify-between">
+      <main className="mx-auto w-full max-w-5xl px-6 py-8">
+        <div className="mb-8 flex items-baseline justify-between">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Meetings</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              {me.workspace?.name ?? "No workspace"}
+            <h1 className="text-2xl font-bold tracking-tight">
+              {greeting()}, {me.user.email.split("@")[0]}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Here&apos;s what your meetings know.
             </p>
           </div>
           <Link
             href="/invite"
-            className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/85"
           >
             Invite bot
           </Link>
+        </div>
+
+        {/* Stat summary cards */}
+        <div className="mb-8 grid gap-4 sm:grid-cols-3">
+          <StatCard
+            label="Meetings"
+            value={meetings?.length ?? null}
+            href="/dashboard"
+            tint="bg-primary/10 text-primary"
+          />
+          <StatCard
+            label="Open obligations"
+            value={obligationCount}
+            href="/obligations"
+            tint="bg-signal-speaker/10 text-signal-speaker"
+          />
+          <StatCard
+            label="Entities tracked"
+            value={entityCount}
+            href="/entities"
+            tint="bg-signal-entity/10 text-signal-entity"
+          />
         </div>
 
         {active.length > 0 ? (
@@ -168,31 +203,32 @@ export default function DashboardPage() {
           </section>
         ) : null}
 
+        <p className="mb-4 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          Recent meetings
+        </p>
         {meetings === null ? (
           <p className="text-sm text-muted-foreground">Loading meetings…</p>
         ) : meetings.length === 0 ? (
           <EmptyState />
         ) : (
-          /* Editorial Vault: hairline-divided dossier rows, not boxes —
-             serif headline per meeting, mono meta underneath. */
-          <ul className="divide-y divide-border border-t border-border">
+          <ul className="grid gap-4 sm:grid-cols-2">
             {meetings.map((m) =>
               m.is_processing ? (
-                <li key={m.session_id}>
+                <li key={m.session_id} className="sm:col-span-2">
                   <ProcessingCard meeting={m} />
                 </li>
               ) : (
                 <li key={m.session_id}>
                   <Link
                     href={`/meeting/${m.session_id}`}
-                    className="group block py-5"
+                    className="group flex h-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
                   >
-                    <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
+                    <p className="text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
                       {m.summary
                         ? truncate(m.summary, 120)
                         : `${m.source} — ${m.date}`}
                     </p>
-                    <p className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+                    <p className="mt-3 flex items-center gap-2 font-mono text-xs text-muted-foreground">
                       {m.date} · {m.source}
                       {isDemoSession(m.session_id) ? <DemoTag /> : null}
                     </p>
@@ -204,6 +240,43 @@ export default function DashboardPage() {
         )}
       </main>
     </AppShell>
+  );
+}
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 5) return "Up late";
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/** Dashboard stat summary card; value=null renders a quiet placeholder. */
+function StatCard({
+  label,
+  value,
+  href,
+  tint,
+}: {
+  label: string;
+  value: number | null;
+  href: string;
+  tint: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="group rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <span
+        className={`inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${tint}`}
+      >
+        {label}
+      </span>
+      <p className="mt-3 text-3xl font-bold tracking-tight">
+        {value ?? "–"}
+      </p>
+    </Link>
   );
 }
 
@@ -225,8 +298,8 @@ function DemoTag() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col gap-10">
-      <div className="border-t border-border pt-8">
+    <div className="flex flex-col gap-6">
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <p className="text-xl font-bold tracking-tight">
           Welcome to Conclave<span className="text-primary">.</span>
         </p>
@@ -238,7 +311,7 @@ function EmptyState() {
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <Link
             href="/invite"
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/85"
           >
             Invite the bot to a meeting
           </Link>
@@ -250,28 +323,23 @@ function EmptyState() {
           </Link>
         </div>
       </div>
-      <div>
-        <p className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-          Example meeting
-        </p>
-        <ul className="divide-y divide-border border-t border-border">
-          <li>
-            <Link
-              href={`/meeting/${EXAMPLE_SESSION_ID}`}
-              className="group block py-5"
-            >
-              <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
-                Walkthrough of how a Conclave meeting card looks once your
-                bot has joined a Meet.
-              </p>
-              <p className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-                2026-05-15 · example
-                <DemoTag />
-              </p>
-            </Link>
-          </li>
-        </ul>
-      </div>
+      <ul className="grid gap-4 sm:grid-cols-2">
+        <li>
+          <Link
+            href={`/meeting/${EXAMPLE_SESSION_ID}`}
+            className="group flex h-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+          >
+            <p className="text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
+              Walkthrough of how a Conclave meeting card looks once your bot
+              has joined a Meet.
+            </p>
+            <p className="mt-3 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+              2026-05-15 · example
+              <DemoTag />
+            </p>
+          </Link>
+        </li>
+      </ul>
     </div>
   );
 }
@@ -319,21 +387,21 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="py-5">
+    <div className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm">
       <div className="flex items-center gap-3">
         <span
           className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
           aria-hidden
         />
-        <p className="animate-shimmer-text text-base font-semibold">
+        <p className="animate-shimmer-text text-sm font-semibold">
           {PROCESSING_MESSAGES[phraseIdx]}
         </p>
       </div>
-      <p className="mt-1.5 font-mono text-xs text-muted-foreground">
+      <p className="mt-2 font-mono text-xs text-muted-foreground">
         {meeting.date} · {meeting.source} · {meeting.session_id}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
-        This row refreshes itself when the LLM finishes — usually under two
+        This card refreshes itself when the LLM finishes — usually under two
         minutes. You can close this tab; the meeting will be ready when you
         come back.
       </p>
