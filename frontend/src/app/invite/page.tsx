@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -37,6 +38,8 @@ type LiveState = {
 };
 
 export default function InvitePage() {
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meetInput, setMeetInput] = useState("");
   const [attendees, setAttendees] = useState("");
@@ -75,7 +78,7 @@ export default function InvitePage() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!me?.workspace) {
+    if (!workspaceId) {
       setError("No workspace — try refreshing the page.");
       return;
     }
@@ -88,7 +91,7 @@ export default function InvitePage() {
     try {
       const resp = await bots.invite({
         meet_url_or_code: meetInput.trim(),
-        workspace_id: me.workspace.id,
+        workspace_id: workspaceId,
         attendee_emails: emails.length ? emails : undefined,
       });
       setLive({
@@ -111,10 +114,10 @@ export default function InvitePage() {
     }
   }
 
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-2xl px-6 py-10">
         <div className="mb-8">
           <h1 className="font-serif text-3xl md:text-4xl">

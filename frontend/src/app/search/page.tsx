@@ -9,6 +9,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   ApiError,
@@ -32,6 +33,8 @@ function SearchPageInner() {
   const router = useRouter();
   const params = useSearchParams();
   const q = params.get("q") ?? "";
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [results, setResults] = useState<SearchResult[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,10 +43,10 @@ function SearchPageInner() {
   const [answer, setAnswer] = useState<AskResponse | "loading" | "unavailable" | null>(null);
 
   async function runAsk() {
-    if (!me?.workspace || !q.trim()) return;
+    if (!workspaceId || !q.trim()) return;
     setAnswer("loading");
     try {
-      const resp = await ask.question(me.workspace.id, q.trim());
+      const resp = await ask.question(workspaceId, q.trim());
       setAnswer(resp);
     } catch (err) {
       // 404 = ENABLE_ASK off server-side → hide the feature quietly
@@ -58,11 +61,11 @@ function SearchPageInner() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace || !q.trim()) {
+        if (!workspaceId) {
           setResults([]);
           return;
         }
-        const resp = await search.query(meResp.workspace.id, q.trim(), 30);
+        const resp = await search.query(workspaceId, q.trim(), 30);
         if (!cancelled) setResults(resp.results);
       } catch (err) {
         if (cancelled) return;
@@ -76,13 +79,13 @@ function SearchPageInner() {
     return () => {
       cancelled = true;
     };
-  }, [router, q]);
+  }, [router, q, workspaceId]);
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <form
           className="mb-8"

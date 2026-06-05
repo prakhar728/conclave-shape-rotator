@@ -85,7 +85,7 @@ export default function WorkspacePage({
   if (!me || !workspace || meetings === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-8">
           <h1 className="font-serif text-3xl md:text-4xl">

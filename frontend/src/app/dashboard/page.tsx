@@ -20,6 +20,8 @@ import { FileText, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { UploadTranscriptButton } from "@/components/upload-transcript";
+import { useWorkspace } from "@/components/workspace-provider";
 import {
   ApiError,
   auth,
@@ -34,6 +36,8 @@ import {
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meetings, setMeetings] = useState<Meeting[] | null>(null);
   const [active, setActive] = useState<ActiveInvitation[]>([]);
@@ -43,6 +47,7 @@ export default function DashboardPage() {
 
   // Initial load + active-list polling so "Live now" reflects state changes
   // (status transitions, completions) without needing the user to refresh.
+  // Keyed on workspaceId: switching workspaces re-runs the whole load.
   useEffect(() => {
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -56,12 +61,12 @@ export default function DashboardPage() {
         if (cancelled) return;
         setMe(meResp);
         setActive(activeResp.active);
-        if (meResp.workspace) {
+        if (workspaceId) {
           // Widget data rides along but never blocks the meetings list.
-          kb.obligations(meResp.workspace.id)
+          kb.obligations(workspaceId)
             .then((r) => !cancelled && setObligations(r.obligations))
             .catch(() => !cancelled && setObligations([]));
-          const m = await workspaces.meetings(meResp.workspace.id);
+          const m = await workspaces.meetings(workspaceId);
           if (!cancelled) setMeetings(m.meetings);
         } else {
           setMeetings([]);
@@ -88,9 +93,9 @@ export default function DashboardPage() {
         setActive((prev) => {
           const becameTerminal = prev.length > r.active.length;
           const hasProcessing = (meetings ?? []).some((m) => m.is_processing);
-          if ((becameTerminal || hasProcessing) && me?.workspace) {
+          if ((becameTerminal || hasProcessing) && workspaceId) {
             workspaces
-              .meetings(me.workspace.id)
+              .meetings(workspaceId)
               .then((mr) => !cancelled && setMeetings(mr.meetings))
               .catch(() => {});
           }
@@ -105,15 +110,15 @@ export default function DashboardPage() {
       if (intervalId) clearInterval(intervalId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [router]);
+  }, [router, workspaceId]);
 
   async function handleStop(sessionId: string) {
     if (!confirm("Stop the bot for this meeting?")) return;
     try {
       await bots.stop(sessionId);
       setActive((prev) => prev.filter((a) => a.session_id !== sessionId));
-      if (me?.workspace) {
-        const m = await workspaces.meetings(me.workspace.id);
+      if (workspaceId) {
+        const m = await workspaces.meetings(workspaceId);
         setMeetings(m.meetings);
       }
     } catch (e) {
@@ -122,10 +127,10 @@ export default function DashboardPage() {
   }
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       {/* Vantage workspace canvas: dotted grid under everything. */}
       <main className="flex-1 bg-dotted-grid">
         <div className="mx-auto w-full max-w-5xl px-6 py-8 md:py-10">
@@ -139,12 +144,17 @@ export default function DashboardPage() {
                 Here&apos;s your overview for {todayLabel()}.
               </p>
             </div>
-            <Link
-              href="/invite"
-              className="hidden h-10 items-center rounded-full bg-primary px-5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95 sm:inline-flex"
-            >
-              Invite bot
-            </Link>
+            <div className="hidden items-center gap-3 sm:flex">
+              {workspaceId ? (
+                <UploadTranscriptButton workspaceId={workspaceId} />
+              ) : null}
+              <Link
+                href="/invite"
+                className="inline-flex h-10 items-center rounded-full border border-border bg-card px-5 text-xs font-bold text-foreground shadow-sm transition-all hover:border-input hover:bg-secondary active:scale-95"
+              >
+                Invite bot
+              </Link>
+            </div>
           </div>
 
           {active.length > 0 ? (
@@ -182,7 +192,7 @@ export default function DashboardPage() {
           ) : null}
 
           {meetings !== null && meetings.length === 0 ? (
-            <EmptyState />
+            <EmptyState workspaceId={workspaceId} />
           ) : (
             /* Widget grid: meetings list (2 cols) + right rail. */
             <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
@@ -384,7 +394,7 @@ function DemoTag() {
   );
 }
 
-function EmptyState() {
+function EmptyState({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
@@ -399,10 +409,16 @@ function EmptyState() {
         <div className="mt-5 flex flex-wrap items-center gap-4">
           <Link
             href="/invite"
-            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition-colors hover:bg-primary/85"
+            className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
           >
             Invite the bot to a meeting
           </Link>
+          {workspaceId ? (
+            <>
+              <span className="text-xs text-muted-foreground">or</span>
+              <UploadTranscriptButton workspaceId={workspaceId} />
+            </>
+          ) : null}
           <Link
             href={`/meeting/${EXAMPLE_SESSION_ID}`}
             className="text-xs text-muted-foreground hover:text-foreground"

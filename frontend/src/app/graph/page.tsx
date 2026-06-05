@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { ApiError, apiFetch, auth, search, type MeResponse } from "@/lib/api";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -71,6 +72,8 @@ const ENTITY_TYPES = ["person", "project", "topic", "company", "tool"];
 
 export default function GraphPage() {
   const router = useRouter();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [data, setData] = useState<{ nodes: GraphNode[]; edges: GraphEdge[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ export default function GraphPage() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace) {
+        if (!workspaceId) {
           setData({ nodes: [], edges: [] });
           return;
         }
@@ -116,7 +119,7 @@ export default function GraphPage() {
         if (minMentions > 1) params.set("min_mentions", String(minMentions));
         const q = params.toString();
         const resp = await apiFetch<{ nodes: GraphNode[]; edges: GraphEdge[] }>(
-          `/api/workspaces/${meResp.workspace.id}/graph${q ? `?${q}` : ""}`,
+          `/api/workspaces/${workspaceId}/graph${q ? `?${q}` : ""}`,
         );
         if (cancelled) return;
         const neighbors = new Map<string, Set<string>>();
@@ -140,15 +143,15 @@ export default function GraphPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, asOf, enabledTypes, minMentions]);
+  }, [router, workspaceId, asOf, enabledTypes, minMentions]);
 
   async function runGraphSearch() {
-    if (!me?.workspace || !graphQuery.trim()) {
+    if (!workspaceId || !graphQuery.trim()) {
       setHighlighted(new Set());
       return;
     }
     try {
-      const resp = await search.query(me.workspace.id, graphQuery.trim(), 200);
+      const resp = await search.query(workspaceId, graphQuery.trim(), 200);
       setHighlighted(
         new Set(resp.results.map((r) => `meeting:${r.session_id}`)),
       );
@@ -213,10 +216,10 @@ export default function GraphPage() {
   );
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       {/* mobile fallback (C33 / 3.5d.10) */}
       <div className="flex flex-1 items-center justify-center px-6 md:hidden">
         <p className="text-center text-sm text-muted-foreground">

@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import {
   ApiError,
   auth,
@@ -53,6 +54,8 @@ const STATUS_PILL: Record<string, string> = {
 
 export default function ObligationsPage() {
   const router = useRouter();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [obligations, setObligations] = useState<KBObligation[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,11 +69,11 @@ export default function ObligationsPage() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace) {
+        if (!workspaceId) {
           setObligations([]);
           return;
         }
-        const resp = await kb.obligations(meResp.workspace.id);
+        const resp = await kb.obligations(workspaceId);
         if (!cancelled) setObligations(resp.obligations);
       } catch (err) {
         if (cancelled) return;
@@ -84,7 +87,7 @@ export default function ObligationsPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, workspaceId]);
 
   const visible = useMemo(() => {
     if (!obligations) return null;
@@ -95,10 +98,10 @@ export default function ObligationsPage() {
   }, [obligations, typeFilter, statusFilter]);
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
           <h1 className="font-serif text-3xl md:text-4xl">

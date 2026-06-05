@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { WorkspaceProvider } from "@/components/workspace-provider";
 
 // Vantage design language (locked 2026-06-04, user-supplied reference):
 // Inter body + Instrument Serif display. Serif carries greetings and
@@ -43,7 +44,9 @@ export default function RootLayout({
         inter.variable,
       )}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <WorkspaceProvider>{children}</WorkspaceProvider>
+      </body>
     </html>
   );
 }

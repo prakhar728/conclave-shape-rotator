@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
@@ -26,6 +27,8 @@ import {
 
 export default function QuestionsPage() {
   const router = useRouter();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [questions, setQuestions] = useState<OpenQuestion[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -37,11 +40,11 @@ export default function QuestionsPage() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace) {
+        if (!workspaceId) {
           setQuestions([]);
           return;
         }
-        const q = await workspaces.openQuestions(meResp.workspace.id);
+        const q = await workspaces.openQuestions(workspaceId);
         if (!cancelled) setQuestions(q.questions);
       } catch (err) {
         if (cancelled) return;
@@ -55,13 +58,13 @@ export default function QuestionsPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, workspaceId]);
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
           <h1 className="font-serif text-3xl md:text-4xl">
@@ -79,7 +82,7 @@ export default function QuestionsPage() {
         {questions === null ? (
           <p className="text-sm text-muted-foreground">Loading questions…</p>
         ) : questions.length === 0 ? (
-          <EmptyState hasWorkspace={Boolean(me.workspace)} />
+          <EmptyState hasWorkspace={Boolean(workspaceId)} />
         ) : (
           <ul className="flex flex-col gap-3">
             {questions.map((q, idx) => (

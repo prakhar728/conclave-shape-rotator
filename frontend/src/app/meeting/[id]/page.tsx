@@ -95,7 +95,7 @@ export default function MeetingPage({
   if (!me || !meeting) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Link
           href="/dashboard"

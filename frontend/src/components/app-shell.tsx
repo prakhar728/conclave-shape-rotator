@@ -16,6 +16,8 @@
 "use client";
 
 import {
+  Check,
+  ChevronsUpDown,
   LayoutGrid,
   ListChecks,
   LogOut,
@@ -26,11 +28,13 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 
 import { AttestedBadge } from "@/components/attested-badge";
 import { cn } from "@/lib/utils";
 import { SearchBox } from "@/components/search-box";
-import { auth, type User, type Workspace } from "@/lib/api";
+import { useWorkspace } from "@/components/workspace-provider";
+import { auth, type User } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -42,11 +46,9 @@ const NAV = [
 
 export function AppShell({
   user,
-  workspace,
   children,
 }: {
   user: User;
-  workspace: Workspace | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -65,15 +67,7 @@ export function AppShell({
     <div className="flex min-h-screen bg-background">
       {/* ── Sidebar (Vantage mockup) ── */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-4 md:flex">
-        {/* Workspace profile chip */}
-        <div className="mb-8 flex cursor-default items-center gap-3 rounded-lg p-2 transition hover:bg-secondary">
-          <span className="flex size-8 items-center justify-center rounded-full border border-card bg-foreground font-serif text-sm text-background shadow-sm">
-            C
-          </span>
-          <span className="truncate text-xs font-bold">
-            {workspace?.name ?? "Conclave"}
-          </span>
-        </div>
+        <WorkspaceSwitcher />
 
         <nav className="space-y-1">
           {NAV.map(({ href, label, icon: Icon }) => {
@@ -146,6 +140,97 @@ export function AppShell({
         </header>
         {children}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Sidebar workspace chip → dropdown: list with checkmark on current,
+ * "+ New workspace" prompts for a name and creates+selects it.
+ */
+function WorkspaceSwitcher() {
+  const { workspaces, workspace, selectWorkspace, createWorkspace } =
+    useWorkspace();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onClick(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  async function handleCreate() {
+    const name = window.prompt("Name for the new workspace:")?.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      await createWorkspace(name);
+      setOpen(false);
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Failed to create workspace");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div ref={boxRef} className="relative mb-8">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-secondary"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-card bg-foreground font-serif text-sm text-background shadow-sm">
+          C
+        </span>
+        <span className="min-w-0 flex-1 truncate text-xs font-bold">
+          {workspace?.name ?? (workspaces === null ? "…" : "Conclave")}
+        </span>
+        <ChevronsUpDown
+          className="size-3.5 shrink-0 text-muted-foreground"
+          aria-hidden
+        />
+      </button>
+
+      {open ? (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl"
+        >
+          {(workspaces ?? []).map((w) => (
+            <button
+              key={w.id}
+              role="option"
+              aria-selected={w.id === workspace?.id}
+              onClick={() => {
+                selectWorkspace(w.id);
+                setOpen(false);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium transition hover:bg-secondary"
+            >
+              <span className="min-w-0 flex-1 truncate">{w.name}</span>
+              {w.id === workspace?.id ? (
+                <Check className="size-3.5 shrink-0 text-primary" aria-hidden />
+              ) : null}
+            </button>
+          ))}
+          <button
+            onClick={handleCreate}
+            disabled={busy}
+            className="flex w-full items-center gap-2 rounded-lg border-t border-border px-2 py-2 text-left text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            {busy ? "Creating…" : "New workspace"}
+          </button>
+        </div>
+      ) : null}
     </div>
   );
 }

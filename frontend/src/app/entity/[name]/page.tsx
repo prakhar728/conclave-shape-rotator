@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { entityTint } from "@/lib/entity-tints";
 import {
   ApiError,
@@ -26,6 +27,8 @@ import {
 export default function EntityDetailPage() {
   const router = useRouter();
   const params = useParams<{ name: string }>();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [detail, setDetail] = useState<KBEntityDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -38,12 +41,12 @@ export default function EntityDetailPage() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace) {
+        if (!workspaceId) {
           setNotFound(true);
           return;
         }
         const name = decodeURIComponent(params.name);
-        const resp = await kb.entity(meResp.workspace.id, name);
+        const resp = await kb.entity(workspaceId, name);
         if (!cancelled) setDetail(resp);
       } catch (err) {
         if (cancelled) return;
@@ -61,13 +64,13 @@ export default function EntityDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, params.name]);
+  }, [router, params.name, workspaceId]);
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         {notFound ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">

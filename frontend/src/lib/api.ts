@@ -115,6 +115,11 @@ export type OpenQuestion = {
 export const workspaces = {
   list: () =>
     apiFetch<{ workspaces: Workspace[] }>("/api/workspaces"),
+  create: (name: string) =>
+    apiFetch<{ workspace: Workspace }>("/api/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
   get: (id: string) =>
     apiFetch<{ workspace: Workspace; role: string }>(`/api/workspaces/${id}`),
   meetings: (id: string) =>
@@ -123,6 +128,15 @@ export const workspaces = {
     apiFetch<{ questions: OpenQuestion[] }>(
       `/api/workspaces/${id}/open-questions`,
     ),
+  uploadTranscript: (id: string, params: { filename?: string; text: string }) =>
+    apiFetch<{
+      session_id: string;
+      is_processing: boolean;
+      status: "accepted" | "duplicate";
+    }>(`/api/workspaces/${id}/transcripts`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
 };
 
 // --- Meeting detail (legacy /transcripts endpoint, dual-mode in 1.7/1.14) ---

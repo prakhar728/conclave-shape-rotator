@@ -102,6 +102,11 @@ app.include_router(workspaces_router)
 from api.kb_routes import router as kb_router
 app.include_router(kb_router)
 
+# Transcript upload — paste/file into a workspace (same enrich chain as
+# the Recato webhook; see api/upload_routes.py docstring).
+from api.upload_routes import router as upload_router
+app.include_router(upload_router)
+
 # Phase 2.1: bot invitation + status polling.
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)

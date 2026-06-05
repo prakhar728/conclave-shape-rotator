@@ -14,6 +14,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { useWorkspace } from "@/components/workspace-provider";
 import { entityTint } from "@/lib/entity-tints";
 import {
   ApiError,
@@ -27,6 +28,8 @@ const TYPES = ["person", "project", "topic", "company", "tool"] as const;
 
 export default function EntitiesPage() {
   const router = useRouter();
+  const { workspace, workspaces: wsList } = useWorkspace();
+  const workspaceId = workspace?.id ?? null;
   const [me, setMe] = useState<MeResponse | null>(null);
   const [entities, setEntities] = useState<KBEntity[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -40,11 +43,11 @@ export default function EntitiesPage() {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!meResp.workspace) {
+        if (!workspaceId) {
           setEntities([]);
           return;
         }
-        const resp = await kb.entities(meResp.workspace.id);
+        const resp = await kb.entities(workspaceId);
         if (!cancelled) setEntities(resp.entities);
       } catch (err) {
         if (cancelled) return;
@@ -58,7 +61,7 @@ export default function EntitiesPage() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [router, workspaceId]);
 
   const visible = useMemo(() => {
     if (!entities) return null;
@@ -76,10 +79,10 @@ export default function EntitiesPage() {
   }, [entities, typeFilter, query]);
 
   if (error) return <PageError message={error} />;
-  if (!me) return <PageLoading />;
+  if (!me || wsList === null) return <PageLoading />;
 
   return (
-    <AppShell user={me.user} workspace={me.workspace}>
+    <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
           <h1 className="font-serif text-3xl md:text-4xl">Entities</h1>
