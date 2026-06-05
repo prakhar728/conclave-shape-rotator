@@ -5,26 +5,32 @@
  */
 import Link from "next/link";
 
+import { AttestedBadge } from "@/components/attested-badge";
 import { Wordmark } from "@/components/wordmark";
 
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-vault-atmosphere px-6">
       <main className="flex w-full max-w-xl flex-col gap-8">
-        <Wordmark size="lg" />
-        <h1 className="text-4xl font-semibold tracking-tight">
-          A privacy-preserving knowledge layer
-          <br />
-          for your team&apos;s conversations.
+        <div className="flex items-baseline gap-3">
+          <Wordmark size="lg" />
+          <AttestedBadge />
+        </div>
+        <h1 className="font-heading text-5xl leading-tight tracking-tight">
+          A privacy-preserving knowledge layer for your team&apos;s
+          conversations.
         </h1>
         <p className="max-w-md text-muted-foreground">
           Invite the bot. Get a confidential transcript and signals.
-          Never lose what was said.
+          Never lose what was said —{" "}
+          <span className="font-heading italic">
+            and never let anyone else read it.
+          </span>
         </p>
         <div>
           <Link
             href="/login"
-            className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
           >
             Sign in
           </Link>
