@@ -197,9 +197,12 @@ function SignalGroup({
         <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
         {title}
       </h2>
-      <ul className="flex flex-col gap-4">
+      <ul className="flex flex-col gap-3">
         {signals.map((s, idx) => (
-          <li key={`${s.kind}-${idx}`} className={`border-l-2 ${bar} pl-4`}>
+          <li
+            key={`${s.kind}-${idx}`}
+            className={`rounded-xl border border-border border-l-2 bg-card p-4 shadow-sm ${bar}`}
+          >
             <p className="text-sm leading-relaxed">{s.text}</p>
             {s.source_quote ? (
               <p className="mt-1.5 text-sm italic leading-relaxed text-muted-foreground">

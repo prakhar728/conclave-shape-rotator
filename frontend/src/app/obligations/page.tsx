@@ -154,12 +154,12 @@ export default function ObligationsPage() {
         ) : (
           /* Editorial Vault: hairline rows; the type chip carries the color,
              the description carries the typography. */
-          <ul className="divide-y divide-border border-t border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             {visible.map((o) => (
               <li key={o.id}>
                 <Link
                   href={`/meeting/${o.session_id}`}
-                  className="group block py-5"
+                  className="group block px-5 py-5"
                 >
                   <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
                     {o.description}

@@ -92,7 +92,7 @@ function LoginInner() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-lg shadow-black/20">
+        <div className="rounded-xl border border-border bg-card p-6 shadow-lg shadow-black/5">
         {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>

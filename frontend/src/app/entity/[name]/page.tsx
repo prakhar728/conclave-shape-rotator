@@ -118,12 +118,12 @@ export default function EntityDetailPage() {
               {detail.meetings.length === 0 ? (
                 <p className="text-sm text-muted-foreground">None visible.</p>
               ) : (
-                <ul className="divide-y divide-border border-t border-border">
+                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                   {detail.meetings.map((m) => (
                     <li key={m.session_id}>
                       <Link
                         href={`/meeting/${m.session_id}`}
-                        className="group flex items-center justify-between gap-3 py-3.5"
+                        className="group flex items-center justify-between gap-3 px-5 py-3.5"
                       >
                         <span className="text-sm transition-colors group-hover:text-primary">
                           {m.summary ? truncate(m.summary, 80) : m.session_id}
@@ -148,9 +148,9 @@ export default function EntityDetailPage() {
                   None currently owned by this entity.
                 </p>
               ) : (
-                <ul className="divide-y divide-border border-t border-border">
+                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
                   {detail.obligations.map((o) => (
-                    <li key={o.id} className="py-3.5">
+                    <li key={o.id} className="px-5 py-3.5">
                       <p className="text-sm leading-relaxed">
                         {o.description}
                       </p>

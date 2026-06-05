@@ -125,12 +125,12 @@ export default function EntitiesPage() {
         ) : (
           /* Editorial Vault: compact hairline ledger rows; the type chip
              carries the entity color language, counts go mono. */
-          <ul className="divide-y divide-border border-t border-border">
+          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             {visible.map((e) => (
               <li key={e.id}>
                 <Link
                   href={`/entity/${encodeURIComponent(e.canonical_name)}`}
-                  className="group flex items-center justify-between gap-4 py-3.5"
+                  className="group flex items-center justify-between gap-4 px-5 py-3.5"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span

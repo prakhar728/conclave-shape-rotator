@@ -175,12 +175,12 @@ function SearchPageInner() {
               {results.length} result{results.length === 1 ? "" : "s"} for “{q}”
             </p>
             {/* Editorial Vault: hairline rows; matched terms get a mint wash. */}
-            <ul className="divide-y divide-border border-t border-border">
+            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
               {results.map((r) => (
                 <li key={r.chunk_id}>
                   <Link
                     href={`/meeting/${r.session_id}`}
-                    className="group block py-5"
+                    className="group block px-5 py-5"
                   >
                     {r.context_header ? (
                       <p className="mb-1.5 text-xs italic text-muted-foreground">
