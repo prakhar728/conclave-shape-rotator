@@ -102,7 +102,7 @@ export default function ObligationsPage() {
       <AppHeader user={me.user} workspace={me.workspace} />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="font-heading text-4xl tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight">
             Obligations
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -162,7 +162,7 @@ export default function ObligationsPage() {
                   href={`/meeting/${o.session_id}`}
                   className="group block py-5"
                 >
-                  <p className="font-heading text-lg leading-snug tracking-tight transition-colors group-hover:text-primary">
+                  <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
                     {o.description}
                   </p>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">

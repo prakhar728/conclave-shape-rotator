@@ -1,19 +1,13 @@
 import type { Metadata } from "next";
-import { Geist, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Geist for body — clean Proton-style utilitarian sans (BUILD_DOC §4).
-const geist = Geist({ subsets: ["latin"], variable: "--font-sans" });
-
-// Instrument Serif for display headings + the wordmark — the "Editorial
-// Vault" voice: classic dossier gravitas over a utilitarian body. The face
-// ships 400-only (normal + italic); weight discipline is the point.
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: ["normal", "italic"],
+// Plus Jakarta Sans — geometric, friendly, modern-SaaS voice (light-theme
+// pivot, 2026-06-04). One family; weight does the hierarchy work.
+const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-serif",
+  variable: "--font-sans",
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -38,11 +32,9 @@ export default function RootLayout({
       className={cn(
         "h-full",
         "antialiased",
-        "dark",
         jetbrainsMono.variable,
-        instrumentSerif.variable,
         "font-sans",
-        geist.variable,
+        jakarta.variable,
       )}
     >
       <body className="min-h-full flex flex-col">{children}</body>

@@ -83,7 +83,7 @@ export default function EntitiesPage() {
       <AppHeader user={me.user} workspace={me.workspace} />
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="font-heading text-4xl tracking-tight">Entities</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Entities</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {visible === null
               ? "Loading…"

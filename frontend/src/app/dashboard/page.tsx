@@ -120,7 +120,7 @@ export default function DashboardPage() {
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-10 flex items-baseline justify-between">
           <div>
-            <h1 className="font-heading text-4xl tracking-tight">Meetings</h1>
+            <h1 className="text-2xl font-bold tracking-tight">Meetings</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               {me.workspace?.name ?? "No workspace"}
             </p>
@@ -188,7 +188,7 @@ export default function DashboardPage() {
                     href={`/meeting/${m.session_id}`}
                     className="group block py-5"
                   >
-                    <p className="font-heading text-xl leading-snug tracking-tight transition-colors group-hover:text-primary">
+                    <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
                       {m.summary
                         ? truncate(m.summary, 120)
                         : `${m.source} — ${m.date}`}
@@ -228,7 +228,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col gap-10">
       <div className="border-t border-border pt-8">
-        <p className="font-heading text-2xl tracking-tight">
+        <p className="text-xl font-bold tracking-tight">
           Welcome to Conclave<span className="text-primary">.</span>
         </p>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">
@@ -261,7 +261,7 @@ function EmptyState() {
               href={`/meeting/${EXAMPLE_SESSION_ID}`}
               className="group block py-5"
             >
-              <p className="font-heading text-xl leading-snug tracking-tight transition-colors group-hover:text-primary">
+              <p className="text-base font-semibold leading-snug transition-colors group-hover:text-primary">
                 Walkthrough of how a Conclave meeting card looks once your
                 bot has joined a Meet.
               </p>
@@ -326,7 +326,7 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
           className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
           aria-hidden
         />
-        <p className="animate-shimmer-text font-heading text-xl tracking-tight">
+        <p className="animate-shimmer-text text-base font-semibold">
           {PROCESSING_MESSAGES[phraseIdx]}
         </p>
       </div>

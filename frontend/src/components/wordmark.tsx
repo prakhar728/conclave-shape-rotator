@@ -1,11 +1,10 @@
 /**
- * Conclave wordmark — Editorial Vault.
+ * Conclave wordmark.
  *
- * Typeset in Instrument Serif (--font-heading) with an emerald terminal
- * period: the full stop as the mark — sealed, nothing leaves. Classic
- * dossier gravitas against the utilitarian Geist body.
+ * Bold Jakarta with an emerald terminal period: the full stop as the
+ * mark — sealed, nothing leaves.
  *
- * `size="lg"` is for the landing/login page; default works for the header.
+ * `size="lg"` is for the landing/login page; default works for the shell.
  */
 import Link from "next/link";
 
@@ -23,8 +22,8 @@ export function Wordmark({
   const inner = (
     <span
       className={cn(
-        "font-heading tracking-tight",
-        size === "lg" ? "text-3xl" : "text-xl",
+        "font-bold tracking-tight",
+        size === "lg" ? "text-2xl" : "text-lg",
         className,
       )}
     >

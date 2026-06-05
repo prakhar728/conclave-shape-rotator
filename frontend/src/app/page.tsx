@@ -16,14 +16,14 @@ export default function Home() {
           <Wordmark size="lg" />
           <AttestedBadge />
         </div>
-        <h1 className="font-heading text-5xl leading-tight tracking-tight">
+        <h1 className="text-5xl font-bold tracking-tight">
           A privacy-preserving knowledge layer for your team&apos;s
           conversations.
         </h1>
         <p className="max-w-md text-muted-foreground">
           Invite the bot. Get a confidential transcript and signals.
           Never lose what was said —{" "}
-          <span className="font-heading italic">
+          <span className="italic">
             and never let anyone else read it.
           </span>
         </p>

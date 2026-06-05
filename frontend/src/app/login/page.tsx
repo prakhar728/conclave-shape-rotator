@@ -87,7 +87,7 @@ function LoginInner() {
             <Wordmark size="lg" />
             <AttestedBadge />
           </div>
-          <p className="font-heading text-lg italic text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Meeting intelligence your provider can&apos;t read.
           </p>
         </div>
@@ -96,7 +96,7 @@ function LoginInner() {
         {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="font-heading text-3xl tracking-tight">
+              <h1 className="text-2xl font-bold tracking-tight">
                 Sign in
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -133,7 +133,7 @@ function LoginInner() {
         ) : (
           <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
             <div>
-              <h1 className="font-heading text-3xl tracking-tight">
+              <h1 className="text-2xl font-bold tracking-tight">
                 Enter the code
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">

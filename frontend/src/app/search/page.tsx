@@ -184,7 +184,7 @@ function SearchPageInner() {
                     className="group block py-5"
                   >
                     {r.context_header ? (
-                      <p className="mb-1.5 font-heading text-sm italic text-muted-foreground">
+                      <p className="mb-1.5 text-xs italic text-muted-foreground">
                         {r.context_header}
                       </p>
                     ) : null}

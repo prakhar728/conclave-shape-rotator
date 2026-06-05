@@ -89,7 +89,7 @@ export default function WorkspacePage({
       <AppHeader user={me.user} workspace={workspace} />
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="font-heading text-4xl tracking-tight">
+          <h1 className="text-2xl font-bold tracking-tight">
             {workspace.name}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

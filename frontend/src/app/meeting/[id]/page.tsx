@@ -105,7 +105,7 @@ export default function MeetingPage({
           ← Back
         </Link>
         <div className="mt-4 mb-10">
-          <h1 className="font-heading text-3xl leading-snug tracking-tight">
+          <h1 className="text-2xl font-bold leading-snug tracking-tight">
             {meeting.summary || `${meeting.source} — ${meeting.date}`}
           </h1>
           <p className="mt-3 font-mono text-xs text-muted-foreground">
@@ -203,7 +203,7 @@ function SignalGroup({
           <li key={`${s.kind}-${idx}`} className={`border-l-2 ${bar} pl-4`}>
             <p className="text-sm leading-relaxed">{s.text}</p>
             {s.source_quote ? (
-              <p className="mt-1.5 font-heading text-base italic leading-snug text-muted-foreground">
+              <p className="mt-1.5 text-sm italic leading-relaxed text-muted-foreground">
                 &ldquo;{s.source_quote}&rdquo;
               </p>
             ) : null}

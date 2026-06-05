@@ -9,8 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  /* Editorial Vault: display headings set in Instrument Serif (layout.tsx) */
-  --font-heading: var(--font-serif);
+  --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -56,38 +55,48 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  /* ───── Enclave Light (full-pivot 2026-06-04): friendly modern SaaS,
+     emerald accent, green-tinted neutrals. The app no longer mounts the
+     `dark` class; this is the live theme. ───── */
+  --background: #F7FAF8;            /* green-tinted off-white canvas */
+  --foreground: #101816;            /* deep green-black text */
+  --card: #FFFFFF;
+  --card-foreground: #101816;
+  --popover: #FFFFFF;
+  --popover-foreground: #101816;
+  --primary: #059669;               /* emerald-600 — AA with white text */
+  --primary-foreground: #FFFFFF;
+  --secondary: #E8F0EC;
+  --secondary-foreground: #101816;
+  --muted: #EEF4F1;
+  --muted-foreground: #5F7268;
+  --accent: #E8F0EC;
+  --accent-foreground: #101816;
+  --destructive: #DC2626;
+  --border: #E3EAE6;
+  --input: #D8E2DD;
+  --ring: #10B981;
+  --chart-1: #10B981;               /* emerald */
+  --chart-2: #0284C7;               /* sky */
+  --chart-3: #D97706;               /* amber */
+  --chart-4: #34D399;               /* mint */
+  --chart-5: #64748B;               /* slate */
+  --radius: 1rem;                   /* rounded-friendly */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #101816;
+  --sidebar-primary: #059669;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #E8F0EC;
+  --sidebar-accent-foreground: #101816;
+  --sidebar-border: #E3EAE6;
+  --sidebar-ring: #10B981;
+
+  /* Brand constants — darkened for legibility on light surfaces. */
+  --accent-mint: #34D399;           /* highlights, graph search glow */
+  --signal-speaker: #D97706;        /* amber-600 — speakers/people */
+  --signal-entity: #0284C7;         /* sky-600 — entities/topics */
+  --signal-meeting: #64748B;        /* slate — meetings */
+  --attested: #059669;              /* verified/TEE trust (= primary) */
 }
 
 .dark {
