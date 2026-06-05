@@ -118,21 +118,25 @@ export default function MeetingPage({
             {meeting.summary || `${meeting.source} — ${meeting.date}`}
           </h1>
           <p className="mt-2 text-xs text-muted-foreground">
-            {meeting.date} · {meeting.source} · {meeting.session_id}
+            {meeting.date} · {meeting.source} ·{" "}
+            <span className="font-mono">{meeting.session_id}</span>
           </p>
         </div>
 
         <SignalGroup
           title="Action items"
           signals={meeting.signals_by_kind.action_items}
+          accent="action"
         />
         <SignalGroup
           title="Open questions"
           signals={meeting.signals_by_kind.open_questions}
+          accent="open_question"
         />
         <SignalGroup
           title="Insights"
           signals={meeting.signals_by_kind.insights}
+          accent="insight"
         />
 
         {meeting.is_owner ? (
@@ -158,7 +162,7 @@ export default function MeetingPage({
                       sessions); the entity page 404-states gracefully. */}
                   <Link
                     href={`/entity/${encodeURIComponent(e.name)}`}
-                    className="inline-block rounded-full border border-border px-3 py-1 text-xs transition-colors hover:border-foreground/40"
+                    className="inline-block rounded-full border border-border px-3 py-1 text-xs transition-colors hover:border-primary/50"
                   >
                     <span className="text-foreground">{e.name}</span>
                     <span className="ml-2 text-muted-foreground">{e.type}</span>
@@ -173,23 +177,41 @@ export default function MeetingPage({
   );
 }
 
+/**
+ * Per-signal-kind accent (UI-NOW.md §3): colored left bar on each card
+ * makes the readout scannable in 2 seconds — same color language as the
+ * obligations board (action=emerald, open_question=amber, insight=sky).
+ */
+const SIGNAL_ACCENT: Record<string, { bar: string; dot: string }> = {
+  action: { bar: "border-l-primary", dot: "bg-primary" },
+  open_question: {
+    bar: "border-l-signal-speaker",
+    dot: "bg-signal-speaker",
+  },
+  insight: { bar: "border-l-signal-entity", dot: "bg-signal-entity" },
+};
+
 function SignalGroup({
   title,
   signals,
+  accent,
 }: {
   title: string;
   signals: Signal[];
+  accent: keyof typeof SIGNAL_ACCENT;
 }) {
   if (signals.length === 0) return null;
+  const { bar, dot } = SIGNAL_ACCENT[accent];
   return (
     <section className="mb-6">
-      <h2 className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+      <h2 className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
         {title}
       </h2>
       <ul className="flex flex-col gap-2">
         {signals.map((s, idx) => (
           <li key={`${s.kind}-${idx}`}>
-            <Card>
+            <Card className={`border-l-2 ${bar}`}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium">{s.text}</CardTitle>
               </CardHeader>
