@@ -13,6 +13,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 
 import { AttestedBadge } from "@/components/attested-badge";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { SearchBox } from "@/components/search-box";
 import { Wordmark } from "@/components/wordmark";
@@ -44,12 +45,12 @@ export function AppHeader({
   }
 
   return (
-    <header className="flex items-center justify-between border-b border-border px-6 py-4">
-      <div className="flex items-center gap-4">
+    <header className="flex items-center justify-between border-b border-border px-6 py-3.5">
+      <div className="flex items-baseline gap-3">
         <Wordmark href="/dashboard" />
         {workspace ? (
           <>
-            <span className="text-muted-foreground">/</span>
+            <span className="text-muted-foreground/60">/</span>
             <span className="text-sm text-muted-foreground">
               {workspace.name}
             </span>
@@ -63,11 +64,12 @@ export function AppHeader({
           <Link
             key={href}
             href={href}
-            className={
+            className={cn(
+              "hidden text-[11px] uppercase tracking-[0.14em] transition-colors sm:inline",
               pathname.startsWith(href)
-                ? "hidden text-xs font-medium text-primary sm:inline"
-                : "hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
-            }
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
           >
             {label}
           </Link>

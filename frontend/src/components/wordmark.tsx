@@ -1,11 +1,11 @@
 /**
- * Conclave wordmark.
+ * Conclave wordmark — Editorial Vault.
  *
- * v1: typeset wordmark using Geist (set as --font-sans in layout.tsx).
- * Uppercase, modest letter-spacing — utilitarian, privacy-tech aesthetic
- * per BUILD_DOC §4. Real logo design is deferred to v1.5.
+ * Typeset in Instrument Serif (--font-heading) with an emerald terminal
+ * period: the full stop as the mark — sealed, nothing leaves. Classic
+ * dossier gravitas against the utilitarian Geist body.
  *
- * `size="lg"` is for the landing page; default works for the header.
+ * `size="lg"` is for the landing/login page; default works for the header.
  */
 import Link from "next/link";
 
@@ -23,12 +23,12 @@ export function Wordmark({
   const inner = (
     <span
       className={cn(
-        "font-semibold tracking-[0.22em] uppercase",
-        size === "lg" ? "text-base" : "text-sm",
+        "font-heading tracking-tight",
+        size === "lg" ? "text-3xl" : "text-xl",
         className,
       )}
     >
-      Conclave
+      Conclave<span className="text-primary">.</span>
     </span>
   );
 
