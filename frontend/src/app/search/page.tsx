@@ -183,29 +183,31 @@ function SearchPageInner() {
           </div>
         ) : (
           <>
-            <p className="mb-4 text-sm text-muted-foreground">
+            <p className="mb-2 text-sm text-muted-foreground">
               {results.length} result{results.length === 1 ? "" : "s"} for “{q}”
             </p>
-            <ul className="flex flex-col gap-3">
+            {/* Editorial Vault: hairline rows; matched terms get a mint wash. */}
+            <ul className="divide-y divide-border border-t border-border">
               {results.map((r) => (
                 <li key={r.chunk_id}>
-                  <Link href={`/meeting/${r.session_id}`}>
-                    <Card className="transition-colors hover:border-primary/30">
-                      <CardContent className="py-3">
-                        {r.context_header ? (
-                          <p className="mb-1 text-[11px] italic text-muted-foreground">
-                            {r.context_header}
-                          </p>
-                        ) : null}
-                        <p className="text-sm">{r.snippet}</p>
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          {r.meeting.date ?? ""}
-                          {r.meeting.summary
-                            ? ` · ${truncate(r.meeting.summary, 70)}`
-                            : ""}
-                        </p>
-                      </CardContent>
-                    </Card>
+                  <Link
+                    href={`/meeting/${r.session_id}`}
+                    className="group block py-5"
+                  >
+                    {r.context_header ? (
+                      <p className="mb-1.5 font-heading text-sm italic text-muted-foreground">
+                        {r.context_header}
+                      </p>
+                    ) : null}
+                    <p className="text-sm leading-relaxed">
+                      {highlightTerms(r.snippet, q)}
+                    </p>
+                    <p className="mt-2 font-mono text-xs text-muted-foreground transition-colors group-hover:text-primary">
+                      {r.meeting.date ?? ""}
+                      {r.meeting.summary
+                        ? ` · ${truncate(r.meeting.summary, 70)}`
+                        : ""}
+                    </p>
                   </Link>
                 </li>
               ))}
@@ -219,4 +221,40 @@ function SearchPageInner() {
 
 function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Wrap query-term matches in a mint-washed <mark> so the user can see
+ * *why* a snippet matched (UI-NOW.md §3, search P1). Terms under 3 chars
+ * are skipped — highlighting "a"/"of" is noise, not signal.
+ */
+function highlightTerms(text: string, query: string): React.ReactNode {
+  const terms = Array.from(
+    new Set(
+      query
+        .toLowerCase()
+        .split(/\s+/)
+        .filter((t) => t.length > 2)
+        .map(escapeRegExp),
+    ),
+  );
+  if (terms.length === 0) return text;
+  // Single capture group → matches land at odd indices after split.
+  const parts = text.split(new RegExp(`(${terms.join("|")})`, "gi"));
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <mark
+        key={i}
+        className="rounded-[3px] bg-primary/20 px-0.5 text-foreground"
+      >
+        {part}
+      </mark>
+    ) : (
+      part
+    ),
+  );
 }
