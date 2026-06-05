@@ -1,10 +1,7 @@
 /**
- * Conclave wordmark.
- *
- * Bold Jakarta with an emerald terminal period: the full stop as the
- * mark — sealed, nothing leaves.
- *
- * `size="lg"` is for the landing/login page; default works for the shell.
+ * Conclave wordmark — Vantage language: dark circle with a serif initial
+ * + bold name. (Vantage uses a white circle on dark nav; we invert on
+ * light surfaces and flip via the `inverted` prop on dark ones.)
  */
 import Link from "next/link";
 
@@ -14,20 +11,36 @@ export function Wordmark({
   size = "default",
   href = "/",
   className,
+  inverted = false,
 }: {
   size?: "default" | "lg";
   href?: string | null;
   className?: string;
+  /** For dark surfaces (landing pill nav): white circle, dark glyph. */
+  inverted?: boolean;
 }) {
   const inner = (
-    <span
-      className={cn(
-        "font-bold tracking-tight",
-        size === "lg" ? "text-2xl" : "text-lg",
-        className,
-      )}
-    >
-      Conclave<span className="text-primary">.</span>
+    <span className={cn("flex items-center gap-2.5", className)}>
+      <span
+        className={cn(
+          "flex items-center justify-center rounded-full font-serif shadow-sm",
+          inverted
+            ? "bg-background text-foreground"
+            : "bg-foreground text-background",
+          size === "lg" ? "size-10 text-2xl" : "size-8 text-lg",
+        )}
+      >
+        C
+      </span>
+      <span
+        className={cn(
+          "font-bold tracking-tight",
+          inverted ? "text-background" : "text-foreground",
+          size === "lg" ? "text-xl" : "text-base",
+        )}
+      >
+        Conclave
+      </span>
     </span>
   );
 
