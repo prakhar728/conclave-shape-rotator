@@ -13,7 +13,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
   auth,
@@ -113,11 +112,11 @@ export default function ObligationsPage() {
     <div className="min-h-screen bg-background">
       <AppHeader user={me.user} workspace={me.workspace} />
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="mb-6">
-          <h1 className="text-3xl font-semibold tracking-tight">
+        <div className="mb-8">
+          <h1 className="font-heading text-4xl tracking-tight">
             Obligations
           </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-2 text-sm text-muted-foreground">
             {visible === null
               ? "Loading…"
               : `${visible.length} current across your meetings.`}
@@ -165,67 +164,65 @@ export default function ObligationsPage() {
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-3">
+          /* Editorial Vault: hairline rows; the type chip carries the color,
+             the description carries the typography. */
+          <ul className="divide-y divide-border border-t border-border">
             {visible.map((o) => (
               <li key={o.id}>
-                <Link href={`/meeting/${o.session_id}`}>
-                  <Card className="transition-colors hover:border-primary/30">
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-base font-medium">
-                        {o.description}
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                <Link
+                  href={`/meeting/${o.session_id}`}
+                  className="group block py-5"
+                >
+                  <p className="font-heading text-lg leading-snug tracking-tight transition-colors group-hover:text-primary">
+                    {o.description}
+                  </p>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <span
+                      className={`rounded-full border px-2 py-0.5 capitalize ${
+                        TYPE_CHIP[o.type] ?? "border-border text-foreground"
+                      }`}
+                    >
+                      {o.type.replace("_", " ")}
+                    </span>
+                    <span
+                      className={`rounded-full border px-2 py-0.5 capitalize ${
+                        STATUS_PILL[o.status_inferred] ??
+                        "border-border text-muted-foreground"
+                      }`}
+                    >
+                      {o.status_inferred}
+                    </span>
+                    {o.owner_raw_text ? (
+                      <>
+                        <span>·</span>
+                        <span>{o.owner_raw_text}</span>
+                      </>
+                    ) : null}
+                    {o.due_date_raw ? (
+                      <>
+                        <span>·</span>
+                        <span className="font-mono">due {o.due_date_raw}</span>
+                      </>
+                    ) : null}
+                    {o.importance ? (
+                      <span className="ml-auto inline-flex items-center gap-1.5">
                         <span
-                          className={`rounded-full border px-2 py-0.5 capitalize ${
-                            TYPE_CHIP[o.type] ??
-                            "border-border text-foreground"
-                          }`}
+                          className="h-1 w-12 overflow-hidden rounded-full bg-muted"
+                          aria-hidden
                         >
-                          {o.type.replace("_", " ")}
+                          <span
+                            className="block h-full rounded-full bg-primary"
+                            style={{
+                              width: `${o.importance * 10}%`,
+                            }}
+                          />
                         </span>
-                        <span
-                          className={`rounded-full border px-2 py-0.5 capitalize ${
-                            STATUS_PILL[o.status_inferred] ??
-                            "border-border text-muted-foreground"
-                          }`}
-                        >
-                          {o.status_inferred}
+                        <span className="font-mono text-[10px]">
+                          {o.importance}/10
                         </span>
-                        {o.owner_raw_text ? (
-                          <>
-                            <span>·</span>
-                            <span>{o.owner_raw_text}</span>
-                          </>
-                        ) : null}
-                        {o.due_date_raw ? (
-                          <>
-                            <span>·</span>
-                            <span>due {o.due_date_raw}</span>
-                          </>
-                        ) : null}
-                        {o.importance ? (
-                          <span className="ml-auto inline-flex items-center gap-1.5">
-                            <span
-                              className="h-1 w-12 overflow-hidden rounded-full bg-muted"
-                              aria-hidden
-                            >
-                              <span
-                                className="block h-full rounded-full bg-primary"
-                                style={{
-                                  width: `${o.importance * 10}%`,
-                                }}
-                              />
-                            </span>
-                            <span className="font-mono text-[10px]">
-                              {o.importance}/10
-                            </span>
-                          </span>
-                        ) : null}
-                      </div>
-                    </CardContent>
-                  </Card>
+                      </span>
+                    ) : null}
+                  </div>
                 </Link>
               </li>
             ))}
