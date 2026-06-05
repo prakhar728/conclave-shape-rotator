@@ -13,7 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { Card, CardContent } from "@/components/ui/card";
+import { entityTint } from "@/lib/entity-tints";
 import {
   ApiError,
   auth,
@@ -93,9 +93,9 @@ export default function EntitiesPage() {
     <div className="min-h-screen bg-background">
       <AppHeader user={me.user} workspace={me.workspace} />
       <main className="mx-auto max-w-3xl px-6 py-10">
-        <div className="mb-6">
-          <h1 className="text-3xl font-semibold tracking-tight">Entities</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
+        <div className="mb-8">
+          <h1 className="font-heading text-4xl tracking-tight">Entities</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
             {visible === null
               ? "Loading…"
               : `${visible.length} across your meetings.`}
@@ -107,7 +107,7 @@ export default function EntitiesPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter by name…"
-            className="h-8 w-48 rounded-md border border-border bg-background px-2 text-sm outline-none focus:border-foreground/40"
+            className="h-8 w-48 rounded-md border border-border bg-background px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
           {TYPES.map((t) => (
             <button
@@ -115,7 +115,7 @@ export default function EntitiesPage() {
               onClick={() => setTypeFilter(typeFilter === t ? null : t)}
               className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
                 typeFilter === t
-                  ? "border-foreground bg-foreground text-background"
+                  ? entityTint(t)
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -135,28 +135,30 @@ export default function EntitiesPage() {
             </p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          /* Editorial Vault: compact hairline ledger rows; the type chip
+             carries the entity color language, counts go mono. */
+          <ul className="divide-y divide-border border-t border-border">
             {visible.map((e) => (
               <li key={e.id}>
-                <Link href={`/entity/${encodeURIComponent(e.canonical_name)}`}>
-                  <Card className="transition-colors hover:border-foreground/20">
-                    <CardContent className="flex items-center justify-between py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
-                          {e.type}
-                        </span>
-                        <span className="text-sm font-medium">
-                          {e.canonical_name}
-                        </span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {e.mention_count}{" "}
-                        {e.mention_count === 1 ? "mention" : "mentions"} ·{" "}
-                        {e.meeting_count}{" "}
-                        {e.meeting_count === 1 ? "meeting" : "meetings"}
-                      </span>
-                    </CardContent>
-                  </Card>
+                <Link
+                  href={`/entity/${encodeURIComponent(e.canonical_name)}`}
+                  className="group flex items-center justify-between gap-4 py-3.5"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <span
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(e.type)}`}
+                    >
+                      {e.type}
+                    </span>
+                    <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">
+                      {e.canonical_name}
+                    </span>
+                  </div>
+                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                    {e.mention_count}×{" · "}
+                    {e.meeting_count}{" "}
+                    {e.meeting_count === 1 ? "meeting" : "meetings"}
+                  </span>
                 </Link>
               </li>
             ))}

@@ -13,7 +13,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { entityTint } from "@/lib/entity-tints";
 import {
   ApiError,
   auth,
@@ -95,20 +95,30 @@ export default function EntityDetailPage() {
           <p className="text-sm text-muted-foreground">Loading…</p>
         ) : (
           <>
-            <div className="mb-8">
-              <div className="flex items-center gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight">
+            <div className="mb-10">
+              <div className="flex items-baseline gap-3">
+                <h1 className="font-heading text-4xl tracking-tight">
                   {detail.entity.canonical_name}
                 </h1>
-                <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
+                <span
+                  className={`rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(detail.entity.type)}`}
+                >
                   {detail.entity.type}
                 </span>
               </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {detail.entity.mention_count}{" "}
+              <p className="mt-2 text-sm text-muted-foreground">
+                <span className="font-mono text-xs">
+                  {detail.entity.mention_count}×
+                </span>{" "}
                 {detail.entity.mention_count === 1 ? "mention" : "mentions"}
                 {detail.entity.raw_mentions.length > 1 ? (
-                  <> · also seen as {detail.entity.raw_mentions.join(", ")}</>
+                  <>
+                    {" "}
+                    · also seen as{" "}
+                    <span className="italic">
+                      {detail.entity.raw_mentions.join(", ")}
+                    </span>
+                  </>
                 ) : null}
               </p>
             </div>
@@ -120,25 +130,20 @@ export default function EntityDetailPage() {
               {detail.meetings.length === 0 ? (
                 <p className="text-sm text-muted-foreground">None visible.</p>
               ) : (
-                <ul className="flex flex-col gap-2">
+                <ul className="divide-y divide-border border-t border-border">
                   {detail.meetings.map((m) => (
                     <li key={m.session_id}>
-                      <Link href={`/meeting/${m.session_id}`}>
-                        <Card className="transition-colors hover:border-foreground/20">
-                          <CardContent className="py-3">
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm">
-                                {m.summary
-                                  ? truncate(m.summary, 80)
-                                  : m.session_id}
-                              </span>
-                              <span className="ml-3 shrink-0 text-xs text-muted-foreground">
-                                {m.date ?? ""} · {m.turn_ids.length}{" "}
-                                {m.turn_ids.length === 1 ? "turn" : "turns"}
-                              </span>
-                            </div>
-                          </CardContent>
-                        </Card>
+                      <Link
+                        href={`/meeting/${m.session_id}`}
+                        className="group flex items-center justify-between gap-3 py-3.5"
+                      >
+                        <span className="text-sm transition-colors group-hover:text-primary">
+                          {m.summary ? truncate(m.summary, 80) : m.session_id}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs text-muted-foreground">
+                          {m.date ?? ""} · {m.turn_ids.length}{" "}
+                          {m.turn_ids.length === 1 ? "turn" : "turns"}
+                        </span>
                       </Link>
                     </li>
                   ))}
@@ -155,23 +160,23 @@ export default function EntityDetailPage() {
                   None currently owned by this entity.
                 </p>
               ) : (
-                <ul className="flex flex-col gap-2">
+                <ul className="divide-y divide-border border-t border-border">
                   {detail.obligations.map((o) => (
-                    <li key={o.id}>
-                      <Card>
-                        <CardHeader className="pb-1">
-                          <CardTitle className="text-sm font-medium">
-                            {o.description}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="rounded-full border border-border px-2 py-0.5 capitalize">
-                            {o.type.replace("_", " ")}
+                    <li key={o.id} className="py-3.5">
+                      <p className="text-sm leading-relaxed">
+                        {o.description}
+                      </p>
+                      <p className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        <span className="rounded-full border border-border px-2 py-0.5 capitalize">
+                          {o.type.replace("_", " ")}
+                        </span>
+                        <span className="capitalize">{o.status_inferred}</span>
+                        {o.due_date_raw ? (
+                          <span className="font-mono">
+                            · due {o.due_date_raw}
                           </span>
-                          <span className="capitalize">{o.status_inferred}</span>
-                          {o.due_date_raw ? <span>· due {o.due_date_raw}</span> : null}
-                        </CardContent>
-                      </Card>
+                        ) : null}
+                      </p>
                     </li>
                   ))}
                 </ul>
