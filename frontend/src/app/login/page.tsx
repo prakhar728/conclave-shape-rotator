@@ -17,6 +17,7 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
+import { AttestedBadge } from "@/components/attested-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Wordmark } from "@/components/wordmark";
@@ -78,10 +79,20 @@ function LoginInner() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
       <div className="w-full max-w-sm">
-        <div className="mb-8">
-          <Wordmark />
+        {/* Trust cue before login: the wordmark + attested badge + the
+            one-line pitch. A prospect should know what's different here
+            before they type anything. */}
+        <div className="mb-8 flex flex-col items-start gap-3">
+          <div className="flex items-center gap-3">
+            <Wordmark />
+            <AttestedBadge />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Meeting intelligence your provider can&apos;t read.
+          </p>
         </div>
 
+        <div className="rounded-xl border border-border bg-card p-6 shadow-lg shadow-black/20">
         {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>
@@ -112,7 +123,7 @@ function LoginInner() {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={busy}
               />
-              <Button type="submit" disabled={busy || !email} variant="outline">
+              <Button type="submit" disabled={busy || !email}>
                 {busy ? "Sending…" : "Send 6-digit code"}
               </Button>
             </form>
@@ -161,6 +172,7 @@ function LoginInner() {
             ) : null}
           </form>
         )}
+        </div>
       </div>
     </div>
   );

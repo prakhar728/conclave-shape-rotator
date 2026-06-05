@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 
 import Link from "next/link";
 
+import { AttestedBadge } from "@/components/attested-badge";
 import { Button } from "@/components/ui/button";
 import { SearchBox } from "@/components/search-box";
 import { Wordmark } from "@/components/wordmark";
@@ -22,25 +23,6 @@ const NAV_LINKS = [
   { href: "/obligations", label: "Obligations" },
   { href: "/graph", label: "Graph" },
 ] as const;
-
-/**
- * The trust mark: emerald dot + mono "attested". The whole pitch in one
- * chip — the operator provably can't read your meetings.
- *
- * TODO(tee-deploy): wire to a real attestation endpoint (TDX quote
- * verification) instead of rendering statically.
- */
-function AttestedBadge() {
-  return (
-    <span
-      title="Running in a confidential VM · Intel TDX"
-      className="inline-flex cursor-default items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] leading-4 text-primary"
-    >
-      <span className="size-1.5 rounded-full bg-attested" aria-hidden />
-      attested
-    </span>
-  );
-}
 
 export function AppHeader({
   user,
