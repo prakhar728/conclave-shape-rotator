@@ -31,6 +31,26 @@ const TYPES = [
 ] as const;
 const STATUSES = ["open", "resolved", "unclear"] as const;
 
+/**
+ * One color per obligation type (UI-NOW.md §3): the board should be
+ * glanceable — a wall of same-gray chips isn't. All via theme tokens.
+ */
+const TYPE_CHIP: Record<string, string> = {
+  action: "border-primary/40 bg-primary/10 text-primary",
+  decision: "border-signal-entity/40 bg-signal-entity/10 text-signal-entity",
+  commitment: "border-accent-mint/40 bg-accent-mint/10 text-accent-mint",
+  open_question:
+    "border-signal-speaker/40 bg-signal-speaker/10 text-signal-speaker",
+  blocker: "border-destructive/40 bg-destructive/10 text-destructive",
+};
+
+/** open = needs attention (amber), resolved = done (emerald), unclear = muted. */
+const STATUS_PILL: Record<string, string> = {
+  open: "border-signal-speaker/40 text-signal-speaker",
+  resolved: "border-primary/40 text-primary",
+  unclear: "border-border text-muted-foreground",
+};
+
 export default function ObligationsPage() {
   const router = useRouter();
   const [me, setMe] = useState<MeResponse | null>(null);
@@ -111,7 +131,7 @@ export default function ObligationsPage() {
               onClick={() => setTypeFilter(typeFilter === t ? null : t)}
               className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
                 typeFilter === t
-                  ? "border-foreground bg-foreground text-background"
+                  ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -125,7 +145,7 @@ export default function ObligationsPage() {
               onClick={() => setStatusFilter(statusFilter === s ? null : s)}
               className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
                 statusFilter === s
-                  ? "border-foreground bg-foreground text-background"
+                  ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -149,7 +169,7 @@ export default function ObligationsPage() {
             {visible.map((o) => (
               <li key={o.id}>
                 <Link href={`/meeting/${o.session_id}`}>
-                  <Card className="transition-colors hover:border-foreground/20">
+                  <Card className="transition-colors hover:border-primary/30">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-base font-medium">
                         {o.description}
@@ -157,10 +177,22 @@ export default function ObligationsPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="rounded-full border border-border px-2 py-0.5 capitalize text-foreground">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 capitalize ${
+                            TYPE_CHIP[o.type] ??
+                            "border-border text-foreground"
+                          }`}
+                        >
                           {o.type.replace("_", " ")}
                         </span>
-                        <span className="capitalize">{o.status_inferred}</span>
+                        <span
+                          className={`rounded-full border px-2 py-0.5 capitalize ${
+                            STATUS_PILL[o.status_inferred] ??
+                            "border-border text-muted-foreground"
+                          }`}
+                        >
+                          {o.status_inferred}
+                        </span>
                         {o.owner_raw_text ? (
                           <>
                             <span>·</span>
@@ -174,10 +206,22 @@ export default function ObligationsPage() {
                           </>
                         ) : null}
                         {o.importance ? (
-                          <>
-                            <span>·</span>
-                            <span>importance {o.importance}/10</span>
-                          </>
+                          <span className="ml-auto inline-flex items-center gap-1.5">
+                            <span
+                              className="h-1 w-12 overflow-hidden rounded-full bg-muted"
+                              aria-hidden
+                            >
+                              <span
+                                className="block h-full rounded-full bg-primary"
+                                style={{
+                                  width: `${o.importance * 10}%`,
+                                }}
+                              />
+                            </span>
+                            <span className="font-mono text-[10px]">
+                              {o.importance}/10
+                            </span>
+                          </span>
                         ) : null}
                       </div>
                     </CardContent>
