@@ -17,7 +17,6 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
   auth,
@@ -130,10 +129,10 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background">
       <AppHeader user={me.user} workspace={me.workspace} />
       <main className="mx-auto max-w-4xl px-6 py-10">
-        <div className="mb-8 flex items-baseline justify-between">
+        <div className="mb-10 flex items-baseline justify-between">
           <div>
-            <h1 className="text-3xl font-semibold tracking-tight">Meetings</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
+            <h1 className="font-heading text-4xl tracking-tight">Meetings</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
               {me.workspace?.name ?? "No workspace"}
             </p>
           </div>
@@ -186,7 +185,9 @@ export default function DashboardPage() {
         ) : meetings.length === 0 ? (
           <EmptyState />
         ) : (
-          <ul className="flex flex-col gap-3">
+          /* Editorial Vault: hairline-divided dossier rows, not boxes —
+             serif headline per meeting, mono meta underneath. */
+          <ul className="divide-y divide-border border-t border-border">
             {meetings.map((m) =>
               m.is_processing ? (
                 <li key={m.session_id}>
@@ -194,22 +195,19 @@ export default function DashboardPage() {
                 </li>
               ) : (
                 <li key={m.session_id}>
-                  <Link href={`/meeting/${m.session_id}`}>
-                    <Card className="transition-colors hover:border-primary/30">
-                      <CardHeader>
-                        <CardTitle className="text-base">
-                          {m.summary
-                            ? truncate(m.summary, 120)
-                            : `${m.source} — ${m.date}`}
-                        </CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
-                          {m.date} · {m.source}
-                          {isDemoSession(m.session_id) ? <DemoTag /> : null}
-                        </p>
-                      </CardContent>
-                    </Card>
+                  <Link
+                    href={`/meeting/${m.session_id}`}
+                    className="group block py-5"
+                  >
+                    <p className="font-heading text-xl leading-snug tracking-tight transition-colors group-hover:text-primary">
+                      {m.summary
+                        ? truncate(m.summary, 120)
+                        : `${m.source} — ${m.date}`}
+                    </p>
+                    <p className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted-foreground">
+                      {m.date} · {m.source}
+                      {isDemoSession(m.session_id) ? <DemoTag /> : null}
+                    </p>
                   </Link>
                 </li>
               ),
@@ -239,15 +237,17 @@ function DemoTag() {
 
 function EmptyState() {
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-lg border border-border bg-card p-6">
-        <p className="text-sm font-medium">Welcome to Conclave</p>
-        <p className="mt-2 max-w-prose text-sm text-muted-foreground">
+    <div className="flex flex-col gap-10">
+      <div className="border-t border-border pt-8">
+        <p className="font-heading text-2xl tracking-tight">
+          Welcome to Conclave<span className="text-primary">.</span>
+        </p>
+        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">
           Conclave gives you a confidential transcript and signal extraction
           for every meeting you invite our bot to. Transcription happens
           inside a TEE — operator-blind from end to end.
         </p>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="mt-5 flex flex-wrap items-center gap-4">
           <Link
             href="/invite"
             className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
@@ -263,25 +263,26 @@ function EmptyState() {
         </div>
       </div>
       <div>
-        <p className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <p className="mb-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
           Example meeting
         </p>
-        <Link href={`/meeting/${EXAMPLE_SESSION_ID}`}>
-          <Card className="transition-colors hover:border-primary/30">
-            <CardHeader>
-              <CardTitle className="text-base">
+        <ul className="divide-y divide-border border-t border-border">
+          <li>
+            <Link
+              href={`/meeting/${EXAMPLE_SESSION_ID}`}
+              className="group block py-5"
+            >
+              <p className="font-heading text-xl leading-snug tracking-tight transition-colors group-hover:text-primary">
                 Walkthrough of how a Conclave meeting card looks once your
                 bot has joined a Meet.
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              </p>
+              <p className="mt-1.5 flex items-center gap-2 font-mono text-xs text-muted-foreground">
                 2026-05-15 · example
                 <DemoTag />
               </p>
-            </CardContent>
-          </Card>
-        </Link>
+            </Link>
+          </li>
+        </ul>
       </div>
     </div>
   );
@@ -330,22 +331,21 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="rounded-lg border border-border bg-card p-5">
+    <div className="py-5">
       <div className="flex items-center gap-3">
         <span
           className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
           aria-hidden
         />
-        <p className="animate-shimmer-text text-sm font-medium">
+        <p className="animate-shimmer-text font-heading text-xl tracking-tight">
           {PROCESSING_MESSAGES[phraseIdx]}
         </p>
       </div>
-      <p className="mt-2 text-xs text-muted-foreground">
-        {meeting.date} · {meeting.source} ·{" "}
-        <span className="font-mono">{meeting.session_id}</span>
+      <p className="mt-1.5 font-mono text-xs text-muted-foreground">
+        {meeting.date} · {meeting.source} · {meeting.session_id}
       </p>
-      <p className="mt-3 text-xs text-muted-foreground">
-        The card refreshes itself when the LLM finishes — usually under two
+      <p className="mt-2 text-xs text-muted-foreground">
+        This row refreshes itself when the LLM finishes — usually under two
         minutes. You can close this tab; the meeting will be ready when you
         come back.
       </p>
