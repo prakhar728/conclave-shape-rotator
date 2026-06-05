@@ -24,7 +24,6 @@ import { use, useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { OwnerControls } from "@/components/owner-controls";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
   auth,
@@ -113,13 +112,12 @@ export default function MeetingPage({
         >
           ← Back
         </Link>
-        <div className="mt-3 mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">
+        <div className="mt-4 mb-10">
+          <h1 className="font-heading text-3xl leading-snug tracking-tight">
             {meeting.summary || `${meeting.source} — ${meeting.date}`}
           </h1>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {meeting.date} · {meeting.source} ·{" "}
-            <span className="font-mono">{meeting.session_id}</span>
+          <p className="mt-3 font-mono text-xs text-muted-foreground">
+            {meeting.date} · {meeting.source} · {meeting.session_id}
           </p>
         </div>
 
@@ -203,26 +201,20 @@ function SignalGroup({
   if (signals.length === 0) return null;
   const { bar, dot } = SIGNAL_ACCENT[accent];
   return (
-    <section className="mb-6">
-      <h2 className="mb-3 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
+    <section className="mb-8">
+      <h2 className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
         <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
         {title}
       </h2>
-      <ul className="flex flex-col gap-2">
+      <ul className="flex flex-col gap-4">
         {signals.map((s, idx) => (
-          <li key={`${s.kind}-${idx}`}>
-            <Card className={`border-l-2 ${bar}`}>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium">{s.text}</CardTitle>
-              </CardHeader>
-              {s.source_quote ? (
-                <CardContent>
-                  <p className="text-xs italic text-muted-foreground">
-                    &ldquo;{s.source_quote}&rdquo;
-                  </p>
-                </CardContent>
-              ) : null}
-            </Card>
+          <li key={`${s.kind}-${idx}`} className={`border-l-2 ${bar} pl-4`}>
+            <p className="text-sm leading-relaxed">{s.text}</p>
+            {s.source_quote ? (
+              <p className="mt-1.5 font-heading text-base italic leading-snug text-muted-foreground">
+                &ldquo;{s.source_quote}&rdquo;
+              </p>
+            ) : null}
           </li>
         ))}
       </ul>
