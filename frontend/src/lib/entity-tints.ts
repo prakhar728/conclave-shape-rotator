@@ -8,7 +8,7 @@ export const ENTITY_TINT: Record<string, string> = {
   project: "border-primary/40 bg-primary/10 text-primary",
   topic: "border-signal-entity/40 bg-signal-entity/10 text-signal-entity",
   company: "border-signal-meeting/50 bg-signal-meeting/10 text-foreground",
-  tool: "border-accent-mint/40 bg-accent-mint/10 text-accent-mint",
+  tool: "border-signal-positive/40 bg-signal-positive/10 text-signal-positive",
 };
 
 export const ENTITY_TINT_FALLBACK = "border-border text-muted-foreground";

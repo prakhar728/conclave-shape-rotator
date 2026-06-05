@@ -9,6 +9,8 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
+  /* `font-serif` = Instrument Serif (layout.tsx) — Vantage display voice */
+  --font-serif: var(--font-serif);
   --font-heading: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -39,11 +41,13 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  /* Enclave Emerald brand constants (UI-NOW.md §1) */
+  /* Brand constant utilities (Vantage accent set) */
   --color-accent-mint: var(--accent-mint);
   --color-signal-speaker: var(--signal-speaker);
   --color-signal-entity: var(--signal-entity);
   --color-signal-meeting: var(--signal-meeting);
+  --color-signal-warn: var(--signal-warn);
+  --color-signal-positive: var(--signal-positive);
   --color-attested: var(--attested);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -55,48 +59,50 @@
 }
 
 :root {
-  /* ───── Enclave Light (full-pivot 2026-06-04): friendly modern SaaS,
-     emerald accent, green-tinted neutrals. The app no longer mounts the
-     `dark` class; this is the live theme. ───── */
-  --background: #F7FAF8;            /* green-tinted off-white canvas */
-  --foreground: #101816;            /* deep green-black text */
+  /* ───── Vantage (locked 2026-06-04, user-supplied reference): warm
+     stone neutrals, orange-600 primary, white cards on stone-50.
+     Green appears ONLY as the trust/operational color (attested). ───── */
+  --background: #FAFAF9;            /* stone-50 canvas */
+  --foreground: #1C1917;            /* stone-900 ink */
   --card: #FFFFFF;
-  --card-foreground: #101816;
+  --card-foreground: #1C1917;
   --popover: #FFFFFF;
-  --popover-foreground: #101816;
-  --primary: #059669;               /* emerald-600 — AA with white text */
+  --popover-foreground: #1C1917;
+  --primary: #EA580C;               /* orange-600 */
   --primary-foreground: #FFFFFF;
-  --secondary: #E8F0EC;
-  --secondary-foreground: #101816;
-  --muted: #EEF4F1;
-  --muted-foreground: #5F7268;
-  --accent: #E8F0EC;
-  --accent-foreground: #101816;
+  --secondary: #F5F5F4;             /* stone-100 */
+  --secondary-foreground: #1C1917;
+  --muted: #F5F5F4;
+  --muted-foreground: #78716C;      /* stone-500 */
+  --accent: #F5F5F4;
+  --accent-foreground: #1C1917;
   --destructive: #DC2626;
-  --border: #E3EAE6;
-  --input: #D8E2DD;
-  --ring: #10B981;
-  --chart-1: #10B981;               /* emerald */
-  --chart-2: #0284C7;               /* sky */
-  --chart-3: #D97706;               /* amber */
-  --chart-4: #34D399;               /* mint */
-  --chart-5: #64748B;               /* slate */
-  --radius: 1rem;                   /* rounded-friendly */
-  --sidebar: #FFFFFF;
-  --sidebar-foreground: #101816;
-  --sidebar-primary: #059669;
+  --border: #E7E5E4;                /* stone-200 */
+  --input: #D6D3D1;                 /* stone-300 */
+  --ring: #EA580C;
+  --chart-1: #EA580C;               /* orange */
+  --chart-2: #3B82F6;               /* blue */
+  --chart-3: #9333EA;               /* purple */
+  --chart-4: #16A34A;               /* green */
+  --chart-5: #A8A29E;               /* stone */
+  --radius: 1rem;
+  --sidebar: #FAFAF9;
+  --sidebar-foreground: #1C1917;
+  --sidebar-primary: #EA580C;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #E8F0EC;
-  --sidebar-accent-foreground: #101816;
-  --sidebar-border: #E3EAE6;
-  --sidebar-ring: #10B981;
+  --sidebar-accent: #F5F5F4;
+  --sidebar-accent-foreground: #1C1917;
+  --sidebar-border: #F5F5F4;        /* stone-100 hairlines, per mockup */
+  --sidebar-ring: #EA580C;
 
-  /* Brand constants — darkened for legibility on light surfaces. */
-  --accent-mint: #34D399;           /* highlights, graph search glow */
-  --signal-speaker: #D97706;        /* amber-600 — speakers/people */
-  --signal-entity: #0284C7;         /* sky-600 — entities/topics */
-  --signal-meeting: #64748B;        /* slate — meetings */
-  --attested: #059669;              /* verified/TEE trust (= primary) */
+  /* Brand constants (Vantage accent set). */
+  --accent-mint: #FB923C;           /* orange-400 — glow / highlight wash */
+  --signal-speaker: #9333EA;        /* purple-600 — people/speakers */
+  --signal-entity: #3B82F6;         /* blue-500 — entities/topics */
+  --signal-meeting: #A8A29E;        /* stone-400 — meetings */
+  --signal-warn: #CA8A04;           /* yellow-600 — open/pending */
+  --signal-positive: #16A34A;       /* green-600 — done/commitment */
+  --attested: #22C55E;              /* green-500 — trust dot, "operational" */
 }
 
 .dark {
@@ -144,17 +150,23 @@
   --radius: 0.375rem;
 }
 
-/* Editorial Vault atmosphere: a faint emerald aurora bleeding in from the
-   top of the canvas. Used on full-bleed pages (login); everything via
-   theme vars, no literal color. */
+/* Warm glow atmosphere (Vantage hero): a soft primary-tinted bloom from
+   the top of the canvas. Used on full-bleed pages (landing, login). */
 @utility bg-vault-atmosphere {
   background:
     radial-gradient(
       55rem 36rem at 50% -12%,
-      color-mix(in oklab, var(--primary) 8%, transparent),
+      color-mix(in oklab, var(--primary) 9%, transparent),
       transparent 70%
     ),
     var(--background);
+}
+
+/* Vantage's signature dotted-grid workspace canvas. */
+@utility bg-dotted-grid {
+  background-color: var(--card);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 /* Emerald text shimmer for in-enclave "thinking" states (UI-NOW.md §3,

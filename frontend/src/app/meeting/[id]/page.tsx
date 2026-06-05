@@ -174,8 +174,8 @@ export default function MeetingPage({
 const SIGNAL_ACCENT: Record<string, { bar: string; dot: string }> = {
   action: { bar: "border-l-primary", dot: "bg-primary" },
   open_question: {
-    bar: "border-l-signal-speaker",
-    dot: "bg-signal-speaker",
+    bar: "border-l-signal-warn",
+    dot: "bg-signal-warn",
   },
   insight: { bar: "border-l-signal-entity", dot: "bg-signal-entity" },
 };

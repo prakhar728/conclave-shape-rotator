@@ -38,16 +38,16 @@ const STATUSES = ["open", "resolved", "unclear"] as const;
 const TYPE_CHIP: Record<string, string> = {
   action: "border-primary/40 bg-primary/10 text-primary",
   decision: "border-signal-entity/40 bg-signal-entity/10 text-signal-entity",
-  commitment: "border-accent-mint/40 bg-accent-mint/10 text-accent-mint",
-  open_question:
-    "border-signal-speaker/40 bg-signal-speaker/10 text-signal-speaker",
+  commitment:
+    "border-signal-positive/40 bg-signal-positive/10 text-signal-positive",
+  open_question: "border-signal-warn/40 bg-signal-warn/10 text-signal-warn",
   blocker: "border-destructive/40 bg-destructive/10 text-destructive",
 };
 
-/** open = needs attention (amber), resolved = done (emerald), unclear = muted. */
+/** open = needs attention (yellow), resolved = done (green), unclear = muted. */
 const STATUS_PILL: Record<string, string> = {
-  open: "border-signal-speaker/40 text-signal-speaker",
-  resolved: "border-primary/40 text-primary",
+  open: "border-signal-warn/40 text-signal-warn",
+  resolved: "border-signal-positive/40 text-signal-positive",
   unclear: "border-border text-muted-foreground",
 };
 

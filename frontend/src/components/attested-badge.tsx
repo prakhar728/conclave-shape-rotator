@@ -10,9 +10,13 @@ export function AttestedBadge() {
   return (
     <span
       title="Running in a confidential VM · Intel TDX"
-      className="inline-flex cursor-default items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] leading-4 text-primary"
+      className="inline-flex cursor-default items-center gap-1.5 rounded-full border border-border bg-card px-2.5 py-1 text-[10px] font-medium leading-4 text-muted-foreground shadow-sm"
     >
-      <span className="size-1.5 rounded-full bg-attested" aria-hidden />
+      {/* Green = operational/trust, Vantage-style status dot. */}
+      <span className="relative flex size-1.5" aria-hidden>
+        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-attested opacity-60" />
+        <span className="relative inline-flex size-1.5 rounded-full bg-attested" />
+      </span>
       attested
     </span>
   );

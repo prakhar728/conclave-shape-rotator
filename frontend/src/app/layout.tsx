@@ -1,13 +1,18 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Plus_Jakarta_Sans } from "next/font/google";
+import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-// Plus Jakarta Sans — geometric, friendly, modern-SaaS voice (light-theme
-// pivot, 2026-06-04). One family; weight does the hierarchy work.
-const jakarta = Plus_Jakarta_Sans({
+// Vantage design language (locked 2026-06-04, user-supplied reference):
+// Inter body + Instrument Serif display. Serif carries greetings and
+// headlines (regular weight, italic accents); Inter does the work.
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+
+const instrumentSerif = Instrument_Serif({
+  weight: "400",
+  style: ["normal", "italic"],
   subsets: ["latin"],
-  variable: "--font-sans",
+  variable: "--font-serif",
 });
 
 const jetbrainsMono = JetBrains_Mono({
@@ -33,8 +38,9 @@ export default function RootLayout({
         "h-full",
         "antialiased",
         jetbrainsMono.variable,
+        instrumentSerif.variable,
         "font-sans",
-        jakarta.variable,
+        inter.variable,
       )}
     >
       <body className="min-h-full flex flex-col">{children}</body>
