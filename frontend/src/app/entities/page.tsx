@@ -13,6 +13,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { PageError, PageLoading } from "@/components/page-state";
 import { entityTint } from "@/lib/entity-tints";
 import {
   ApiError,
@@ -74,20 +75,8 @@ export default function EntitiesPage() {
     return out;
   }, [entities, typeFilter, query]);
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-destructive">{error}</p>
-      </div>
-    );
-  }
-  if (!me) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
+  if (error) return <PageError message={error} />;
+  if (!me) return <PageLoading />;
 
   return (
     <div className="min-h-screen bg-background">

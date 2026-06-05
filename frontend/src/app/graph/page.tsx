@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { PageError, PageLoading } from "@/components/page-state";
 import { ApiError, apiFetch, auth, search, type MeResponse } from "@/lib/api";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -211,20 +212,8 @@ export default function GraphPage() {
     [router],
   );
 
-  if (error) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-destructive">{error}</p>
-      </div>
-    );
-  }
-  if (!me) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
+  if (error) return <PageError message={error} />;
+  if (!me) return <PageLoading />;
 
   return (
     <div className="flex h-screen flex-col bg-background">

@@ -16,6 +16,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { PageLoading } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -110,13 +111,7 @@ export default function InvitePage() {
     }
   }
 
-  if (!me) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
+  if (!me) return <PageLoading />;
 
   return (
     <div className="min-h-screen bg-background">

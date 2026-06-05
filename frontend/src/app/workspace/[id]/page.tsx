@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { PageError, PageLoading } from "@/components/page-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ApiError,
@@ -71,26 +72,17 @@ export default function WorkspacePage({
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <div className="text-center">
-          <p className="text-sm text-destructive">{error}</p>
-          <Link
-            href="/dashboard"
-            className="mt-3 inline-block text-xs text-muted-foreground hover:text-foreground"
-          >
-            Back to dashboard
-          </Link>
-        </div>
-      </div>
+      <PageError message={error}>
+        <Link
+          href="/dashboard"
+          className="mt-3 inline-block text-xs text-muted-foreground hover:text-foreground"
+        >
+          Back to dashboard
+        </Link>
+      </PageError>
     );
   }
-  if (!me || !workspace || meetings === null) {
-    return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-muted-foreground">Loading…</p>
-      </div>
-    );
-  }
+  if (!me || !workspace || meetings === null) return <PageLoading />;
 
   return (
     <div className="min-h-screen bg-background">
