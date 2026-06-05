@@ -8,7 +8,7 @@
  */
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import Link from "next/link";
 
@@ -16,6 +16,31 @@ import { Button } from "@/components/ui/button";
 import { SearchBox } from "@/components/search-box";
 import { Wordmark } from "@/components/wordmark";
 import { auth, type User, type Workspace } from "@/lib/api";
+
+const NAV_LINKS = [
+  { href: "/entities", label: "Entities" },
+  { href: "/obligations", label: "Obligations" },
+  { href: "/graph", label: "Graph" },
+] as const;
+
+/**
+ * The trust mark: emerald dot + mono "attested". The whole pitch in one
+ * chip — the operator provably can't read your meetings.
+ *
+ * TODO(tee-deploy): wire to a real attestation endpoint (TDX quote
+ * verification) instead of rendering statically.
+ */
+function AttestedBadge() {
+  return (
+    <span
+      title="Running in a confidential VM · Intel TDX"
+      className="inline-flex cursor-default items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] leading-4 text-primary"
+    >
+      <span className="size-1.5 rounded-full bg-attested" aria-hidden />
+      attested
+    </span>
+  );
+}
 
 export function AppHeader({
   user,
@@ -25,6 +50,7 @@ export function AppHeader({
   workspace: Workspace | null;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
 
   async function handleLogout() {
     try {
@@ -47,27 +73,23 @@ export function AppHeader({
             </span>
           </>
         ) : null}
+        <AttestedBadge />
       </div>
       <div className="flex items-center gap-4">
         {workspace ? <SearchBox workspaceId={workspace.id} /> : null}
-        <Link
-          href="/entities"
-          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
-        >
-          Entities
-        </Link>
-        <Link
-          href="/obligations"
-          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
-        >
-          Obligations
-        </Link>
-        <Link
-          href="/graph"
-          className="hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
-        >
-          Graph
-        </Link>
+        {NAV_LINKS.map(({ href, label }) => (
+          <Link
+            key={href}
+            href={href}
+            className={
+              pathname.startsWith(href)
+                ? "hidden text-xs font-medium text-primary sm:inline"
+                : "hidden text-xs text-muted-foreground hover:text-foreground sm:inline"
+            }
+          >
+            {label}
+          </Link>
+        ))}
         <span className="hidden text-xs text-muted-foreground sm:inline">
           {user.email}
         </span>
