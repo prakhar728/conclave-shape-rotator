@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { entityTint } from "@/lib/entity-tints";
 import {
@@ -67,8 +67,7 @@ export default function EntityDetailPage() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         {notFound ? (
           <div className="rounded-lg border border-dashed border-border p-10 text-center">
@@ -174,7 +173,7 @@ export default function EntityDetailPage() {
           </>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

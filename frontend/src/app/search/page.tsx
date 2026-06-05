@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -82,8 +82,7 @@ function SearchPageInner() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <form
           className="mb-8"
@@ -204,7 +203,7 @@ function SearchPageInner() {
           </>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

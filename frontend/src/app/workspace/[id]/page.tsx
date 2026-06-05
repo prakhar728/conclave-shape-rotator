@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -85,8 +85,7 @@ export default function WorkspacePage({
   if (!me || !workspace || meetings === null) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={workspace} />
+    <AppShell user={me.user} workspace={workspace}>
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight">
@@ -132,6 +131,6 @@ export default function WorkspacePage({
           </ul>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }

@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import {
   ApiError,
@@ -115,8 +115,7 @@ export default function DashboardPage() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-4xl px-6 py-10">
         <div className="mb-10 flex items-baseline justify-between">
           <div>
@@ -204,7 +203,7 @@ export default function DashboardPage() {
           </ul>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

@@ -22,7 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
 import {
@@ -95,8 +95,7 @@ export default function MeetingPage({
   if (!me || !meeting) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Link
           href="/dashboard"
@@ -163,7 +162,7 @@ export default function MeetingPage({
           </section>
         ) : null}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

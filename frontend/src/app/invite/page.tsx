@@ -15,7 +15,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageLoading } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -114,8 +114,7 @@ export default function InvitePage() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-2xl px-6 py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight">
@@ -177,7 +176,7 @@ export default function InvitePage() {
           </form>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
 

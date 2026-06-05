@@ -16,7 +16,7 @@ import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { ApiError, apiFetch, auth, search, type MeResponse } from "@/lib/api";
 
@@ -216,9 +216,7 @@ export default function GraphPage() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
-
+    <AppShell user={me.user} workspace={me.workspace}>
       {/* mobile fallback (C33 / 3.5d.10) */}
       <div className="flex flex-1 items-center justify-center px-6 md:hidden">
         <p className="text-center text-sm text-muted-foreground">
@@ -346,6 +344,6 @@ export default function GraphPage() {
           />
         )}
       </div>
-    </div>
+    </AppShell>
   );
 }

@@ -12,7 +12,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { entityTint } from "@/lib/entity-tints";
 import {
@@ -79,8 +79,7 @@ export default function EntitiesPage() {
   if (!me) return <PageLoading />;
 
   return (
-    <div className="min-h-screen bg-background">
-      <AppHeader user={me.user} workspace={me.workspace} />
+    <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight">Entities</h1>
@@ -154,6 +153,6 @@ export default function EntitiesPage() {
           </ul>
         )}
       </main>
-    </div>
+    </AppShell>
   );
 }
