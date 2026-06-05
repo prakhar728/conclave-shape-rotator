@@ -108,7 +108,7 @@ function SearchPageInner() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Search across your meetings…"
-            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-foreground/40"
+            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             autoFocus
           />
         </form>
@@ -119,24 +119,31 @@ function SearchPageInner() {
             {answer === null ? (
               <button
                 onClick={runAsk}
-                className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
+                className="rounded-md border border-primary/50 bg-primary/5 px-3.5 py-2 text-xs font-medium text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-[0_0_24px_-8px_var(--primary)]"
               >
                 ✨ Ask your meetings this question
               </button>
             ) : answer === "loading" ? (
-              <Card>
+              <Card className="border-l-2 border-l-primary">
                 <CardContent className="py-4">
-                  <p className="text-sm text-muted-foreground">
+                  <p className="animate-shimmer-text text-sm font-medium">
                     Reading your meetings…
+                  </p>
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    Runs inside the enclave — no third-party LLM sees your
+                    query.
                   </p>
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-foreground/20">
+              <Card className="border-l-2 border-l-primary">
                 <CardContent className="py-4">
+                  <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-primary">
+                    ✦ generated answer
+                  </p>
                   <p className="text-sm leading-relaxed">{answer.answer}</p>
                   {answer.citations.length > 0 ? (
-                    <p className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <span>Sources:</span>
                       {Array.from(
                         new Set(answer.citations.map((c) => c.session_id)),
@@ -144,13 +151,17 @@ function SearchPageInner() {
                         <Link
                           key={sid}
                           href={`/meeting/${sid}`}
-                          className="underline hover:text-foreground"
+                          className="font-mono text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
                         >
                           {sid}
                         </Link>
                       ))}
                     </p>
                   ) : null}
+                  <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+                    Generated inside the enclave — this answer never left your
+                    workspace.
+                  </p>
                 </CardContent>
               </Card>
             )}
@@ -179,7 +190,7 @@ function SearchPageInner() {
               {results.map((r) => (
                 <li key={r.chunk_id}>
                   <Link href={`/meeting/${r.session_id}`}>
-                    <Card className="transition-colors hover:border-foreground/20">
+                    <Card className="transition-colors hover:border-primary/30">
                       <CardContent className="py-3">
                         {r.context_header ? (
                           <p className="mb-1 text-[11px] italic text-muted-foreground">

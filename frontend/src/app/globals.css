@@ -131,6 +131,31 @@
   --attested: #34D399;              /* verified/TEE trust (= primary) */
 }
 
+/* Emerald text shimmer for in-enclave "thinking" states (UI-NOW.md §3,
+   search/ask loading). Sweeps primary through muted text via bg-clip. */
+@utility animate-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--muted-foreground) 35%,
+    var(--primary) 50%,
+    var(--muted-foreground) 65%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer-text 1.8s linear infinite;
+}
+
+@keyframes shimmer-text {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
