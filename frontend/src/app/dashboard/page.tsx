@@ -158,7 +158,7 @@ export default function DashboardPage() {
                 >
                   <div className="flex items-center gap-3">
                     <span
-                      className="h-2 w-2 rounded-full bg-emerald-500"
+                      className="h-2 w-2 rounded-full bg-attested"
                       aria-hidden
                     />
                     <div>
@@ -195,7 +195,7 @@ export default function DashboardPage() {
               ) : (
                 <li key={m.session_id}>
                   <Link href={`/meeting/${m.session_id}`}>
-                    <Card className="transition-colors hover:border-foreground/20">
+                    <Card className="transition-colors hover:border-primary/30">
                       <CardHeader>
                         <CardTitle className="text-base">
                           {m.summary
@@ -204,8 +204,9 @@ export default function DashboardPage() {
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="flex items-center gap-2 text-xs text-muted-foreground">
                           {m.date} · {m.source}
+                          {isDemoSession(m.session_id) ? <DemoTag /> : null}
                         </p>
                       </CardContent>
                     </Card>
@@ -222,6 +223,20 @@ export default function DashboardPage() {
 
 const EXAMPLE_SESSION_ID = "example-conclave-demo";
 
+/** Sessions seeded for demo purposes (Alembic 0009 + the example card). */
+function isDemoSession(sessionId: string): boolean {
+  return sessionId.startsWith("demo-") || sessionId === EXAMPLE_SESSION_ID;
+}
+
+/** Subtle mono tag so a prospect knows a card is sample data, not theirs. */
+function DemoTag() {
+  return (
+    <span className="rounded-full border border-border bg-muted px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground">
+      demo
+    </span>
+  );
+}
+
 function EmptyState() {
   return (
     <div className="flex flex-col gap-6">
@@ -232,18 +247,27 @@ function EmptyState() {
           for every meeting you invite our bot to. Transcription happens
           inside a TEE — operator-blind from end to end.
         </p>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Click <strong>Invite bot</strong> in the header to add the
-          Conclave bot to a Google Meet. Or take a look at the example
-          below to see what a finished meeting card looks like.
-        </p>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <Link
+            href="/invite"
+            className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/80"
+          >
+            Invite the bot to a meeting
+          </Link>
+          <Link
+            href={`/meeting/${EXAMPLE_SESSION_ID}`}
+            className="text-xs text-muted-foreground hover:text-foreground"
+          >
+            or browse the example meeting →
+          </Link>
+        </div>
       </div>
       <div>
         <p className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
           Example meeting
         </p>
         <Link href={`/meeting/${EXAMPLE_SESSION_ID}`}>
-          <Card className="transition-colors hover:border-foreground/20">
+          <Card className="transition-colors hover:border-primary/30">
             <CardHeader>
               <CardTitle className="text-base">
                 Walkthrough of how a Conclave meeting card looks once your
@@ -251,8 +275,9 @@ function EmptyState() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-xs text-muted-foreground">
+              <p className="flex items-center gap-2 text-xs text-muted-foreground">
                 2026-05-15 · example
+                <DemoTag />
               </p>
             </CardContent>
           </Card>
@@ -308,10 +333,10 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     <div className="rounded-lg border border-border bg-card p-5">
       <div className="flex items-center gap-3">
         <span
-          className="inline-block h-2 w-2 animate-pulse rounded-full bg-amber-400"
+          className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
           aria-hidden
         />
-        <p className="text-sm font-medium text-foreground">
+        <p className="animate-shimmer-text text-sm font-medium">
           {PROCESSING_MESSAGES[phraseIdx]}
         </p>
       </div>
