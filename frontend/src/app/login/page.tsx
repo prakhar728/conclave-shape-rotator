@@ -96,7 +96,7 @@ function LoginInner() {
         {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="font-serif text-3xl md:text-4xl">
                 Sign in
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -133,7 +133,7 @@ function LoginInner() {
         ) : (
           <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">
+              <h1 className="font-serif text-3xl md:text-4xl">
                 Enter the code
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">

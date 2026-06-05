@@ -64,7 +64,7 @@ export default function QuestionsPage() {
     <AppShell user={me.user} workspace={me.workspace}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="font-serif text-3xl md:text-4xl">
             Open questions
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">

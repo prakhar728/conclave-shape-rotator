@@ -16,7 +16,7 @@ export default function Home() {
           <Wordmark size="lg" />
           <AttestedBadge />
         </div>
-        <h1 className="text-5xl font-bold tracking-tight">
+        <h1 className="font-serif text-6xl leading-[1.05]">
           A privacy-preserving knowledge layer for your team&apos;s
           conversations.
         </h1>

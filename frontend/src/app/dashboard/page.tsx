@@ -388,7 +388,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xl font-bold tracking-tight">
+        <p className="font-serif text-2xl">
           Welcome to Conclave<span className="text-primary">.</span>
         </p>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">

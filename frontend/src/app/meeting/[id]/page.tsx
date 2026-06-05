@@ -104,7 +104,7 @@ export default function MeetingPage({
           ← Back
         </Link>
         <div className="mt-4 mb-10">
-          <h1 className="text-2xl font-bold leading-snug tracking-tight">
+          <h1 className="font-serif text-3xl leading-snug">
             {meeting.summary || `${meeting.source} — ${meeting.date}`}
           </h1>
           <p className="mt-3 font-mono text-xs text-muted-foreground">
