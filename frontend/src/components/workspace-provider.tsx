@@ -11,6 +11,7 @@
  */
 "use client";
 
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -36,10 +37,16 @@ type WorkspaceContextValue = {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
   const [list, setList] = useState<Workspace[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Fetch on mount, and RE-fetch on navigation while the list is empty:
+  // the provider mounts in the root layout, so the first fetch can happen
+  // on /login (401 → []). Without the retry, signing in and client-side
+  // navigating to /dashboard would leave the list permanently empty.
   useEffect(() => {
+    if (list !== null && list.length > 0) return;
     let cancelled = false;
     workspacesApi
       .list()
@@ -55,13 +62,14 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       })
       .catch(() => {
         // Auth failures are handled by the pages' own auth.me() flows;
-        // the provider just stays empty.
+        // the provider just stays empty (and retries on next navigation).
         if (!cancelled) setList([]);
       });
     return () => {
       cancelled = true;
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const selectWorkspace = useCallback((id: string) => {
     setSelectedId(id);
