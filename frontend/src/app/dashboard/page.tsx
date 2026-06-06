@@ -137,7 +137,7 @@ export default function DashboardPage() {
           {/* Serif greeting header (Vantage mockup) */}
           <div className="mb-8 flex items-end justify-between">
             <div>
-              <h1 className="font-serif text-3xl leading-tight text-foreground md:text-4xl">
+              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
                 {greeting()}, {me.user.email.split("@")[0]}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
@@ -285,7 +285,7 @@ function EnclaveCard() {
           <ShieldCheck className="size-3.5 text-primary" aria-hidden />
           Enclave
         </div>
-        <div className="font-serif text-3xl tracking-tight">
+        <div className="text-2xl font-bold tracking-tight">
           Operator-blind
         </div>
       </div>
@@ -398,7 +398,7 @@ function EmptyState({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <p className="font-serif text-2xl">
+        <p className="text-xl font-bold tracking-tight">
           Welcome to Conclave<span className="text-primary">.</span>
         </p>
         <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">

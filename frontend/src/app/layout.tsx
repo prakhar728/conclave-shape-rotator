@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Inter, JetBrains_Mono } from "next/font/google";
+import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 
-// Vantage design language (locked 2026-06-04, user-supplied reference):
-// Inter body + Instrument Serif display. Serif carries greetings and
-// headlines (regular weight, italic accents); Inter does the work.
+// Inter everywhere — weight does the hierarchy work (serif display voice
+// retired 2026-06-05 by user preference). JetBrains Mono for machine ids.
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
-
-const instrumentSerif = Instrument_Serif({
-  weight: "400",
-  style: ["normal", "italic"],
-  subsets: ["latin"],
-  variable: "--font-serif",
-});
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
@@ -39,7 +31,6 @@ export default function RootLayout({
         "h-full",
         "antialiased",
         jetbrainsMono.variable,
-        instrumentSerif.variable,
         "font-sans",
         inter.variable,
       )}

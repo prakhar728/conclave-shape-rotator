@@ -85,7 +85,7 @@ export default function EntitiesPage() {
     <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="font-serif text-3xl md:text-4xl">Entities</h1>
+          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Entities</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {visible === null
               ? "Loading…"

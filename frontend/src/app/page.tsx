@@ -47,7 +47,7 @@ export default function Home() {
           </div>
 
           {/* Headline */}
-          <h1 className="mb-8 font-serif text-6xl leading-[1.02] text-foreground md:text-7xl">
+          <h1 className="mb-8 text-5xl font-bold tracking-tight md:text-6xl">
             Meeting intelligence{" "}
             <span className="italic text-muted-foreground">nobody else</span>{" "}
             can read.
@@ -91,7 +91,7 @@ export default function Home() {
               aria-hidden
             />
             <div className="relative z-10">
-              <h2 className="mb-4 font-serif text-4xl italic text-background md:text-5xl">
+              <h2 className="mb-4 text-3xl font-bold tracking-tight text-background md:text-4xl">
                 Record everything. Reveal nothing.
               </h2>
               <p className="mx-auto mb-10 max-w-xl text-lg text-background/60">

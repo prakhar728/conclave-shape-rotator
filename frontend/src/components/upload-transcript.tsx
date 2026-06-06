@@ -110,7 +110,7 @@ function UploadModal({
       >
         <div className="mb-5 flex items-start justify-between">
           <div>
-            <h2 className="font-serif text-2xl leading-tight">
+            <h2 className="text-xl font-bold tracking-tight">
               Upload a transcript
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">

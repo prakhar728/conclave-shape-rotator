@@ -123,7 +123,7 @@ export function AppShell({
         {/* Mobile-only slim bar (sidebar is hidden <md). */}
         <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-full bg-foreground font-serif text-sm text-background">
+            <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background">
               C
             </span>
             <span className="text-sm font-bold tracking-tight">Conclave</span>
@@ -187,7 +187,7 @@ function WorkspaceSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-card bg-foreground font-serif text-sm text-background shadow-sm">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-card bg-foreground text-sm font-bold text-background shadow-sm">
           C
         </span>
         <span className="min-w-0 flex-1 truncate text-xs font-bold">
@@ -254,7 +254,7 @@ export function PageHeader({
   return (
     <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
       <div>
-        <h1 className="font-serif text-3xl leading-tight md:text-4xl">
+        <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
           {title}
         </h1>
         {subtitle ? (

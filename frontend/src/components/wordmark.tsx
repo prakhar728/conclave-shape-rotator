@@ -23,7 +23,7 @@ export function Wordmark({
     <span className={cn("flex items-center gap-2.5", className)}>
       <span
         className={cn(
-          "flex items-center justify-center rounded-full font-serif shadow-sm",
+          "flex items-center justify-center rounded-full font-bold shadow-sm",
           inverted
             ? "bg-background text-foreground"
             : "bg-foreground text-background",
