@@ -271,6 +271,7 @@ def _ingest_from_recato_now(
     if existing is None:
         from api.transcripts_routes import _build_and_save_session, _enrich_in_background
         sess = _build_and_save_session(canonical)
+        stored_session_id = sess.session_id
         transcripts_store.set_workspace(
             session_id=sess.session_id,
             workspace_id=workspace_id,
@@ -286,6 +287,7 @@ def _ingest_from_recato_now(
         ).start()
     else:
         # Already exists (e.g. webhook beat us). Just ensure workspace bind.
+        stored_session_id = existing.session_id
         transcripts_store.set_workspace(
             session_id=existing.session_id,
             workspace_id=workspace_id,
@@ -293,6 +295,20 @@ def _ingest_from_recato_now(
             visibility="owner-only",
         )
         logger.info("post-stop ingest: existing session %s — re-bound workspace", existing.session_id)
+
+    # Calendar enrichment (best-effort): mirror the webhook's step 6b so a
+    # bot stopped by hand gets the same transcript↔event link + attendee
+    # auto-share as a naturally-ended meeting. `session_id` here is the Meet
+    # code (native_meeting_id). Never fatal to the stop UX.
+    try:
+        from infra.meeting_calendar_links import link_completed_meeting
+        link_completed_meeting(
+            meet_code=session_id,
+            session_id=stored_session_id,
+            inviter_user_id=inviter_user_id,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("post-stop ingest: calendar link failed for %s", session_id)
 
 
 @router.get("/{session_id}/bot-status")
