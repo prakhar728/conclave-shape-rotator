@@ -194,3 +194,55 @@ def create_event(
     except gc.GoogleCalendarError as e:
         raise HTTPException(status_code=502, detail=str(e))
     return {"event": event}
+
+
+class AutoRecordBody(BaseModel):
+    enabled: bool
+    workspace_id: str = Field(min_length=1)
+
+
+@router.post("/events/{event_id}/auto-record")
+def set_auto_record(
+    event_id: str,
+    body: AutoRecordBody,
+    user: dict = Depends(require_current_user),
+):
+    """Opt an event in/out of auto-recording.
+
+    Enabling requires the event to have a Google Meet link (we fetch it
+    server-side to capture the authoritative meet_code for the poller). The
+    workspace must be one the user belongs to — that's where the recorded
+    transcript will land."""
+    _require_configured()
+    _require_connected(user["id"])
+
+    from infra import workspaces
+    ws = workspaces.get_workspace(body.workspace_id)
+    if ws is None or not workspaces.is_member(body.workspace_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    from infra import calendar_auto_record as car
+
+    meet_code = None
+    if body.enabled:
+        try:
+            event = gc.get_event(user["id"], event_id)
+        except gc.GoogleOAuthError as e:
+            raise HTTPException(status_code=409, detail=f"reconnect required: {e}")
+        except gc.GoogleCalendarError as e:
+            raise HTTPException(status_code=502, detail=str(e))
+        meet_code = event.get("meet_code")
+        if not meet_code:
+            raise HTTPException(
+                status_code=422,
+                detail="event has no Google Meet link — can't auto-record",
+            )
+
+    car.set_auto_record(
+        user_id=user["id"],
+        google_event_id=event_id,
+        workspace_id=body.workspace_id,
+        meet_code=meet_code,
+        enabled=body.enabled,
+    )
+    return {"ok": True, "event_id": event_id, "enabled": body.enabled, "meet_code": meet_code}

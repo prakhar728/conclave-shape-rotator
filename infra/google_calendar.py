@@ -407,6 +407,23 @@ def list_events(
     return [_normalize_event(e) for e in resp.json().get("items", [])]
 
 
+def get_event(user_id: str, event_id: str, *, calendar_id: str = "primary") -> dict:
+    """Fetch a single event by id; returns the normalized projection."""
+    try:
+        resp = httpx.get(
+            f"{_CALENDAR_API}/calendars/{calendar_id}/events/{event_id}",
+            headers=_auth_headers(user_id),
+            timeout=20.0,
+        )
+    except httpx.HTTPError as e:
+        raise GoogleCalendarError(f"events.get unreachable: {e}") from e
+    if resp.status_code == 404:
+        raise GoogleCalendarError("event not found")
+    if resp.status_code >= 400:
+        raise GoogleCalendarError(f"events.get {resp.status_code}: {resp.text[:300]}")
+    return _normalize_event(resp.json())
+
+
 def create_event(
     user_id: str,
     *,
