@@ -18,9 +18,12 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timedelta, timezone
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel, EmailStr, Field
 
 from auth.session import require_current_user
 from config import settings
@@ -121,3 +124,73 @@ def disconnect(user: dict = Depends(require_current_user)):
     _require_configured()
     gc.delete_tokens(user["id"])
     return {"ok": True}
+
+
+def _require_connected(user_id: str) -> None:
+    if not gc.is_connected(user_id):
+        raise HTTPException(status_code=409, detail="Google Calendar not connected")
+
+
+@router.get("/events")
+def list_events(
+    user: dict = Depends(require_current_user),
+    window_hours: int = Query(default=168, ge=1, le=744),  # default 7 days, max 31
+):
+    """List the signed-in user's upcoming events over the next `window_hours`.
+
+    Annotates each event with `auto_record` (whether the auto-dispatch poller
+    will send the bot to it)."""
+    _require_configured()
+    _require_connected(user["id"])
+    now = datetime.now(timezone.utc)
+    try:
+        events = gc.list_events(
+            user["id"],
+            time_min=now.isoformat(),
+            time_max=(now + timedelta(hours=window_hours)).isoformat(),
+        )
+    except gc.GoogleOAuthError as e:
+        raise HTTPException(status_code=409, detail=f"reconnect required: {e}")
+    except gc.GoogleCalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Annotate with auto-record opt-in state.
+    from infra import calendar_auto_record as car
+    enabled_ids = car.enabled_event_ids(user["id"])
+    for ev in events:
+        ev["auto_record"] = ev["id"] in enabled_ids
+    return {"events": events}
+
+
+class CreateEventBody(BaseModel):
+    title: str = Field(min_length=1)
+    start: str = Field(min_length=1)  # RFC3339
+    end: str = Field(min_length=1)
+    attendees: Optional[List[EmailStr]] = None
+    description: str = ""
+    add_meet: bool = True
+
+
+@router.post("/events", status_code=201)
+def create_event(
+    body: CreateEventBody,
+    user: dict = Depends(require_current_user),
+):
+    """Create a calendar event (with a Meet link by default)."""
+    _require_configured()
+    _require_connected(user["id"])
+    try:
+        event = gc.create_event(
+            user["id"],
+            title=body.title,
+            start=body.start,
+            end=body.end,
+            attendees=[str(e) for e in body.attendees] if body.attendees else None,
+            description=body.description,
+            add_meet=body.add_meet,
+        )
+    except gc.GoogleOAuthError as e:
+        raise HTTPException(status_code=409, detail=f"reconnect required: {e}")
+    except gc.GoogleCalendarError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {"event": event}

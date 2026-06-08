@@ -44,6 +44,7 @@ SCOPES = [
 
 _AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 _TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+_CALENDAR_API = "https://www.googleapis.com/calendar/v3"
 # Refresh this many seconds BEFORE the recorded expiry, so a token that's
 # about to lapse mid-request gets refreshed proactively.
 _EXPIRY_SKEW_S = 60
@@ -51,6 +52,10 @@ _EXPIRY_SKEW_S = 60
 
 class GoogleOAuthError(Exception):
     """Google's OAuth/token endpoint returned a non-2xx or was unreachable."""
+
+
+class GoogleCalendarError(Exception):
+    """The Calendar REST API returned a non-2xx or was unreachable."""
 
 
 # ---------------------------------------------------------------------------
@@ -315,3 +320,139 @@ def list_connected_user_ids() -> list[str]:
         "SELECT user_id FROM google_oauth_tokens WHERE refresh_token_enc IS NOT NULL"
     ).fetchall()
     return [r["user_id"] for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# Calendar API client
+# ---------------------------------------------------------------------------
+def extract_meet_code(event: dict) -> Optional[str]:
+    """Pull the Google Meet code from an event, or None if it has no Meet.
+
+    Checks `hangoutLink` first, then `conferenceData.entryPoints[*].uri`.
+    Reuses the recato Meet-URL parser so the code shape matches what the bot
+    launcher expects (abc-defg-hij)."""
+    from connectors.recato.launch import parse_meet_input
+
+    candidates = []
+    if event.get("hangoutLink"):
+        candidates.append(event["hangoutLink"])
+    conf = event.get("conferenceData") or {}
+    for ep in conf.get("entryPoints") or []:
+        if ep.get("uri"):
+            candidates.append(ep["uri"])
+    for c in candidates:
+        try:
+            return parse_meet_input(c)
+        except ValueError:
+            continue
+    return None
+
+
+def _normalize_event(event: dict) -> dict:
+    """Project Google's verbose event into the shape our API/poller use."""
+    start = event.get("start") or {}
+    end = event.get("end") or {}
+    attendees = [
+        a["email"] for a in (event.get("attendees") or []) if a.get("email")
+    ]
+    return {
+        "id": event.get("id"),
+        "title": event.get("summary") or "(no title)",
+        "start": start.get("dateTime") or start.get("date"),
+        "end": end.get("dateTime") or end.get("date"),
+        "organizer": (event.get("organizer") or {}).get("email"),
+        "attendees": attendees,
+        "hangout_link": event.get("hangoutLink"),
+        "meet_code": extract_meet_code(event),
+        "html_link": event.get("htmlLink"),
+    }
+
+
+def _auth_headers(user_id: str) -> dict:
+    return {
+        "Authorization": f"Bearer {valid_access_token(user_id)}",
+        "Accept": "application/json",
+    }
+
+
+def list_events(
+    user_id: str,
+    *,
+    time_min: str,
+    time_max: str,
+    max_results: int = 50,
+    calendar_id: str = "primary",
+) -> list[dict]:
+    """List events in [time_min, time_max) (RFC3339 strings), expanding
+    recurring events (singleEvents) and ordered by start time. Returns
+    normalized event dicts."""
+    params = {
+        "timeMin": time_min,
+        "timeMax": time_max,
+        "singleEvents": "true",
+        "orderBy": "startTime",
+        "maxResults": str(max_results),
+    }
+    try:
+        resp = httpx.get(
+            f"{_CALENDAR_API}/calendars/{calendar_id}/events",
+            params=params,
+            headers=_auth_headers(user_id),
+            timeout=20.0,
+        )
+    except httpx.HTTPError as e:
+        raise GoogleCalendarError(f"events.list unreachable: {e}") from e
+    if resp.status_code >= 400:
+        raise GoogleCalendarError(f"events.list {resp.status_code}: {resp.text[:300]}")
+    return [_normalize_event(e) for e in resp.json().get("items", [])]
+
+
+def create_event(
+    user_id: str,
+    *,
+    title: str,
+    start: str,
+    end: str,
+    attendees: Optional[list[str]] = None,
+    description: str = "",
+    add_meet: bool = True,
+    calendar_id: str = "primary",
+) -> dict:
+    """Create an event, optionally provisioning a Google Meet link.
+
+    `start`/`end` are RFC3339 datetimes. When `add_meet` is set we attach a
+    conferenceData.createRequest so Google mints a fresh Meet link (requires
+    conferenceDataVersion=1). Returns the normalized created event."""
+    body: dict = {
+        "summary": title,
+        "description": description,
+        "start": {"dateTime": start},
+        "end": {"dateTime": end},
+    }
+    if attendees:
+        body["attendees"] = [{"email": e} for e in attendees]
+    params = {}
+    if add_meet:
+        # The createRequest.requestId must be unique per request; a random
+        # token is fine (idempotency isn't a concern for a user-initiated
+        # create).
+        body["conferenceData"] = {
+            "createRequest": {
+                "requestId": secrets.token_hex(8),
+                "conferenceSolutionKey": {"type": "hangoutsMeet"},
+            }
+        }
+        params["conferenceDataVersion"] = "1"
+    try:
+        resp = httpx.post(
+            f"{_CALENDAR_API}/calendars/{calendar_id}/events",
+            params=params,
+            json=body,
+            headers={**_auth_headers(user_id), "Content-Type": "application/json"},
+            timeout=20.0,
+        )
+    except httpx.HTTPError as e:
+        raise GoogleCalendarError(f"events.insert unreachable: {e}") from e
+    if resp.status_code >= 400:
+        raise GoogleCalendarError(f"events.insert {resp.status_code}: {resp.text[:300]}")
+    return _normalize_event(resp.json())
