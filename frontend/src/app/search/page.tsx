@@ -56,12 +56,17 @@ function SearchPageInner() {
 
   useEffect(() => {
     let cancelled = false;
+    // New query → drop the previous /ask answer (keep "unavailable" so we
+    // don't re-show the Ask button when the server flag is off).
+    setAnswer((prev) => (prev === "unavailable" ? "unavailable" : null));
     (async () => {
       try {
         const meResp = await auth.me();
         if (cancelled) return;
         setMe(meResp);
-        if (!workspaceId) {
+        if (!workspaceId || !q.trim()) {
+          // No workspace, or empty query → nothing to search (server rejects
+          // empty queries with 422 since `query` has min_length=1).
           setResults([]);
           return;
         }
