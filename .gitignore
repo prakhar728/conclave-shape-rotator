@@ -27,6 +27,7 @@ scripts/*
 # + scorers are real, maintained artifacts. Dir-then-contents negation.
 !scripts/eval/
 !scripts/eval/*.py
+!scripts/eval/*.md
 scripts/eval/__pycache__/
 !alembic/scripts/
 tests/fixtures/*
