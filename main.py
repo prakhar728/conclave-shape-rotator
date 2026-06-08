@@ -121,6 +121,11 @@ app.include_router(recato_webhook_router)
 from api.magic_link_routes import router as magic_link_router
 app.include_router(magic_link_router)
 
+# Google Calendar integration — dedicated OAuth connect + events +
+# auto-dispatch. All routes 503 when unconfigured.
+from api.calendar_routes import router as calendar_router
+app.include_router(calendar_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles
