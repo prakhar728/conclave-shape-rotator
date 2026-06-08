@@ -257,3 +257,66 @@ Known v1 demo caveats: cohort + demo copies of the same 3 transcripts
 both exist (entity duplicates across session families are expected and
 ER-merged within type+name); context headers off by default for cost
 (--headers flag exists on both backfill + seed scripts).
+
+---
+
+## H1 — held-out retrieval cross-check on QMSum (2026-06-08)
+
+The C24 number (NDCG@10 0.814) is **in-sample**: 28 Codex-written queries
+over the same 3 cohort transcripts the FTS sanitizer was tuned on, with
+queries that tend to quote transcript vocabulary. This record answers
+"does retrieval quality survive a held-out, human-labelled, paraphrase-
+heavy benchmark on meetings the system has never seen?"
+
+### Setup
+- **Data:** QMSum (Zhong et al. 2021) test split, all 3 domains —
+  Academic (ICSI), Product (AMI), Committee (parliamentary). 35 meetings,
+  **244 human-annotated specific queries** with gold `relevant_text_span`
+  turn ranges. Cloned at `datasets/qmsum/`.
+- **Harness:** `scripts/eval/ingest_harness.py` pushes each meeting through
+  the **real production seam** (`store.save_session` → `kb_pipeline.index_session`)
+  — not a hand-rewired copy — so the eval re-measures whatever the live
+  pipeline does. Scorer `scripts/eval/score_retrieval.py`; translator
+  `scripts/eval/qmsum.py`.
+- **Methodology = C24, held identical for comparability:** binary chunk
+  relevance (chunk relevant iff `turn_ids ∩ gold`), per-meeting retrieval
+  scope, RRF k=60, fetch 50, headers OFF, NDCG@10.
+
+### Results (NDCG@10)
+
+| domain | n | FTS | dense | hybrid |
+|---|---|---|---|---|
+| Academic (ICSI) | 49 | 0.676 | 0.592 | 0.684 |
+| Committee | 66 | 0.777 | 0.640 | 0.755 |
+| Product (AMI) | 129 | 0.807 | 0.636 | 0.791 |
+| **OVERALL** | **244** | **0.773** | **0.628** | **0.760** |
+
+vs in-sample C24: hybrid 0.814 / FTS 0.835 / dense 0.693 (n=28).
+
+### Reading
+1. **Retrieval quality generalizes — it was not an in-sample mirage.**
+   Hybrid 0.760 held-out vs 0.814 in-sample (−0.054) on a different corpus,
+   human (not Codex) queries, and 244 (not 28) queries. The leakage worry
+   that the 0.814 was inflated by Codex quoting transcript vocabulary turns
+   out to cost only ~0.05. This materially de-risks using retrieval as the
+   substrate for the cross-session layer.
+2. **FTS ≥ hybrid persists on held-out human paraphrase queries** (0.773 vs
+   0.760 overall; FTS wins Committee + Product, hybrid edges Academic). The
+   C24 hypothesis that dense "earns its place on paraphrase queries this
+   eval under-represents" is *not* supported here: even on paraphrase-heavy
+   human queries, dense (0.628) trails FTS, and RRF-fusing it in slightly
+   lowers the overall score. Caveat: QMSum specific-queries still share
+   content words with the transcript and gold spans are broad, both of
+   which favour lexical recall — so this weakens, not kills, the dense case.
+   **Action: this strengthens the C25 "no reranker" call and adds a new
+   open question — is the dense leg net-positive at all on meeting QA? Worth
+   an ablation before investing further in embeddings.** Still above the
+   C25 reranker trigger (NDCG@10 < 0.6) on every domain, so no reranker.
+3. **Domain spread:** Product/AMI strongest (0.79), ICSI weakest (0.68 —
+   disfluent, cross-talk-heavy research meetings are genuinely harder).
+
+### Caveats inheriting from this record
+- Numbers are headers-OFF (cost parity with C24). Production default is
+  headers-ON; a `--headers` run would measure that (LLM cost). Not yet run.
+- This validates *retrieval*, the single-meeting component. It says nothing
+  about cross-session/collaboration quality (separate eval).
