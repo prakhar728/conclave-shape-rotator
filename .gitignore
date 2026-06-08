@@ -23,6 +23,11 @@ scripts/*
 !scripts/chunk_and_embed_existing.py
 !scripts/eval_search_quality.py
 !scripts/seed_demo.py
+# Persistent eval harness (Phase 0/1): connective layer + dataset translators
+# + scorers are real, maintained artifacts. Dir-then-contents negation.
+!scripts/eval/
+!scripts/eval/*.py
+scripts/eval/__pycache__/
 !alembic/scripts/
 tests/fixtures/*
 !tests/fixtures/interview_reflection/
@@ -58,3 +63,8 @@ tmp/
 # macOS metadata
 .DS_Store
 **/.DS_Store
+
+# eval datasets: downloaded benchmarks + generated eval DBs (code is tracked, data is not)
+datasets/qmsum/
+datasets/ami/
+datasets/*.db
