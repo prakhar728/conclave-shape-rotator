@@ -196,6 +196,47 @@ def current_obligations(
     return [_obligation_row(r) for r in rows]
 
 
+def entities_for_sessions(
+    session_ids: Iterable[str], *, etype: Optional[str] = None, limit: int = 100,
+) -> list[dict]:
+    """Entities mentioned in the given sessions, ranked by mention count.
+
+    Single source of truth for the workspace "entities" projection (the
+    query api.kb_routes.list_entities builds inline; PersonalMemory reuses
+    this so the two can't drift). Returns ``[]`` for an empty session set so
+    no caller can accidentally trigger an unscoped, permission-blind scan.
+    """
+    ids = list(session_ids)
+    if not ids:
+        return []
+    qs = ",".join("?" * len(ids))
+    sql = (
+        "SELECT e.id, e.type, e.canonical_name, e.props_json,"
+        " COUNT(m.id) AS mention_count,"
+        " COUNT(DISTINCT m.session_id) AS meeting_count"
+        " FROM entities e JOIN entity_mentions m ON m.entity_id = e.id"
+        f" WHERE m.session_id IN ({qs})"
+    )
+    params: list = list(ids)
+    if etype:
+        sql += " AND e.type = ?"
+        params.append(etype)
+    sql += " GROUP BY e.id ORDER BY mention_count DESC, e.canonical_name LIMIT ?"
+    params.append(limit)
+    rows = _get_conn().execute(sql, params).fetchall()
+    return [
+        {
+            "id": r["id"],
+            "type": r["type"],
+            "canonical_name": r["canonical_name"],
+            "raw_mentions": (json.loads(r["props_json"] or "{}").get("raw_mentions") or []),
+            "mention_count": r["mention_count"],
+            "meeting_count": r["meeting_count"],
+        }
+        for r in rows
+    ]
+
+
 def similar_obligations(
     query_vec: list[float], *, otype: str, k: int = 5, model_id: str,
 ) -> list[dict]:
