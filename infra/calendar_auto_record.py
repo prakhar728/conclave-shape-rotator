@@ -54,6 +54,19 @@ def enabled_event_ids(user_id: str) -> set[str]:
     return {r["google_event_id"] for r in rows}
 
 
+def find_by_meet_code(meet_code: str) -> Optional[dict]:
+    """Most recent opt-in row carrying this Meet code, regardless of enabled
+    state. The webhook uses it to recover the Google event id behind a
+    recorded meeting."""
+    row = _get_conn().execute(
+        "SELECT user_id, google_event_id, workspace_id, meet_code, enabled "
+        "FROM calendar_auto_record WHERE meet_code = ? "
+        "ORDER BY updated_at DESC LIMIT 1",
+        (meet_code,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
 def list_enabled_for_user(user_id: str) -> list[dict]:
     """Full enabled rows for one user (poller uses workspace_id + meet_code)."""
     rows = _get_conn().execute(
