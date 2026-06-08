@@ -10,6 +10,30 @@ something) · `DONE` (resolved, kept for history).
 
 ---
 
+## OI-5 — Experiment observability: tokens, latency, traces across models  ·  OPEN
+*Raised: 2026-06-08. Separate thread (needs its own plan + decisions).*
+
+Today we have **partial** experiment observability and it blocks principled
+model/cost decisions:
+- **Time:** `ingest_metrics(session, stage)` logs `ms_elapsed` + `llm_call_count`
+  + `items_in/out`. Bake-offs logged wall-clock. OK-ish.
+- **Tokens:** NOT tracked — only call counts. EVAL.md cost figures are
+  estimates (calls × assumed per-call), not measured prompt/completion tokens.
+- **Traces / bottlenecks:** none. **LangSmith and all cloud tracing are
+  deliberately hard-disabled in `config.py`** because they ship transcript
+  content to a third party — incompatible with the TEE "operator-blind"
+  thesis. So observability MUST be local/self-hosted; the off-the-shelf
+  answer is off-limits.
+
+**Scope when prioritized:** decide what to measure (tokens in/out per stage
+per model, p50/p95 latency, $ per meeting-hour by backend), a local trace
+sink (not LangSmith), and a cross-model cost/latency comparison harness.
+Pairs naturally with the RedPill-vs-alternatives model bake-off. NOTE: this
+is about the **LLM stages** (extraction/headers/enrichment on RedPill/gemma),
+NOT retrieval — retrieval (FTS+dense+RRF) is LLM-free and local.
+
+---
+
 ## OI-1 — Dense retrieval underperforms FTS on meeting QA  ·  OPEN
 *Found: Phase 1a (2026-06-08). See `transcripts/EVAL.md` H1.*
 
@@ -36,18 +60,46 @@ Resolve (or at least understand) before trusting Phase 3 matching.
    prefixes — verify applied. Model may simply be weak on disfluent meeting
    speech (ICSI dense was the worst cell).
 
-**Diagnostics / fixes (cheap → expensive):**
-- (a) **Per-query win/loss** dense vs FTS over the 244 queries. Does dense
-  win ≥~25%? Decides "keep vs cut." *Cheapest; do this first.*
-- (b) **768-dim vs 256-dim** dense re-run — isolates truncation (config fix
-  if it jumps).
-- (c) **Recall@50 vs NDCG@10** — does dense *miss* relevant chunks or just
-  rank them lower? Different problem, different fix.
-- (d) **Weighted / tuned RRF** (favor FTS, sweep k).
-- (e) **Decouple dense chunk size** from FTS chunk size (smaller embed chunks).
-- (f) **Stronger / full-precision embedding model**; re-verify task prefixes.
+**Diagnosis DONE (2026-06-08, `scripts/eval/ablate_dense.py`, 244 queries):**
 
-**When:** after the full eval scaffold is in, or when prioritized.
+| metric | FTS | dense |
+|---|---|---|
+| mean NDCG@10 | 0.773 | 0.628 |
+| mean recall@10 | 0.916 | 0.776 |
+| mean recall@50 | 1.000* | 0.850 |
+
+Win/loss: dense **wins 23.4%**, loses 59.4%, ties 17.2% (avg +0.24 when it
+wins, −0.34 when it loses). Complementarity on the 42 "hard" queries where
+FTS fails (NDCG<0.5): **dense beats FTS on 64%**, big-rescue (+0.3) on 26%.
+*(*FTS recall@50=1.0 is partly trivial: per-meeting scope + ≤50 chunks/meeting
+means fetching 50 returns everything; the real comparison is recall@10 and the
+fact dense@50=0.85 means it genuinely MISSES ~15% on long meetings.)*
+
+**Verdict: dense is not broken and should NOT be cut — it's a weaker-but-
+genuinely-complementary leg being fused naively.**
+- It rescues 64% of the queries FTS fails → real complementary value (the
+  whole reason hybrid exists). Cutting it would lose the tail.
+- BUT equal-weight RRF (k=60) lets the weaker leg drag down the 59% FTS
+  already wins → hybrid (0.760) dips just below FTS-only (0.773).
+- It also has a real **recall miss** (~15% at @50, worse on long meetings) —
+  consistent with Matryoshka-256 truncation and/or long-meeting candidate
+  overflow.
+
+**Lever (highest ROI first):**
+1. **Weighted / asymmetric fusion** — let dense *promote* on its confident
+   tail rescues without dragging the cases FTS nails. Cheapest, biggest win.
+   *This is the fix; needs its own eval plan (how to pick weights w/o
+   overfitting the 244 queries — held-out split or k-fold).*
+2. **768-dim vs 256-dim** dense re-run — isolate the truncation recall loss.
+3. Decouple dense chunk size; verify nomic task prefixes; stronger model.
+
+**Phase 2/3 implication:** the matcher uses embeddings for *similarity*, not
+ranking-vs-FTS, so the ranking loss doesn't directly doom it — but the ~15%
+recall miss is a yellow flag (the matcher could miss ~1-in-7 real overlaps).
+Worth re-checking once the matcher exists.
+
+**When:** the *fix* (weighted fusion) is a separate scoped effort with its own
+eval-design decisions, per user. Diagnosis is done; fix is deferred.
 
 ---
 
