@@ -60,6 +60,37 @@ So the work is **an edit layer + a ledger**, *not* a graph store.
 
 ---
 
+## 2b. Memory layers — vocabulary is part of the memory space
+
+Vocabulary is a *kind of memory* — **terminology memory** (what terms mean, who
+people are, how things are spelled), as opposed to the **content memory** of what
+was said. It splits into two layers, and that split drives the scope model:
+
+| Layer | Content memory | Terminology memory |
+|---|---|---|
+| **Org / shared** | the KB (meetings, graph) | **the canon** (this doc) |
+| **Personal** | `PersonalMemory`'s scoped view | personal vocab / corrections / preferences / **profile** |
+
+- **The canonical vocab is SHARED (org) memory** — one single source of truth the
+  whole workspace reads from (the point of this doc).
+- **A person's corrections, shorthand, preferences, and profile are PERSONAL
+  memory.** Personal actions **feed** the shared canon: a user's correction
+  (`dstack`→`DStack`) is the highest-trust input that updates the org's canon.
+
+Implications:
+- **`companion/personal_agent.py::PersonalMemory` is the natural home for the
+  personal layer.** Today it's a scoped *content* view; it extends cleanly to also
+  carry the person's vocab / preferences / profile — everything that *is* their
+  memory. The "personal agent" then consumes all of it.
+- **No new access model is needed** — personal vocab is permission-scoped like
+  `PersonalMemory`; the shared canon is workspace-visible. The permission model
+  we already built (`_visible_session_ids` / `can_user_see`) governs both.
+- The **profile** the Connections matcher scores is itself part of personal memory
+  (interests + skills + vocab). So access-scope, vocab, and profile are all facets
+  of one person's memory — sitting on top of the shared canon.
+
+---
+
 ## 3. The three components
 
 ### A. Editable canonical entities & speakers  *(net-new; no edit endpoints exist today)*
@@ -156,8 +187,10 @@ a compounding system.
 ---
 
 ## 8. Open decisions (resolve when scheduled)
-- **Scope:** workspace-shared ledger (names, products) vs a personal overlay
-  (idiosyncratic shorthand) — ties into the `PersonalMemory` permission model.
+- **Scope:** shared canon (org) + personal overlay — see **§2b Memory layers**.
+  The personal layer (corrections/shorthand/preferences/profile) lives with
+  `PersonalMemory`; the canon is workspace-shared. Resolve the exact split of
+  which corrections stay personal vs promote to the shared canon.
 - **Auto-apply threshold:** how confident before a ledger entry merges without
   a confirm (bias conservative — false merges unrecoverable).
 - **Merge reversibility model:** snapshot-before-merge vs append-only re-point
