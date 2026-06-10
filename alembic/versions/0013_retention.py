@@ -17,8 +17,8 @@ KB, so retention is expressed as three small additions:
 All columns are nullable / JSON, so existing rows are untouched (NULL ⇒ keep
 forever ⇒ today's behaviour).
 
-Revision ID: 0012_retention
-Revises: 0011_meeting_share_scope
+Revision ID: 0013_retention
+Revises: 0012_meeting_share_scope
 Create Date: 2026-06-08
 """
 from __future__ import annotations
@@ -26,8 +26,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0012_retention"
-down_revision = "0011_meeting_share_scope"
+revision = "0013_retention"
+down_revision = "0012_meeting_share_scope"
 branch_labels = None
 depends_on = None
 

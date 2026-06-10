@@ -59,7 +59,31 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_anon_key: str = ""
 
+    # Google Calendar integration (optional — if client id/secret are unset,
+    # all /api/calendar/* routes return 503 and the auto-dispatch poller is a
+    # no-op). A *dedicated* Google OAuth flow (not the Supabase Google login)
+    # so we can request Calendar scopes + offline access and hold a refresh
+    # token for background bot dispatch even when the user isn't active.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    # Where Google redirects after consent — must match the Authorized
+    # redirect URI registered in the Google Cloud console, and points at our
+    # GET /api/calendar/callback.
+    google_redirect_uri: str = ""
+    # Fernet key used to encrypt Google access/refresh tokens at rest (the
+    # `google_oauth_tokens` table). Generate with
+    # `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+    # When unset, the token store refuses to persist tokens (raises) rather
+    # than writing provider credentials in plaintext — matches the
+    # operator-blind invariant the rest of the codebase enforces.
+    token_enc_key: str = ""
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
+
+    def google_calendar_enabled(self) -> bool:
+        """True when a dedicated Google OAuth client is configured."""
+        return bool(self.google_client_id and self.google_client_secret
+                    and self.google_redirect_uri)
 
 
 settings = Settings()

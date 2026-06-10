@@ -14,17 +14,21 @@ Existing rows predate the column and back-fill to the default
 ('summary_and_transcript'), preserving today's "shared = full access"
 behaviour for anyone already granted.
 
-Revision ID: 0011_meeting_share_scope
-Revises: 0010_kb_fk_cascade
+Revision ID: 0012_meeting_share_scope
+Revises: 0011_google_calendar
 Create Date: 2026-06-08
+
+Re-chained from 0010 to 0011_google_calendar when feat/transcript-saving
+merged feat/google-calendar-integration: both branches had originally added
+an 0011 off 0010, so this side moved to 0012 to keep the chain linear.
 """
 from __future__ import annotations
 
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0011_meeting_share_scope"
-down_revision = "0010_kb_fk_cascade"
+revision = "0012_meeting_share_scope"
+down_revision = "0011_google_calendar"
 branch_labels = None
 depends_on = None
 
