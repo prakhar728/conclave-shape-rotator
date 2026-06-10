@@ -148,6 +148,46 @@ def can_user_see(user: Optional[dict], row: dict) -> bool:
     return False
 
 
+def can_see_transcript(user: Optional[dict], row: dict) -> bool:
+    """Gate the RAW transcript — stricter than `can_user_see`.
+
+    Until the Transcript Saving feature, `raw_diarization` was NEVER served at
+    the API boundary (the old blanket privacy guard). This opens it, but only
+    to people the owner explicitly trusted with it:
+
+      - owner of the meeting                              → yes
+      - 'workspace' visibility + workspace member         → yes (full members)
+      - 'shared' recipient with 'summary_and_transcript'  → yes
+      - 'shared' recipient with 'summary_only'            → NO (summary only)
+      - everyone else / anonymous / 'owner-only' non-owner→ no
+
+    A caller who passes `can_see_transcript` may also see the derived view; the
+    reverse is NOT true — `summary_only` recipients pass `can_user_see` (so they
+    get the summary) but fail here (so the raw transcript stays withheld).
+    """
+    if user is None:
+        return False
+
+    owner_user_id = row.get("owner_user_id")
+    if owner_user_id and owner_user_id == user["id"]:
+        return True
+
+    visibility = row.get("visibility") or "owner-only"
+
+    if visibility == "workspace":
+        from infra.workspaces import is_member
+        workspace_id = row.get("workspace_id")
+        return bool(workspace_id) and is_member(workspace_id, user["id"])
+
+    if visibility == "shared":
+        from infra.workspaces import get_meeting_share_scope
+        scope = get_meeting_share_scope(row["session_id"], user["email"])
+        return scope == "summary_and_transcript"
+
+    # 'owner-only' (non-owner), 'public-link', or unknown → withhold raw.
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Projection: derived-only "card" shape
 # ---------------------------------------------------------------------------
@@ -245,6 +285,39 @@ def to_view(session: Session) -> dict:
     return card
 
 
+def to_transcript(session: Session) -> dict:
+    """Raw-transcript projection — the ONLY shape that carries verbatim text.
+
+    Served exclusively by `GET /sessions/{id}/transcript`, behind
+    `can_see_transcript`. Each segment maps the diarizer's anonymous label to a
+    resolved display name when speaker resolution ran, so the UI can show real
+    names without the caller re-joining `resolved_speakers`.
+    """
+    speakers = session.metadata.resolved_speakers or {}
+
+    def _name_for(label: str) -> Optional[str]:
+        meta = speakers.get(label)
+        if isinstance(meta, dict):
+            return meta.get("name")
+        return None
+
+    segments = [
+        {
+            "speaker": seg.speaker,
+            "speaker_name": _name_for(seg.speaker),
+            "text": seg.text,
+            "start": seg.start,
+            "end": seg.end,
+        }
+        for seg in (session.raw_diarization or [])
+    ]
+    return {
+        "session_id": session.session_id,
+        "segment_count": len(segments),
+        "segments": segments,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Routes
 # ---------------------------------------------------------------------------
@@ -310,7 +383,11 @@ def get_session(
     if session_id in DEMO_SESSION_IDS:
         if user is None:
             raise HTTPException(status_code=403, detail="not allowed")
-        return to_view(session)
+        view = to_view(session)
+        # Demo sessions are readable in full by any authed user (see
+        # get_session_transcript), so their transcript panel renders too.
+        view["can_view_transcript"] = True
+        return view
     # Only consult the workspace columns when there's an authed user — keeps
     # anonymous cohort traffic on the legacy path and means test DBs without
     # the 1.6 columns (some legacy fixtures use init_db without alembic) are
@@ -334,12 +411,71 @@ def get_session(
         # typed visibility value (separate from the legacy JSON one).
         view["effective_visibility"] = row.get("visibility")
         view["is_owner"] = row.get("owner_user_id") == user["id"]
+        # Lets the transcript panel pick its state (show transcript vs.
+        # "not shared with you") without a round-trip that 403s.
+        view["can_view_transcript"] = can_see_transcript(user, row)
+        # Retention state — drives the auto-deleted note + (owner-only) the
+        # per-meeting override control. retention_override: None=inherit |
+        # 'keep_forever' | '<int>' days.
+        view["raw_transcript_deleted"] = bool(ws_row.get("raw_transcript_deleted_at"))
+        view["retention_override"] = ws_row.get("retention_override")
         return view
 
     v = _resolve_viewer(viewer)
     if not can_see(v, session):
         raise HTTPException(status_code=403, detail="not allowed")
     return to_view(session)
+
+
+@router.get("/sessions/{session_id}/transcript")
+def get_session_transcript(session_id: str, request: Request) -> dict:
+    """Raw transcript for a single session — the gated privacy surface.
+
+    Transcript Saving feature. Unlike `get_session` (derived-only, dual-mode),
+    this endpoint serves verbatim text and is therefore:
+
+      - authenticated-only (no anonymous / legacy `?viewer=` path), and
+      - gated by `can_see_transcript`, which grants the owner, full workspace
+        members, and 'summary_and_transcript' recipients — and denies
+        'summary_only' recipients and everyone else.
+
+    Legacy cohort sessions (no `workspace_id`) keep the old invariant: the raw
+    transcript is never served, so they 403 here regardless of viewer.
+
+    Phase 2 adds the `raw_transcript_deleted_at` retention state; once that
+    lands, a purged transcript returns 410 Gone instead of the segments.
+    """
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    # Demo/example sessions: any authenticated user may read them in full,
+    # mirroring get_session's empty-state placeholder contract.
+    if session_id in DEMO_SESSION_IDS:
+        return to_transcript(session)
+
+    try:
+        ws_row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001 — defensive vs schema drift in test DBs
+        ws_row = None
+    if not ws_row or not ws_row.get("workspace_id"):
+        # Legacy cohort session — raw transcript was never exposed for these.
+        raise HTTPException(status_code=403, detail="not allowed")
+
+    row = {"session_id": session_id, **ws_row}
+    if not can_see_transcript(user, row):
+        raise HTTPException(status_code=403, detail="not allowed")
+    # Retention: an authorized viewer whose raw transcript was auto-deleted
+    # gets 410 Gone (the summary remains on the detail endpoint). Checked
+    # AFTER the gate so 'summary_only' recipients still see 403, not 410.
+    if ws_row.get("raw_transcript_deleted_at"):
+        raise HTTPException(status_code=410, detail="transcript auto-deleted")
+    return to_transcript(session)
 
 
 # ---------------------------------------------------------------------------

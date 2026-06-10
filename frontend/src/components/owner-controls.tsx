@@ -18,9 +18,15 @@ import {
   ApiError,
   meetingOwner,
   type MeetingShare,
+  type ShareScope,
 } from "@/lib/api";
 
 type Visibility = "owner-only" | "shared";
+
+const SCOPE_LABELS: Record<ShareScope, string> = {
+  summary_and_transcript: "Summary + transcript",
+  summary_only: "Summary only",
+};
 
 export function OwnerControls({
   sessionId,
@@ -32,6 +38,7 @@ export function OwnerControls({
   const [visibility, setVisibility] = useState<Visibility>(initialVisibility);
   const [shares, setShares] = useState<MeetingShare[] | null>(null);
   const [email, setEmail] = useState("");
+  const [scope, setScope] = useState<ShareScope>("summary_and_transcript");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -70,12 +77,17 @@ export function OwnerControls({
     setBusy(true);
     setError(null);
     try {
-      const r = await meetingOwner.addShare(sessionId, email.trim());
-      setShares((prev) =>
-        prev
-          ? [...prev, { email: r.email, granted_at: new Date().toISOString() }]
-          : [{ email: r.email, granted_at: new Date().toISOString() }],
-      );
+      const r = await meetingOwner.addShare(sessionId, email.trim(), scope);
+      const added: MeetingShare = {
+        email: r.email,
+        granted_at: new Date().toISOString(),
+        scope: r.scope,
+      };
+      // Re-sharing the same email updates its scope rather than duplicating.
+      setShares((prev) => {
+        const rest = (prev ?? []).filter((s) => s.email !== added.email);
+        return [...rest, added];
+      });
       setEmail("");
     } catch (e) {
       if (e instanceof ApiError && e.status === 422) {
@@ -111,14 +123,27 @@ export function OwnerControls({
 
       {visibility === "shared" ? (
         <>
-          <form onSubmit={handleAddShare} className="mt-4 flex gap-2">
+          <form onSubmit={handleAddShare} className="mt-4 flex flex-wrap gap-2">
             <Input
               type="email"
               placeholder="attendee@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={busy}
+              className="min-w-[12rem] flex-1"
             />
+            <select
+              value={scope}
+              onChange={(e) => setScope(e.target.value as ShareScope)}
+              disabled={busy}
+              aria-label="Share permission level"
+              className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+            >
+              <option value="summary_and_transcript">
+                {SCOPE_LABELS.summary_and_transcript}
+              </option>
+              <option value="summary_only">{SCOPE_LABELS.summary_only}</option>
+            </select>
             <Button type="submit" disabled={busy || !email.trim()}>
               Add
             </Button>
@@ -129,10 +154,13 @@ export function OwnerControls({
               {shares.map((s) => (
                 <li
                   key={s.email}
-                  className="flex items-center justify-between text-xs"
+                  className="flex items-center justify-between gap-3 text-xs"
                 >
                   <span className="text-foreground">{s.email}</span>
-                  <span className="text-muted-foreground">
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    <span className="rounded bg-muted px-1.5 py-0.5">
+                      {SCOPE_LABELS[s.scope] ?? s.scope}
+                    </span>
                     {s.granted_at.split("T")[0]}
                   </span>
                 </li>

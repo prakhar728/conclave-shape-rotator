@@ -12,7 +12,7 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, EmailStr, Field
@@ -358,6 +358,10 @@ def set_visibility(
 
 class AddShareBody(BaseModel):
     email: EmailStr
+    # 'summary_and_transcript' (default) lets the recipient open the raw
+    # transcript; 'summary_only' withholds it. Validated against the
+    # canonical list in infra.workspaces (CHECK constraint backs it in SQL).
+    scope: str = "summary_and_transcript"
 
 
 def _user_owns_meeting(session_id: str, user_id: str) -> bool:
@@ -386,7 +390,11 @@ def list_shares(
     shares = list_meeting_shares(session_id)
     return {
         "shares": [
-            {"email": s["user_email"], "granted_at": s["granted_at"]}
+            {
+                "email": s["user_email"],
+                "granted_at": s["granted_at"],
+                "scope": s.get("scope") or "summary_and_transcript",
+            }
             for s in shares
         ]
     }
@@ -409,6 +417,53 @@ def add_share(
     if not _user_owns_meeting(session_id, user["id"]):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    from infra.workspaces import add_meeting_share
-    add_meeting_share(session_id, str(body.email), user["id"])
-    return {"ok": True, "email": str(body.email)}
+    from infra.workspaces import SHARE_SCOPES, add_meeting_share
+    if body.scope not in SHARE_SCOPES:
+        raise HTTPException(
+            status_code=422,
+            detail=f"scope must be one of {list(SHARE_SCOPES)}",
+        )
+    add_meeting_share(session_id, str(body.email), user["id"], scope=body.scope)
+    return {"ok": True, "email": str(body.email), "scope": body.scope}
+
+
+class RetentionBody(BaseModel):
+    # 'inherit' clears the override (use the account default); 'keep_forever'
+    # pins this meeting; 'days' auto-deletes its raw transcript after `days`.
+    mode: Literal["inherit", "keep_forever", "days"]
+    days: Optional[int] = None
+
+
+@router.post("/{session_id}/retention")
+def set_meeting_retention(
+    session_id: str,
+    body: RetentionBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner sets the per-meeting retention override (Transcript Saving P2).
+
+    Stored on the transcript_sessions row, so it only applies once the meeting
+    has been processed into a session — a not-yet-completed meeting returns 409.
+    """
+    if not _user_owns_meeting(session_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+
+    if body.mode == "days":
+        if body.days is None or body.days <= 0:
+            raise HTTPException(
+                status_code=422, detail="days must be a positive integer"
+            )
+        override: Optional[str] = str(body.days)
+    elif body.mode == "keep_forever":
+        override = "keep_forever"
+    else:  # inherit
+        override = None
+
+    from transcripts import store as _store
+    if _store.get_workspace_fields(session_id) is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Retention can be set once the meeting has been processed",
+        )
+    _store.set_retention_override(session_id, override)
+    return {"ok": True, "retention_override": override}

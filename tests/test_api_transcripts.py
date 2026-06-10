@@ -4,10 +4,13 @@ Asserts the contract documented in IMPLEMENTATION_PLAN.md §G12 / §H C10:
 
 - ``GET /transcripts/sessions``      → newest-first list of card dicts.
 - ``GET /transcripts/sessions/{id}`` → derived + metadata for one session.
-- **`raw_diarization` never appears in any response.** This is the
-  highest-blast-radius privacy assertion in the pipeline (`§I "two
-  assertions worth never losing"`); even the per-segment text strings
-  must not bleed through.
+- **`raw_diarization` never appears in the list or detail response.** This
+  is the highest-blast-radius privacy assertion in the pipeline (`§I "two
+  assertions worth never losing"`); even the per-segment text strings must
+  not bleed through these shapes. The Transcript Saving feature adds ONE
+  deliberately-gated exception — ``GET /sessions/{id}/transcript`` — which
+  serves raw only to authorized viewers (auth + `can_see_transcript`); see
+  test_can_see_transcript.py. The list/detail guards below stay absolute.
 - ``can_see`` stub allows everyone in Phase 1; the 403 path will go live
   at 1.5 without an endpoint signature change.
 """
@@ -279,6 +282,38 @@ def test_to_card_and_to_view_helpers_omit_raw_directly():
         blob = json.dumps(payload)
         assert "raw_diarization" not in blob
         assert _SECRET_RAW_TEXT not in blob
+
+
+def test_to_transcript_helper_deliberately_carries_raw():
+    """Counterpart to the guard above: the transcript projection is the ONE
+    shape that intentionally serves verbatim text. The endpoint gates WHO
+    reaches it (see test_can_see_transcript.py); this just pins the shape."""
+    from api.transcripts_routes import to_transcript
+
+    sess = Session(
+        session_id="x",
+        raw_diarization=[
+            RawSegment(speaker="Shaw", text=_SECRET_RAW_TEXT, start=1.0, end=2.0)
+        ],
+        metadata=SessionMetadata(
+            date="2026-05-20", source="otter",
+            resolved_speakers={"Shaw": {"name": "Shaw Walters"}},
+        ),
+        derived=Derived(summary="ok"),
+    )
+    payload = to_transcript(sess)
+    assert payload["segment_count"] == 1
+    seg = payload["segments"][0]
+    assert seg["text"] == _SECRET_RAW_TEXT
+    assert seg["speaker_name"] == "Shaw Walters"  # resolved from metadata
+
+
+def test_transcript_endpoint_requires_auth(client):
+    """Anonymous callers get 401 — no legacy `?viewer=` bypass for raw text."""
+    _store_session("demo")
+    r = client.get("/transcripts/sessions/demo/transcript")
+    assert r.status_code == 401
+    assert _SECRET_RAW_TEXT not in r.text
 
 
 # ---------------------------------------------------------------------------

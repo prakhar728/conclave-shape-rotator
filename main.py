@@ -111,6 +111,10 @@ app.include_router(upload_router)
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)
 
+# Transcript Saving (Phase 2): account settings — transcript retention default.
+from api.users_routes import router as users_router
+app.include_router(users_router)
+
 # Phase 2.4: Recato webhook receiver (replaces the standalone consumer.py
 # bridge for the hosted-product path).
 from api.webhooks_recato import router as recato_webhook_router

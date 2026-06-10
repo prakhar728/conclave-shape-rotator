@@ -638,13 +638,64 @@ def set_transcript_workspace(
 
 
 def get_transcript_workspace_fields(session_id: str) -> dict | None:
-    """Read the typed workspace columns for a session (None if row missing)."""
+    """Read the typed workspace + retention columns for a session.
+
+    Returns None if the row is missing. The retention columns
+    (`retention_override`, `raw_transcript_deleted_at`) ride along so the
+    transcript endpoint can decide 410-vs-serve in the same fetch that
+    drives `can_see_transcript`. Extra keys are additive — `can_user_see`
+    only reads workspace_id / owner_user_id / visibility.
+    """
     row = _get_conn().execute(
-        "SELECT workspace_id, owner_user_id, visibility "
+        "SELECT workspace_id, owner_user_id, visibility, "
+        "retention_override, raw_transcript_deleted_at "
         "FROM transcript_sessions WHERE session_id = ?",
         (session_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def set_transcript_retention_override(
+    session_id: str, retention_override: str | None
+) -> None:
+    """Set the per-meeting retention override (NULL = inherit account default,
+    'keep_forever', or a stringified positive int of days)."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET retention_override = ?, updated_at = ? "
+        "WHERE session_id = ?",
+        (retention_override, _now(), session_id),
+    )
+
+
+def purge_transcript_raw(session_id: str) -> None:
+    """Auto-delete: drop the raw transcript, keep metadata + derived.
+
+    Replaces `raw_diarization` with an empty JSON array (the column is NOT
+    NULL) and stamps `raw_transcript_deleted_at`. The summary, signals,
+    entities, and KB graph all survive — this is the privacy-preserving
+    retention contract, not a hard delete. Idempotent: re-purging only
+    refreshes the timestamp on an already-empty raw.
+    """
+    _get_conn().execute(
+        "UPDATE transcript_sessions "
+        "SET raw_diarization = '[]', raw_transcript_deleted_at = ?, updated_at = ? "
+        "WHERE session_id = ?",
+        (_now(), _now(), session_id),
+    )
+
+
+def list_transcript_retention_rows() -> list[dict]:
+    """Minimal projection the retention sweep iterates over.
+
+    One row per session with just the fields needed to compute effective
+    expiry: when it was created, its per-meeting override, who owns it (to
+    look up the account default), and whether its raw was already purged.
+    """
+    rows = _get_conn().execute(
+        "SELECT session_id, created_at, owner_user_id, retention_override, "
+        "raw_transcript_deleted_at FROM transcript_sessions"
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def list_workspace_transcript_sessions(workspace_id: str) -> list[dict]:

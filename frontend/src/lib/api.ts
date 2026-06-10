@@ -177,11 +177,36 @@ export type MeetingView = {
   // without an extra round-trip.
   is_owner?: boolean;
   effective_visibility?: string;
+  // Transcript Saving — whether THIS viewer may load the raw transcript.
+  // Drives the transcript panel's state (show vs. "not shared with you").
+  can_view_transcript?: boolean;
+  // Retention (owner-relevant): whether the raw transcript was auto-deleted,
+  // and the per-meeting override (null=inherit | 'keep_forever' | '<int>' days).
+  raw_transcript_deleted?: boolean;
+  retention_override?: string | null;
+};
+
+// --- Raw transcript (gated surface — Transcript Saving feature) -----------
+
+export type TranscriptSegment = {
+  speaker: string;
+  speaker_name: string | null;
+  text: string;
+  start: number | null;
+  end: number | null;
+};
+
+export type TranscriptView = {
+  session_id: string;
+  segment_count: number;
+  segments: TranscriptSegment[];
 };
 
 export const meetings = {
   get: (sessionId: string) =>
     apiFetch<MeetingView>(`/api/transcripts/sessions/${sessionId}`),
+  transcript: (sessionId: string) =>
+    apiFetch<TranscriptView>(`/api/transcripts/sessions/${sessionId}/transcript`),
 };
 
 // --- Magic links ----------------------------------------------------------
@@ -255,7 +280,15 @@ export const bots = {
     apiFetch<{ active: ActiveInvitation[] }>("/api/meetings/active"),
 };
 
-export type MeetingShare = { email: string; granted_at: string };
+// 'summary_and_transcript' lets the recipient open the raw transcript;
+// 'summary_only' withholds it (they still get the summary + signals).
+export type ShareScope = "summary_and_transcript" | "summary_only";
+
+export type MeetingShare = {
+  email: string;
+  granted_at: string;
+  scope: ShareScope;
+};
 
 export const meetingOwner = {
   setVisibility: (sessionId: string, visibility: "owner-only" | "shared") =>
@@ -270,14 +303,40 @@ export const meetingOwner = {
     apiFetch<{ shares: MeetingShare[] }>(
       `/api/meetings/${sessionId}/shares`,
     ),
-  addShare: (sessionId: string, email: string) =>
-    apiFetch<{ ok: boolean; email: string }>(
+  addShare: (sessionId: string, email: string, scope: ShareScope) =>
+    apiFetch<{ ok: boolean; email: string; scope: ShareScope }>(
       `/api/meetings/${sessionId}/shares`,
       {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, scope }),
       },
     ),
+  setRetention: (
+    sessionId: string,
+    body: { mode: "inherit" | "keep_forever" | "days"; days?: number },
+  ) =>
+    apiFetch<{ ok: boolean; retention_override: string | null }>(
+      `/api/meetings/${sessionId}/retention`,
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
+};
+
+// --- Account settings (Transcript Saving, Phase 2) ------------------------
+
+// retention_days: null = keep transcripts forever; a positive int = auto-delete
+// each transcript's RAW text N days after creation (summary + KB are kept).
+export type UserSettings = { retention_days: number | null };
+
+export const userSettings = {
+  get: () => apiFetch<UserSettings>("/api/users/me/settings"),
+  update: (retention_days: number | null) =>
+    apiFetch<UserSettings>("/api/users/me/settings", {
+      method: "POST",
+      body: JSON.stringify({ retention_days }),
+    }),
 };
 
 // --- KB surface (Phase 3.5b — entities + obligations) -----------------------

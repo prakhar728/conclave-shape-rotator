@@ -64,6 +64,9 @@ def test_set_workspace_writes_typed_columns():
         "workspace_id": ws["id"],
         "owner_user_id": user["id"],
         "visibility": "shared",
+        # Retention columns ride along additively (Alembic 0012) — unset here.
+        "retention_override": None,
+        "raw_transcript_deleted_at": None,
     }
 
 
