@@ -142,3 +142,40 @@ is untested. QMSum has **no gold** for this (queries are per-meeting, no
 cross-meeting/negative labels), so a QMSum proxy would be contaminated.
 Correct instrument = the **Phase 3 planted-needle corpus** (authored
 cross-meeting gold). Do it there, not as a Phase-1 hack.*
+
+---
+
+## OI-7 — Entity-resolution over-merge ("black-hole" entities)  ·  OPEN — TOP BLOCKER
+*Found: 2026-06-09 while debugging Connections (feat/connections). This is
+currently the #1 thing on the table — it gates connections AND search AND the
+graph (everything that reads entities).*
+
+**Evidence (real cohort DB):** a few entities have absorbed hundreds of
+unrelated mentions —
+- `DStack` = **94 distinct surface forms / 406 mentions** (swallowed
+  `hermes`, `ethereum`, `chatgpt`, `claude`, `github`, …)
+- `CBM` = 75 surfaces · `Dstack` = 52 · `Jupyter Notebook` = 46
+- everything else is a normal **2–3** surfaces → a sharp cliff = a real bug,
+  not just messy data.
+
+**Why it matters:** in retrieve-rerank terms the **entity index is corrupt**, so
+the Connections matcher (Stage 1+2, which is itself correct/done) builds
+candidates on garbage — no reranker can fix it. Same corruption pollutes
+search results and the graph.
+
+**Likely root cause:** `transcripts/entity_resolution.py` / the upsert path is
+**over-merging** unrelated mentions into a few magnets (a threshold / upsert
+bug), despite the codebase's stated "conservative, false-merges-unrecoverable"
+philosophy. A `DStack`-named entity should never have `hermes` as a surface.
+
+**Plan (agreed):**
+1. **Diagnose** the root cause — read `entity_resolution.py` + upsert; trace how
+   `DStack` accumulated 406 mentions / 94 surfaces. Contained, read-only-ish.
+2. **Fix on its OWN branch off `main`** (e.g. `fix/entity-resolution-overmerge`)
+   — NOT on `feat/connections`; the fix is broadly useful and must merge
+   independently, not be trapped behind the held connections feature.
+3. **Merge → then re-run Connections** (rebase feat/connections on fixed main)
+   to confirm the downstream improvement.
+
+The cheap root-cause fix comes FIRST; the full editable-entities + ledger
+system (`ENTITY-CANON.md`) is the longer-term layer, not the first move.
