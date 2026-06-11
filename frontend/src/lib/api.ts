@@ -444,3 +444,44 @@ export const ask = {
       body: JSON.stringify({ question }),
     }),
 };
+
+// --- Google Calendar --------------------------------------------------------
+
+export type CalendarStatus =
+  | { connected: false }
+  | { connected: true; scopes: string; connected_at: string };
+
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  start: string | null;
+  end: string | null;
+  hangout_link: string | null;
+  auto_record: boolean;
+};
+
+export type AutoRecordResp = {
+  ok: boolean;
+  event_id: string;
+  enabled: boolean;
+  meet_code: string | null;
+};
+
+export const calendar = {
+  status: () => apiFetch<CalendarStatus>("/api/calendar/status"),
+  connect: () => apiFetch<{ auth_url: string }>("/api/calendar/connect"),
+  disconnect: () =>
+    apiFetch<{ ok: boolean }>("/api/calendar/disconnect", { method: "POST" }),
+  events: (windowHours = 168) =>
+    apiFetch<{ events: CalendarEvent[] }>(
+      `/api/calendar/events?window_hours=${windowHours}`,
+    ),
+  setAutoRecord: (eventId: string, enabled: boolean, workspaceId: string) =>
+    apiFetch<AutoRecordResp>(
+      `/api/calendar/events/${encodeURIComponent(eventId)}/auto-record`,
+      {
+        method: "POST",
+        body: JSON.stringify({ enabled, workspace_id: workspaceId }),
+      },
+    ),
+};

@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
+import { CalendarSettings } from "@/components/calendar-settings";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -127,6 +128,8 @@ export default function SettingsPage() {
             ) : null}
           </div>
         </section>
+
+        <CalendarSettings />
       </main>
     </AppShell>
   );
