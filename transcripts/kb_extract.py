@@ -71,6 +71,42 @@ def extract_session(session_id: str) -> Optional[dict]:
         return None
 
 
+def _extract_concurrency() -> int:
+    """Bounded per-chunk extraction concurrency (config.settings.extract_concurrency,
+    env CONCLAVE_EXTRACT_CONCURRENCY; 1 = sequential)."""
+    try:
+        from config import settings
+        return max(1, int(getattr(settings, "extract_concurrency", 6)))
+    except Exception:  # noqa: BLE001 — config trouble → safe sequential default
+        return 1
+
+
+def _extract_all_chunks(
+    chunks: list[dict], n_turns: int,
+) -> tuple[list[dict], list[dict]]:
+    """Per-chunk extraction, bounded-concurrent. `extract_from_chunk` is stateless
+    and `ChatOpenAI.invoke` is thread-safe, so the per-chunk LLM calls (the ingest
+    bottleneck) run in a thread pool. `ThreadPoolExecutor.map` PRESERVES input
+    order, so the flattened result lists are **identical** to the old sequential
+    loop — only wall-clock changes. Merge/resolution/upsert downstream stay serial
+    (DB-write races). `concurrency=1` reproduces the exact sequential path."""
+    def _one(c: dict):
+        return extract_from_chunk(
+            c["text"], c.get("context_header") or "", turn_count=n_turns,
+        )
+
+    workers = max(1, min(_extract_concurrency(), len(chunks) or 1))
+    if workers == 1:
+        results = [_one(c) for c in chunks]
+    else:
+        from concurrent.futures import ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            results = list(ex.map(_one, chunks))   # order-preserving
+    raw_entities = [e for r in results for e in r.entities]
+    raw_obligations = [o for r in results for o in r.obligations]
+    return raw_entities, raw_obligations
+
+
 def _run(session_id: str) -> Optional[dict]:
     from transcripts import store
 
@@ -86,16 +122,9 @@ def _run(session_id: str) -> Optional[dict]:
     n_turns = len(session.raw_diarization or [])
     metrics: dict = {"session_id": session_id}
 
-    # --- 1. extraction ------------------------------------------------------
+    # --- 1. extraction (bounded-parallel per chunk; merge stays serial) -----
     t0 = time.time()
-    raw_entities: list[dict] = []
-    raw_obligations: list[dict] = []
-    for c in chunks:
-        r = extract_from_chunk(
-            c["text"], c.get("context_header") or "", turn_count=n_turns,
-        )
-        raw_entities.extend(r.entities)
-        raw_obligations.extend(r.obligations)
+    raw_entities, raw_obligations = _extract_all_chunks(chunks, n_turns)
     entities = merge_entities(raw_entities)
     obligations = dedupe_obligations(raw_obligations)
     ms = int((time.time() - t0) * 1000)

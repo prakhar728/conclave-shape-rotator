@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     # Embedding (unchanged)
     embedding_model: str = "all-MiniLM-L6-v2"
 
+    # KB ingest: bounded concurrency for the per-chunk extraction LLM calls
+    # (env CONCLAVE_EXTRACT_CONCURRENCY). 1 = sequential. Resolution/upsert stay
+    # serial regardless. Raise to speed long transcripts; mind backend rate limits.
+    extract_concurrency: int = 6
+
     # Supabase auth (optional — if unset, /auth/* endpoints return 503 and /register is the fallback)
     supabase_url: str = ""
     supabase_anon_key: str = ""
