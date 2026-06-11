@@ -117,6 +117,33 @@ def test_entity_detail_case_insensitive_and_url_encoded(client: TestClient):
     assert body["obligations"][0]["id"] == oid
 
 
+def test_entities_expose_definition_role_category(client: TestClient):
+    """OI-7 Commit 5: definition + role + derived category are additive; the
+    existing keys are unchanged."""
+    wsid, sid, _, _ = _seed_world(client, "dave@example.com")
+    t = kb_graph.insert_entity(
+        "tool", "DStack", ["DStack"],
+        definition="a confidential-computing framework", role=None,
+    )
+    kb_graph.add_mentions(t, sid, [0], "DStack")
+
+    ents = {e["canonical_name"]: e
+            for e in client.get(f"/api/workspaces/{wsid}/entities").json()["entities"]}
+    assert ents["Ada Lovelace"]["category"] == "person"
+    assert ents["DStack"]["category"] == "tech"
+    assert ents["DStack"]["definition"] == "a confidential-computing framework"
+    assert ents["DStack"]["role"] is None
+    assert ents["Ada Lovelace"]["definition"] is None
+    # old keys unchanged
+    assert ents["Ada Lovelace"]["mention_count"] == 2
+    assert ents["Ada Lovelace"]["meeting_count"] == 1
+
+    detail = client.get(f"/api/workspaces/{wsid}/entities/DStack").json()["entity"]
+    assert detail["category"] == "tech"
+    assert detail["definition"] == "a confidential-computing framework"
+    assert detail["role"] is None
+
+
 def test_entity_detail_404_unknown(client: TestClient):
     wsid, *_ = _seed_world(client, "carol@example.com")
     assert client.get(

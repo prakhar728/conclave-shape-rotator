@@ -90,19 +90,22 @@ def list_entities(
     sql += " GROUP BY e.id ORDER BY mention_count DESC, e.canonical_name LIMIT ?"
     params.append(limit)
     rows = _get_conn().execute(sql, params).fetchall()
-    return {
-        "entities": [
-            {
-                "id": r["id"],
-                "type": r["type"],
-                "canonical_name": r["canonical_name"],
-                "raw_mentions": (json.loads(r["props_json"] or "{}").get("raw_mentions") or []),
-                "mention_count": r["mention_count"],
-                "meeting_count": r["meeting_count"],
-            }
-            for r in rows
-        ]
-    }
+    from storage.kb_graph import category_of
+    out = []
+    for r in rows:
+        props = json.loads(r["props_json"] or "{}")
+        out.append({
+            "id": r["id"],
+            "type": r["type"],
+            "category": category_of(r["type"]),
+            "canonical_name": r["canonical_name"],
+            "definition": props.get("definition"),
+            "role": props.get("role"),
+            "raw_mentions": props.get("raw_mentions") or [],
+            "mention_count": r["mention_count"],
+            "meeting_count": r["meeting_count"],
+        })
+    return {"entities": out}
 
 
 @router.get("/{workspace_id}/entities/{name}")
@@ -163,12 +166,16 @@ def entity_detail(
         if o.get("owner_entity_id") == ent["id"]
     ]
 
+    _props = json.loads(ent["props_json"] or "{}")
     return {
         "entity": {
             "id": ent["id"],
             "type": ent["type"],
+            "category": kb_graph.category_of(ent["type"]),
             "canonical_name": ent["canonical_name"],
-            "raw_mentions": (json.loads(ent["props_json"] or "{}").get("raw_mentions") or []),
+            "definition": _props.get("definition"),
+            "role": _props.get("role"),
+            "raw_mentions": _props.get("raw_mentions") or [],
             "mention_count": ent["mention_count"],
         },
         "meetings": sorted(
@@ -361,12 +368,14 @@ def workspace_graph(
                       else s.session_id),
             "date": s.metadata.date,
         })
+    from storage.kb_graph import category_of
     for eid in kept_entities:
         nodes.append({
             "id": f"entity:{eid}",
             "kind": "entity",
             "label": meta[eid]["name"],
             "entity_type": meta[eid]["type"],
+            "category": category_of(meta[eid]["type"]),
             "weight": totals[eid],
         })
     for key, rec in kept_speakers.items():
