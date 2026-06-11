@@ -147,3 +147,46 @@ def test_embed_failure_defaults_new():
 def test_cosine_guards():
     assert cosine([0, 0], [1, 0]) == 0.0
     assert cosine([1, 0], [1, 0]) == pytest.approx(1.0)
+
+
+# ---------------------------------------------------------------------------
+# Real-embedder integration (OI-7 / EVAL.md E1) — de-mocks the resolver.
+#
+# Every test above injects synthetic fixed-angle vectors, so the suite assumed
+# the embedder is meaningful and never saw that nomic-embed collapses ultra-short
+# names onto one vector (cos ~1.0 → blind auto-merge). This runs the resolver
+# with the REAL embed_fn over an accumulated pool of lexically-disjoint short
+# names and asserts they do NOT merge — the exact failure the black holes are.
+# Auto-skipped when Ollama isn't available (tests/conftest.py).
+# ---------------------------------------------------------------------------
+
+@pytest.mark.requires_ollama
+@pytest.mark.xfail(
+    reason="Reproduces OI-7: bare-name embedding collapse → auto-merge. Flips to a "
+    "real pass in Commit 4 (resolver lexical-first + definition-embedding).",
+    strict=False,
+)
+def test_real_embedder_disjoint_short_names_do_not_merge():
+    from transcripts.embed import embed_texts
+
+    def real_embed(texts):
+        return embed_texts(texts, kind="document")
+
+    # An accumulated pool of unrelated single-token tool names (no cached
+    # embeddings → resolver embeds them via real_embed, exactly as in production).
+    pool = [
+        {"id": "t1", "type": "tool", "canonical_name": "Benchling"},
+        {"id": "t2", "type": "tool", "canonical_name": "ChatGPT"},
+        {"id": "t3", "type": "tool", "canonical_name": "Cowrie"},
+    ]
+    # A new, lexically-disjoint tool name must become its own entity, not get
+    # absorbed into the pool. llm says "different" so the decision can't hide
+    # behind a permissive tiebreak — a merge here can only come from cosine.
+    d = resolve_entity(
+        {"type": "tool", "canonical_name": "DStack"},
+        pool, embed_fn=real_embed, llm=SameLLM(False),
+    )
+    assert d.action == "new", (
+        f"lexically-disjoint short names merged (target={d.target_id}, "
+        f"sim={d.similarity:.4f}) — the OI-7 collapse→auto-merge path."
+    )

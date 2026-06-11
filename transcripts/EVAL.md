@@ -320,3 +320,74 @@ vs in-sample C24: hybrid 0.814 / FTS 0.835 / dense 0.693 (n=28).
   headers-ON; a `--headers` run would measure that (LLM cost). Not yet run.
 - This validates *retrieval*, the single-meeting component. It says nothing
   about cross-session/collaboration quality (separate eval).
+
+---
+
+## E1 — entity-resolution over-merge root cause + eval blind-spot (2026-06-11)
+
+*Branch `fix/entity-resolution-overmerge`. Tracked as OI-7 in
+`scripts/eval/OPEN_ITEMS.md`. This record documents (a) the confirmed cause and
+(b) why no existing eval caught it — the second is the actionable part.*
+
+### Symptom
+A few entities became "black holes" in the real cohort DB: `DStack` = 94 distinct
+surface forms / 406 mentions (swallowed `hermes`, `ethereum`, `chatgpt`, `claude`,
+`github`, …), `CBM` = 75, `Dstack` = 52, `Jupyter Notebook` = 46; **everything
+else sits at a normal 2–3** — a sharp cliff. Surfaced downstream as coincidental
+Connections matches (the matcher joins on a corrupt entity index).
+
+### Root cause — degenerate short-text embeddings → blind auto-merge
+`nomic-embed-text:v1.5` (Ollama) returns a **near-constant vector for ultra-short
+inputs**, so bare entity names collapse onto one point `C`:
+- `embed("DStack") == embed("Benchling") == embed("ChatGPT")` **byte-identical**
+  (cosine 1.0000); sentences embed fine (cos ~0.53). Collapse scales with length:
+  1 tok → 1.000, 2 → 0.882, 5–6 → 0.55–0.79. Mechanism: the fixed
+  `"search_document: "` prefix dominates a 1-token input.
+- **80 / 225 stored entity vectors are mutually identical** (cos > 0.999), all
+  single-token names; `DStack ≡ CBM ≡ Dstack`.
+- cos ≈ 1.0 trips `resolve_entity`'s auto-merge band (`sim > 0.90`), which **never
+  calls the LLM** → every short non-person name is absorbed into the per-type
+  incumbent at `C` (one black hole per non-person type). Replaying `_llm_tiebreak`
+  on the swallowed pairs returns `same=False` — the LLM is accurate; it just never
+  runs.
+- **Natural control:** ~70 person names also collapse onto `C`, yet every person
+  entity is clean (1 surface) — persons use the exact-match path
+  (`entity_resolution.py:88–94`), not embeddings. ⇒ bug = (short-name embedding
+  collapse) × (non-person cosine auto-merge). Long-text (chunk/obligation)
+  embeddings are healthy ⇒ **retrieval/search unaffected; contained to the entity
+  layer.** The threshold (0.90) and the LLM prompt are NOT the lever.
+
+### Why no existing eval caught it (the blind spot)
+- **Bake-off entity F1 (C4/C13) measures the wrong stage.** It scores
+  `extract`/`extract_from_chunk` **per single transcript** vs Codex gold — it never
+  exercises the **cross-session resolver over an accumulated pool**, which is where
+  the merge happens. And F1 matches on canonical_name, so a black-hole "DStack"
+  still matches gold "DStack"; the junk surfaces don't move per-transcript F1.
+- **`tests/test_entity_resolution.py` mocks the embedder.** Its 11 unit tests build
+  **synthetic fixed-angle vectors** (10°/35°/60°) to test band routing. They assume
+  the embedder produces meaningful cosines, so the real collapse is invisible — the
+  bug lives in the embedding the tests stub out.
+- **`tests/test_kb_extract_pipeline.py`** monkeypatches embeddings + uses a size-1
+  pool; collapse needs real embeddings + an accumulating pool.
+- **No resolution-quality metric existed** (over/under-merge / cluster purity). The
+  surface-count cliff that exposed it was an ad-hoc query, never a checked signal.
+
+### Eval signals added (this record's deliverable)
+- `tests/test_embed_health.py` — calls the **real** embedder on distinct short
+  names; asserts they are not near-identical (max pairwise cosine bound). Standing
+  monitor for the collapse; would have caught this immediately.
+- `scripts/eval/check_entity_merge.py` — over-merge guardrail: flags any entity
+  whose distinct-surface count exceeds a cliff threshold + prints the distribution.
+- A **real-embedder** `resolve_entity` no-merge test (lexically-disjoint short
+  names over an accumulated pool must NOT merge) — de-mocks the resolution test.
+
+### Fix direction (grounded in METHODOLOGY_SURVEY D12/O3 + v1_improvements §6)
+Lexical-first gate (normalize + edit-distance / shared-token / phonetic) for
+non-person merges; demote bare-name cosine auto-merge; route genuine decisions
+through the (accurate) LLM tiebreak. D12 was pre-registered `open` with trigger
+"dedup quality drops below acceptable" — that trigger has fired.
+
+### Acceptance
+After the fix: the new guardrail + no-merge tests pass; **entity F1 stays ≥ C27
+floor (0.55)**; a cohort re-ingest shows no entity > ~10 surfaces (bar genuine
+high-frequency); the Connections junk class disappears.

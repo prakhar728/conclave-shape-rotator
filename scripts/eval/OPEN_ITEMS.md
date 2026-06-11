@@ -145,10 +145,11 @@ cross-meeting gold). Do it there, not as a Phase-1 hack.*
 
 ---
 
-## OI-7 — Entity-resolution over-merge ("black-hole" entities)  ·  OPEN — TOP BLOCKER
-*Found: 2026-06-09 while debugging Connections (feat/connections). This is
-currently the #1 thing on the table — it gates connections AND search AND the
-graph (everything that reads entities).*
+## OI-7 — Entity-resolution over-merge ("black-hole" entities)  ·  DIAGNOSED — fix in progress
+*Found: 2026-06-09 while debugging Connections (feat/connections). Root cause
+CONFIRMED 2026-06-11 (on `fix/entity-resolution-overmerge`). It gates connections
+AND search AND the graph (everything that reads entities). See `transcripts/EVAL.md`
+"entity-resolution over-merge root cause" for the full record.*
 
 **Evidence (real cohort DB):** a few entities have absorbed hundreds of
 unrelated mentions —
@@ -163,19 +164,69 @@ the Connections matcher (Stage 1+2, which is itself correct/done) builds
 candidates on garbage — no reranker can fix it. Same corruption pollutes
 search results and the graph.
 
-**Likely root cause:** `transcripts/entity_resolution.py` / the upsert path is
-**over-merging** unrelated mentions into a few magnets (a threshold / upsert
-bug), despite the codebase's stated "conservative, false-merges-unrecoverable"
-philosophy. A `DStack`-named entity should never have `hermes` as a surface.
+**CONFIRMED root cause (2026-06-11): degenerate short-text embeddings → blind
+auto-merge.** The embedder (`nomic-embed-text:v1.5` via Ollama) returns a
+**near-constant vector for ultra-short inputs**, so bare entity names collapse
+onto a single point. Evidence (real cohort DB + live embedder):
+- `embed("DStack") == embed("Benchling") == embed("ChatGPT")` are **byte-identical**
+  (cosine 1.0000); full sentences embed fine (cos ~0.53). Collapse scales with
+  length: 1 token → 1.000, 2 → 0.882, 5–6 → 0.55–0.79 (the fixed
+  `"search_document: "` prefix dominates a 1-token input).
+- **80 / 225 stored entity vectors are mutually identical** (cos > 0.999) — all
+  single-token names; the 3 single-token black holes are one vector
+  (`DStack ≡ CBM ≡ Dstack`).
+- cosine ≈ 1.0 trips `resolve_entity`'s **auto-merge band (`sim > 0.90`)**, which
+  **never calls the LLM** → every short non-person name is absorbed into whichever
+  entity sits at the collapse point for its type (→ one black hole per non-person
+  type). Replaying `_llm_tiebreak` returns `same=False` on the swallowed pairs —
+  the LLM is correct, it just never runs.
+- **Natural control:** ~70 person names also collapse, yet every person entity is
+  clean (1 surface) — persons use the exact-match path (`entity_resolution.py:88–94`),
+  not embeddings. ⇒ bug = (short-name embedding collapse) × (non-person cosine
+  auto-merge). **Retrieval/search is fine** (long-text chunk/obligation embeddings
+  are healthy); corruption is contained to the entity layer.
 
-**Plan (agreed):**
-1. **Diagnose** the root cause — read `entity_resolution.py` + upsert; trace how
-   `DStack` accumulated 406 mentions / 94 surfaces. Contained, read-only-ish.
-2. **Fix on its OWN branch off `main`** (e.g. `fix/entity-resolution-overmerge`)
-   — NOT on `feat/connections`; the fix is broadly useful and must merge
-   independently, not be trapped behind the held connections feature.
-3. **Merge → then re-run Connections** (rebase feat/connections on fixed main)
-   to confirm the downstream improvement.
+The earlier "threshold / upsert bug" guess is wrong: 0.90 is never reached by real
+name geometry, and the LLM tiebreak is accurate. The lever is NOT the threshold or
+the prompt.
 
-The cheap root-cause fix comes FIRST; the full editable-entities + ledger
-system (`ENTITY-CANON.md`) is the longer-term layer, not the first move.
+**Fix (in progress, `fix/entity-resolution-overmerge`):**
+1. **Eval blind spots first** — add an embedder-health signal, an over-merge
+   guardrail metric, and a de-mocked real-embedder resolution test (the prior
+   signals all missed this: bake-off scores extraction-per-transcript not
+   cross-session resolution; the resolution unit tests mock the embedder with
+   synthetic vectors).
+2. **Resolver fix** — lexical-first gate (normalize + edit-distance / shared-token /
+   phonetic) for non-person merges; demote bare-name cosine auto-merge; route
+   genuine decisions through the LLM tiebreak. Grounded in `METHODOLOGY_SURVEY.md`
+   D12 (`open`, trigger "dedup quality drops below acceptable" — now fired) + O3,
+   and `v1_improvements.md §6`.
+3. **Re-ingest** cohort → surface-count cliff restored → **then re-run Connections**.
+
+The full editable-entities + ledger system (`ENTITY-CANON.md`) remains the
+longer-term layer, not this fix.
+
+---
+
+## OI-8 — TEE-compatible embedding service  ·  OPEN
+*Raised: 2026-06-11 (while fixing OI-7). Separate from the OI-7 fix — do NOT fold in.*
+
+The team plans to move everything into a TEE, where local **Ollama may not be
+feasible**. Backend reality today (verified in `config.py` + `transcripts/embed.py`):
+- **LLM is already TEE-served** — `config.get_llm` defaults to `redpill`
+  (`google/gemma-3-27b-it` on Phala RedPill TEE; `nearai`/DeepSeek alt). Ollama
+  (`qwen2.5-conclave`) is dev-only. No TEE work needed for the LLM.
+- **Embeddings are the ONLY hard Ollama dependency** — `transcripts/embed.py` always
+  posts to Ollama `/api/embed` with `nomic-embed-text:v1.5`, regardless of
+  `CONCLAVE_LLM_BACKEND`. (`config.embedding_model = "all-MiniLM-L6-v2"` is stale /
+  unused — embed.py hardcodes nomic; stored vectors confirm nomic.)
+
+**Scope when prioritized:** pick a TEE-compatible embedder — (a) a small embedding
+model running *inside* the enclave (nomic-embed is ~137M; doable without Ollama via a
+minimal runtime/ONNX), or (b) a TEE-hosted `/embeddings` endpoint (RedPill is
+OpenAI-compatible). The embedder is **model-keyed + swappable** (`EMBED_MODEL_ID` one
+constant; `embeddings` table namespaces by `model_id`), so the swap is a contained
+change + a re-embed. The OI-7 fix **de-risks this** — resolution becomes lexical-first
++ LLM-tiebreak, so the embedder is no longer the arbiter of entity identity, and the
+remaining embeddings (chunk retrieval + entity definitions) work on any decent
+sentence-embedder.
