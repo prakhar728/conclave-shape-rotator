@@ -68,7 +68,15 @@ function readGraphColors(): GraphColors {
 }
 
 const NODE_KINDS = ["meeting", "entity", "speaker"] as const;
-const ENTITY_TYPES = ["person", "project", "topic", "company", "tool"];
+// OI-7 derived 3-category model → the fine stored types the backend `types`
+// filter expects. A category checkbox toggles its constituent fine types.
+const CATEGORY_TYPES: Record<string, string[]> = {
+  person: ["person"],
+  tech: ["tool", "project", "topic"],
+  affiliation: ["company"],
+};
+const CATEGORIES = ["person", "tech", "affiliation"] as const;
+const ALL_TYPES = Object.values(CATEGORY_TYPES).flat();
 
 export default function GraphPage() {
   const router = useRouter();
@@ -81,7 +89,7 @@ export default function GraphPage() {
   // filters (C32)
   const [asOf, setAsOf] = useState("");
   const [enabledTypes, setEnabledTypes] = useState<Set<string>>(
-    new Set(ENTITY_TYPES),
+    new Set(ALL_TYPES),
   );
   const [minMentions, setMinMentions] = useState(1);
 
@@ -114,7 +122,7 @@ export default function GraphPage() {
         }
         const params = new URLSearchParams();
         if (asOf) params.set("as_of", asOf);
-        if (enabledTypes.size < ENTITY_TYPES.length)
+        if (enabledTypes.size < ALL_TYPES.length)
           params.set("types", Array.from(enabledTypes).join(","));
         if (minMentions > 1) params.set("min_mentions", String(minMentions));
         const q = params.toString();
@@ -242,24 +250,28 @@ export default function GraphPage() {
           </label>
           <p className="mb-1.5 text-muted-foreground font-bold uppercase tracking-wider text-[10px]">Entity types</p>
           <div className="mb-3 flex flex-wrap gap-1">
-            {ENTITY_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => {
-                  const next = new Set(enabledTypes);
-                  if (next.has(t)) next.delete(t);
-                  else next.add(t);
-                  setEnabledTypes(next);
-                }}
-                className={`rounded-none border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
-                  enabledTypes.has(t)
-                    ? "border-foreground bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
-                }`}
-              >
-                {t}
-              </button>
-            ))}
+            {CATEGORIES.map((cat) => {
+              const types = CATEGORY_TYPES[cat];
+              const on = types.every((t) => enabledTypes.has(t));
+              return (
+                <button
+                  key={cat}
+                  onClick={() => {
+                    const next = new Set(enabledTypes);
+                    if (on) types.forEach((t) => next.delete(t));
+                    else types.forEach((t) => next.add(t));
+                    setEnabledTypes(next);
+                  }}
+                  className={`rounded-none border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
+                    on
+                      ? "border-foreground bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
           </div>
           <label className="block mb-3">
             <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px]">

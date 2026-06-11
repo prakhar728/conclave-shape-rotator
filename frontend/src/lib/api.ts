@@ -410,8 +410,13 @@ export const userSettings = {
 
 export type KBEntity = {
   id: string;
+  // fine-grained stored type (kept for back-compat)
   type: "person" | "project" | "topic" | "company" | "tool";
+  // OI-7 derived 3-category model — what the UI groups/colors by
+  category: "person" | "tech" | "affiliation";
   canonical_name: string;
+  definition?: string | null;
+  role?: "builder" | "researcher" | "marketing" | "other" | null;
   raw_mentions: string[];
   mention_count: number;
   meeting_count: number;

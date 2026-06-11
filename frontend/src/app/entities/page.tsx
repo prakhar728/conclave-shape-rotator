@@ -24,7 +24,8 @@ import {
   type MeResponse,
 } from "@/lib/api";
 
-const TYPES = ["person", "project", "topic", "company", "tool"] as const;
+// OI-7 derived 3-category model (was the 5 fine types). Filters on `category`.
+const TYPES = ["person", "tech", "affiliation"] as const;
 
 export default function EntitiesPage() {
   const router = useRouter();
@@ -66,7 +67,7 @@ export default function EntitiesPage() {
   const visible = useMemo(() => {
     if (!entities) return null;
     let out = entities;
-    if (typeFilter) out = out.filter((e) => e.type === typeFilter);
+    if (typeFilter) out = out.filter((e) => e.category === typeFilter);
     if (query.trim()) {
       const q = query.trim().toLowerCase();
       out = out.filter(
@@ -137,9 +138,9 @@ export default function EntitiesPage() {
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(e.type)}`}
+                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(e.category)}`}
                     >
-                      {e.type}
+                      {e.category}
                     </span>
                     <span className="truncate text-sm font-medium transition-colors group-hover:text-primary">
                       {e.canonical_name}

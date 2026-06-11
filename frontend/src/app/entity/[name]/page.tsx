@@ -92,11 +92,21 @@ export default function EntityDetailPage() {
                   {detail.entity.canonical_name}
                 </h1>
                 <span
-                  className={`rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(detail.entity.type)}`}
+                  className={`rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(detail.entity.category)}`}
                 >
-                  {detail.entity.type}
+                  {detail.entity.category}
                 </span>
+                {detail.entity.category === "person" && detail.entity.role ? (
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
+                    {detail.entity.role}
+                  </span>
+                ) : null}
               </div>
+              {detail.entity.definition ? (
+                <p className="mt-2 max-w-2xl text-sm italic text-muted-foreground">
+                  {detail.entity.definition}
+                </p>
+              ) : null}
               <p className="mt-2 text-sm text-muted-foreground">
                 <span className="font-mono text-xs">
                   {detail.entity.mention_count}×
