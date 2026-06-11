@@ -166,6 +166,21 @@ async def on_meeting_completed(
             native_id,
         )
 
+    # 6b. Calendar enrichment (best-effort): if this Meet was auto-recorded
+    # from a calendar event, link the transcript to the event and auto-share
+    # it with the event's attendees. Never fatal — a failure here must not
+    # block transcript ingest.
+    if platform == "google_meet":
+        try:
+            from infra.meeting_calendar_links import link_completed_meeting
+            link_completed_meeting(
+                meet_code=native_id,
+                session_id=session_id,
+                inviter_user_id=inv["user_id"] if inv else None,
+            )
+        except Exception:  # noqa: BLE001
+            logger.exception("calendar link failed for %s", native_id)
+
     # 7. Enrichment kicks asynchronously (mirrors /transcripts/ingest).
     if status_label == "accepted":
         from api.transcripts_routes import _enrich_in_background

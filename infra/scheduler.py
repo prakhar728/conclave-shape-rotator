@@ -131,11 +131,57 @@ def start_instance(instance_id: str) -> None:
     _tasks[instance_id] = loop.create_task(_loop_for(instance_id))
 
 
+# --- Google Calendar auto-dispatch poller -------------------------------
+# One extra asyncio task (separate from the per-instance loops) that polls
+# connected users' calendars and sends the bot to soon-starting meetings.
+_calendar_task: "asyncio.Task | None" = None
+
+
+async def _calendar_poll_loop() -> None:
+    """Tick every CONCLAVE_CALENDAR_POLL_SECONDS (default 60). Each tick is a
+    no-op when the integration is unconfigured, so this loop is safe to run
+    unconditionally once the scheduler is enabled."""
+    from config import settings
+
+    interval = float(os.environ.get("CONCLAVE_CALENDAR_POLL_SECONDS", "60"))
+    while True:
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.info("scheduler: calendar poll loop cancelled")
+            return
+        if not settings.google_calendar_enabled():
+            continue
+        try:
+            from infra.calendar_dispatch import dispatch_due_meetings
+            count = await asyncio.to_thread(dispatch_due_meetings)
+            if count:
+                logger.info("calendar poll: dispatched %d bot(s)", count)
+        except Exception:  # noqa: BLE001 — keep the loop alive across failures
+            logger.exception("calendar poll: tick failed")
+
+
+def start_calendar_poll() -> None:
+    """Start the calendar poll loop if not already running. No-op when the
+    scheduler is disabled (tests) or no event loop is running yet."""
+    global _calendar_task
+    if disabled():
+        return
+    if _calendar_task is not None and not _calendar_task.done():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _calendar_task = loop.create_task(_calendar_poll_loop())
+
+
 async def start_all() -> None:
     """Start tasks for every active (not-yet-ended) instance."""
     if disabled():
         logger.info("scheduler: disabled via CONCLAVE_DISABLE_SCHEDULER")
         return
+    start_calendar_poll()
     now = datetime.now(timezone.utc)
     for inst in storage.list_instances():
         end_date_str = inst.get("end_date")
@@ -153,8 +199,13 @@ async def start_all() -> None:
 
 async def stop_all() -> None:
     """Cancel all running tasks. Used on app shutdown."""
-    for task in _tasks.values():
+    global _calendar_task
+    tasks = list(_tasks.values())
+    if _calendar_task is not None:
+        tasks.append(_calendar_task)
+    for task in tasks:
         task.cancel()
-    if _tasks:
-        await asyncio.gather(*_tasks.values(), return_exceptions=True)
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
     _tasks.clear()
+    _calendar_task = None

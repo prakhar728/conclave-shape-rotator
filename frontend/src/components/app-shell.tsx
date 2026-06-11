@@ -23,6 +23,7 @@ import {
   LogOut,
   Plus,
   Search,
+  Settings,
   Share2,
   Tags,
 } from "lucide-react";
@@ -105,6 +106,24 @@ export function AppShell({
           <div className="px-2">
             <AttestedBadge />
           </div>
+          <Link
+            href="/settings"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-2 py-2 text-xs transition",
+              pathname.startsWith("/settings")
+                ? "border border-border bg-card font-medium text-foreground shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+            )}
+          >
+            <Settings
+              className={cn(
+                "size-3.5",
+                pathname.startsWith("/settings") && "text-primary",
+              )}
+              aria-hidden
+            />
+            Settings
+          </Link>
           <p className="truncate px-2 text-[11px] text-muted-foreground">
             {user.email}
           </p>

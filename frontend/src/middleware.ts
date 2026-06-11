@@ -29,6 +29,7 @@ const PROTECTED_PREFIXES = [
   "/obligations",
   "/search",
   "/graph",
+  "/settings",
 ];
 const AUTH_PAGES = new Set(["/login", "/signup"]);
 
@@ -63,6 +64,7 @@ export const config = {
     "/meeting/:path*",
     "/invite/:path*",
     "/questions/:path*",
+    "/settings/:path*",
     "/login",
     "/signup",
   ],

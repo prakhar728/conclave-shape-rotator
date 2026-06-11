@@ -111,6 +111,10 @@ app.include_router(upload_router)
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)
 
+# Transcript Saving (Phase 2): account settings — transcript retention default.
+from api.users_routes import router as users_router
+app.include_router(users_router)
+
 # Phase 2.4: Recato webhook receiver (replaces the standalone consumer.py
 # bridge for the hosted-product path).
 from api.webhooks_recato import router as recato_webhook_router
@@ -120,6 +124,11 @@ app.include_router(recato_webhook_router)
 # resolve the token, but the meeting itself is still permission-gated).
 from api.magic_link_routes import router as magic_link_router
 app.include_router(magic_link_router)
+
+# Google Calendar integration — dedicated OAuth connect + events +
+# auto-dispatch. All routes 503 when unconfigured.
+from api.calendar_routes import router as calendar_router
+app.include_router(calendar_router)
 
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).

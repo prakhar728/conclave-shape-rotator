@@ -10,6 +10,7 @@ User row without re-hitting Supabase on every call.
 """
 from __future__ import annotations
 
+import json
 import secrets
 from typing import Optional
 
@@ -97,3 +98,46 @@ def get_user_by_supabase(supabase_id: str) -> Optional[dict]:
         (supabase_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+# --- Account settings (users.settings JSON, Alembic 0012) ------------------
+
+def get_user_settings(user_id: str) -> dict:
+    """Return the user's settings dict (empty `{}` if unset or row missing).
+
+    Settings live in a JSON blob so new preferences don't each need a
+    migration. Today the only key is `retention_days` (null/absent = keep
+    transcripts forever).
+    """
+    row = _get_conn().execute(
+        "SELECT settings FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None or row["settings"] is None:
+        return {}
+    try:
+        return json.loads(row["settings"]) or {}
+    except (ValueError, TypeError):
+        return {}
+
+
+def set_user_settings(user_id: str, settings: dict) -> dict:
+    """Replace the user's settings blob. Returns the stored dict."""
+    _get_conn().execute(
+        "UPDATE users SET settings = ?, updated_at = ? WHERE id = ?",
+        (json.dumps(settings), _now(), user_id),
+    )
+    return settings
+
+
+def get_account_retention_days(user_id: str) -> Optional[int]:
+    """Account-wide default retention in days, or None for keep-forever.
+
+    Resilient to junk: a non-positive or non-int value reads as keep-forever.
+    """
+    val = get_user_settings(user_id).get("retention_days")
+    if isinstance(val, bool):  # bool is an int subclass — reject explicitly
+        return None
+    if isinstance(val, int) and val > 0:
+        return val
+    return None

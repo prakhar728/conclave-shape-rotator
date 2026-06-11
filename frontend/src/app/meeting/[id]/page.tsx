@@ -12,9 +12,8 @@
  *  - Open questions
  *  - Insights
  *  - Entities (small)
- *
- * Raw transcript is deliberately not requested — the endpoint never
- * serves raw_diarization (see api/transcripts_routes.py docstring).
+ *  - Transcript (gated — TranscriptPanel fetches the raw transcript only
+ *    when can_view_transcript is true; otherwise shows a state message)
  */
 "use client";
 
@@ -25,6 +24,8 @@ import { use, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
+import { RetentionControl } from "@/components/retention-control";
+import { TranscriptPanel } from "@/components/transcript-panel";
 import {
   ApiError,
   auth,
@@ -129,13 +130,20 @@ export default function MeetingPage({
         />
 
         {meeting.is_owner ? (
-          <OwnerControls
-            sessionId={meeting.session_id}
-            initialVisibility={
-              (meeting.effective_visibility as "owner-only" | "shared") ??
-              "owner-only"
-            }
-          />
+          <>
+            <OwnerControls
+              sessionId={meeting.session_id}
+              initialVisibility={
+                (meeting.effective_visibility as "owner-only" | "shared") ??
+                "owner-only"
+              }
+            />
+            <RetentionControl
+              sessionId={meeting.session_id}
+              initialOverride={meeting.retention_override}
+              rawDeleted={meeting.raw_transcript_deleted}
+            />
+          </>
         ) : null}
 
         {meeting.entities.length > 0 ? (
@@ -160,6 +168,16 @@ export default function MeetingPage({
               ))}
             </ul>
           </section>
+        ) : null}
+
+        {/* Gated raw transcript. Only workspace-mode / demo responses carry
+            can_view_transcript; legacy cohort sessions leave it undefined and
+            never expose a transcript surface. */}
+        {meeting.can_view_transcript !== undefined ? (
+          <TranscriptPanel
+            sessionId={meeting.session_id}
+            canView={meeting.can_view_transcript}
+          />
         ) : null}
       </main>
     </AppShell>

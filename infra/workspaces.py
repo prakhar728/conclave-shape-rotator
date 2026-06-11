@@ -102,17 +102,37 @@ def get_member_role(workspace_id: str, user_id: str) -> Optional[str]:
 # --- Meeting shares (Phase 1.7 / 2.x consumer) ---
 
 
-def add_meeting_share(session_id: str, user_email: str, granted_by: str) -> None:
-    """Grant `user_email` access to a 'shared' meeting. Idempotent (PK absorbs dups)."""
+#: Permission levels a share can grant. 'summary_and_transcript' is the default
+#: (and what every pre-0011 row back-fills to); 'summary_only' withholds the raw
+#: transcript at the gated /transcripts/sessions/{id}/transcript endpoint.
+SHARE_SCOPES = ("summary_and_transcript", "summary_only")
+_DEFAULT_SHARE_SCOPE = "summary_and_transcript"
+
+
+def add_meeting_share(
+    session_id: str,
+    user_email: str,
+    granted_by: str,
+    scope: str = _DEFAULT_SHARE_SCOPE,
+) -> None:
+    """Grant `user_email` access to a 'shared' meeting at permission `scope`.
+
+    Idempotent (PK absorbs dups); re-sharing the same email updates the scope,
+    so an owner can downgrade summary+transcript → summary-only (or back) by
+    re-adding the same recipient.
+    """
+    if scope not in SHARE_SCOPES:
+        raise ValueError(f"scope must be one of {SHARE_SCOPES}, got {scope!r}")
     conn = _get_conn()
     now = _now()
-    # Upsert: ignore if already shared, refresh granted_at otherwise.
+    # Upsert: ignore if already shared, refresh granted_at + scope otherwise.
     conn.execute(
-        "INSERT INTO meeting_shares (session_id, user_email, granted_by, granted_at) "
-        "VALUES (?, ?, ?, ?) "
+        "INSERT INTO meeting_shares (session_id, user_email, granted_by, granted_at, scope) "
+        "VALUES (?, ?, ?, ?, ?) "
         "ON CONFLICT (session_id, user_email) DO UPDATE SET "
-        "granted_by = excluded.granted_by, granted_at = excluded.granted_at",
-        (session_id, user_email, granted_by, now),
+        "granted_by = excluded.granted_by, granted_at = excluded.granted_at, "
+        "scope = excluded.scope",
+        (session_id, user_email, granted_by, now, scope),
     )
 
 
@@ -124,9 +144,23 @@ def has_meeting_share(session_id: str, user_email: str) -> bool:
     return row is not None
 
 
+def get_meeting_share_scope(session_id: str, user_email: str) -> Optional[str]:
+    """Return the share scope granted to `user_email`, or None if not shared.
+
+    Used by the transcript gate to decide whether a 'shared' recipient is
+    allowed the raw transcript ('summary_and_transcript') or only the derived
+    summary ('summary_only').
+    """
+    row = _get_conn().execute(
+        "SELECT scope FROM meeting_shares WHERE session_id = ? AND user_email = ?",
+        (session_id, user_email),
+    ).fetchone()
+    return row["scope"] if row else None
+
+
 def list_meeting_shares(session_id: str) -> list[dict]:
     rows = _get_conn().execute(
-        "SELECT session_id, user_email, granted_by, granted_at, user_id "
+        "SELECT session_id, user_email, granted_by, granted_at, user_id, scope "
         "FROM meeting_shares WHERE session_id = ? ORDER BY granted_at ASC",
         (session_id,),
     ).fetchall()

@@ -126,9 +126,33 @@ def set_workspace(
 
 
 def get_workspace_fields(session_id: str) -> Optional[dict]:
-    """Return `{workspace_id, owner_user_id, visibility}` or None if missing."""
+    """Return `{workspace_id, owner_user_id, visibility, retention_override,
+    raw_transcript_deleted_at}` or None if missing."""
     from storage import sqlite as _sqlite
     return _sqlite.get_transcript_workspace_fields(session_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 2 — retention / auto-delete (typed columns from Alembic 0012)
+# ---------------------------------------------------------------------------
+
+def set_retention_override(session_id: str, retention_override: Optional[str]) -> None:
+    """Per-meeting override: None (inherit), 'keep_forever', or '<int>' days."""
+    from storage import sqlite as _sqlite
+    _sqlite.set_transcript_retention_override(session_id, retention_override)
+
+
+def purge_raw(session_id: str) -> None:
+    """Auto-delete the raw transcript, keeping metadata + derived. Stamps
+    `raw_transcript_deleted_at`."""
+    from storage import sqlite as _sqlite
+    _sqlite.purge_transcript_raw(session_id)
+
+
+def list_retention_rows() -> list[dict]:
+    """Projection the retention sweep iterates over (see sqlite layer)."""
+    from storage import sqlite as _sqlite
+    return _sqlite.list_transcript_retention_rows()
 
 
 def list_workspace_sessions(workspace_id: str) -> list[Session]:
