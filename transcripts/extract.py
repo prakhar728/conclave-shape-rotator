@@ -35,6 +35,8 @@ log = logging.getLogger(__name__)
 EXTRACT_PROMPT_VERSION = "x1.0"
 
 ENTITY_TYPES = ("person", "project", "topic", "company", "tool")
+#: Coarse person profile (MVP). LLM-inferred at extraction; null when unclear.
+PERSON_ROLES = ("builder", "researcher", "marketing", "other")
 OBLIGATION_TYPES = ("action", "decision", "commitment", "open_question", "blocker")
 STATUS_VALUES = ("open", "resolved", "unclear")
 
@@ -76,12 +78,19 @@ Extract an entity only when it is load-bearing for the conversation —
 referenced repeatedly, defined, or central to an obligation. Passing
 name-drops are not entities. canonical_name for a person is the fullest
 form of their name available in the chunk.
+For every entity also write a one-line "definition" grounded in THIS chunk
+(what the thing is / what was said about it — a person's definition is a short
+who-they-are line). For a person only, set "role" to the best fit of
+builder|researcher|marketing|other based on how they are described; use null
+when unclear. For non-person entities, "role" is null.
 
 Output ONLY a raw JSON object (no markdown fences, no prose) of exactly this shape:
 {{
   "entities": [
     {{"type": "person|project|topic|company|tool",
      "canonical_name": "...",
+     "definition": "one short sentence defining this entity, grounded in the chunk",
+     "role": "person only: builder|researcher|marketing|other, else null",
      "raw_mentions": ["each distinct surface form seen in this chunk"],
      "turn_ids": [integer turn ids]}}
   ],
@@ -154,9 +163,16 @@ def _clean_entities(rows: list, n_turns: int) -> list[dict]:
         if etype not in ENTITY_TYPES or not name:
             continue
         mentions = [str(m).strip() for m in (r.get("raw_mentions") or []) if str(m).strip()]
+        definition = str(r.get("definition") or "").strip() or None
+        role = None
+        if etype == "person":
+            raw_role = str(r.get("role") or "").strip().lower()
+            role = raw_role if raw_role in PERSON_ROLES else None
         out.append({
             "type": etype,
             "canonical_name": name,
+            "definition": definition,
+            "role": role,
             "raw_mentions": mentions or [name],
             "turn_ids": _clean_turn_ids(r.get("turn_ids"), n_turns),
         })
@@ -208,7 +224,11 @@ def _clean_turn_ids(value: Any, n_turns: int) -> list[int]:
 # ---------------------------------------------------------------------------
 
 def merge_entities(rows: list[dict]) -> list[dict]:
-    """Merge by (type, casefolded canonical_name); union mentions + turns."""
+    """Merge by (type, casefolded canonical_name); union mentions + turns,
+    keep the richest (longest) definition + the first non-empty role.
+
+    Reads ``definition``/``role`` defensively (``.get``) so rows that predate
+    those fields — bake-off strategies, older callers — still merge cleanly."""
     by_key: dict[tuple[str, str], dict] = {}
     for r in rows:
         key = (r["type"], r["canonical_name"].casefold())
@@ -218,10 +238,17 @@ def merge_entities(rows: list[dict]) -> list[dict]:
                 if m not in tgt["raw_mentions"]:
                     tgt["raw_mentions"].append(m)
             tgt["turn_ids"] = sorted(set(tgt["turn_ids"]) | set(r["turn_ids"]))
+            cand_def = r.get("definition")
+            if cand_def and len(cand_def) > len(tgt.get("definition") or ""):
+                tgt["definition"] = cand_def
+            if not tgt.get("role") and r.get("role"):
+                tgt["role"] = r.get("role")
         else:
             by_key[key] = {
                 "type": r["type"],
                 "canonical_name": r["canonical_name"],
+                "definition": r.get("definition"),
+                "role": r.get("role"),
                 "raw_mentions": list(r["raw_mentions"]),
                 "turn_ids": list(r["turn_ids"]),
             }
