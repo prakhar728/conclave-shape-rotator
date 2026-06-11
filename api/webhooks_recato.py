@@ -122,8 +122,8 @@ async def on_meeting_completed(
         )
 
     # 3. Fetch transcript from Recato.
-    vexa = _fetch_recato_transcript(platform, native_id)
-    if not (vexa.get("segments") or []):
+    recato = _fetch_recato_transcript(platform, native_id)
+    if not (recato.get("segments") or []):
         # Empty transcripts happen (silence-only meetings). Still mark complete.
         inv = bot_invitations.find_by_meeting(platform, native_id)
         if inv:
@@ -132,7 +132,7 @@ async def on_meeting_completed(
 
     # 4. Translate to canonical → Session.
     source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
-    canonical = to_canonical(vexa, source=source)
+    canonical = to_canonical(recato, source=source)
 
     # Reuse the canonical→Session build path.
     from api.transcripts_routes import _build_and_save_session

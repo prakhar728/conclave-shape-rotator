@@ -18,7 +18,7 @@ from uuid import uuid4
 
 
 def to_canonical(
-    vexa_response: dict,
+    recato_response: dict,
     *,
     source: str = "recato",
     event_id: Optional[str] = None,
@@ -36,21 +36,21 @@ def to_canonical(
     Caller is responsible for HMAC-signing the JSON dump of this dict and
     POSTing it to ``/transcripts/ingest``.
     """
-    if not isinstance(vexa_response, dict):
+    if not isinstance(recato_response, dict):
         raise TypeError(
-            f"vexa_response must be a dict, got {type(vexa_response).__name__}"
+            f"recato_response must be a dict, got {type(recato_response).__name__}"
         )
 
     # --- Meeting metadata -------------------------------------------------
     # external_id: prefer `native_meeting_id` (Recato's own stable identifier
     # for the meeting on its platform — e.g. "abc-defg-hij" for a Meet code);
     # fall back to the DB-internal `id` only if native is missing.
-    external_id = vexa_response.get("native_meeting_id") or vexa_response.get("id")
+    external_id = recato_response.get("native_meeting_id") or recato_response.get("id")
     if external_id is None:
-        raise ValueError("vexa_response is missing both native_meeting_id and id")
+        raise ValueError("recato_response is missing both native_meeting_id and id")
     external_id = str(external_id)
 
-    platform = vexa_response.get("platform")
+    platform = recato_response.get("platform")
     if hasattr(platform, "value"):  # tolerate Pydantic Enum coming through
         platform = platform.value
     if platform is not None:
@@ -59,26 +59,26 @@ def to_canonical(
     meeting = {"external_id": external_id}
     if platform:
         meeting["platform"] = platform
-    if vexa_response.get("constructed_meeting_url"):
-        meeting["url"] = str(vexa_response["constructed_meeting_url"])
+    if recato_response.get("constructed_meeting_url"):
+        meeting["url"] = str(recato_response["constructed_meeting_url"])
 
-    notes = vexa_response.get("notes")
+    notes = recato_response.get("notes")
     if notes:
         # Recato's "notes" is a freeform meeting note; treat as title for now.
         # If Recato later adds an explicit title field, prefer that.
         meeting["title"] = str(notes)[:200]
 
-    if vexa_response.get("start_time"):
-        meeting["start_time"] = _to_iso(vexa_response["start_time"])
-    if vexa_response.get("end_time"):
-        meeting["end_time"] = _to_iso(vexa_response["end_time"])
+    if recato_response.get("start_time"):
+        meeting["start_time"] = _to_iso(recato_response["start_time"])
+    if recato_response.get("end_time"):
+        meeting["end_time"] = _to_iso(recato_response["end_time"])
 
     # --- Segments ---------------------------------------------------------
-    vexa_segments = vexa_response.get("segments") or []
+    recato_segments = recato_response.get("segments") or []
     seen_speakers: list[str] = []
     seen_set: set[str] = set()
     segments: list[dict] = []
-    for seg in vexa_segments:
+    for seg in recato_segments:
         if not isinstance(seg, dict):
             continue
         text = str(seg.get("text") or "").strip()

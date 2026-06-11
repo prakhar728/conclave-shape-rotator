@@ -227,7 +227,7 @@ def _ingest_from_recato_now(
                "Accept": "application/json"}
 
     # Poll up to 5 times over ~10 seconds while Recato finishes its flush.
-    vexa = None
+    recato = None
     for attempt in range(5):
         try:
             resp = httpx.get(url, headers=headers, timeout=20.0)
@@ -245,7 +245,7 @@ def _ingest_from_recato_now(
         body = resp.json()
         segs = body.get("segments") or []
         if segs:
-            vexa = body
+            recato = body
             logger.info(
                 "post-stop ingest: got %d segments for %s on attempt %d",
                 len(segs), session_id, attempt,
@@ -257,7 +257,7 @@ def _ingest_from_recato_now(
         )
         time.sleep(2)
 
-    if vexa is None:
+    if recato is None:
         logger.warning(
             "post-stop ingest: gave up — no segments after retries for %s",
             session_id,
@@ -265,7 +265,7 @@ def _ingest_from_recato_now(
         return
 
     source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
-    canonical = to_canonical(vexa, source=source)
+    canonical = to_canonical(recato, source=source)
 
     existing = transcripts_store.load_session(canonical["meeting"]["external_id"])
     if existing is None:

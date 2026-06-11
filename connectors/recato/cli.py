@@ -67,12 +67,12 @@ def fetch_and_post(platform: str, native_meeting_id: str) -> dict:
     if resp.status_code != 200:
         print(f"  HTTP {resp.status_code}: {resp.text[:300]}", file=sys.stderr)
         resp.raise_for_status()
-    vexa = resp.json()
-    seg_count = len(vexa.get("segments") or [])
+    recato = resp.json()
+    seg_count = len(recato.get("segments") or [])
     print(f"  got {seg_count} segments", file=sys.stderr)
 
     # --- Translate to canonical ------------------------------------------
-    canonical = to_canonical(vexa, source=source)
+    canonical = to_canonical(recato, source=source)
     print(f"  translated → canonical (external_id={canonical['meeting']['external_id']})", file=sys.stderr)
 
     # --- HMAC-sign + POST to Conclave ------------------------------------

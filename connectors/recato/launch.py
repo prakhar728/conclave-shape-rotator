@@ -95,20 +95,20 @@ def launch_bot(
         # bind-mounted profile. Chrome creates these on launch and removes
         # them on clean exit — but on crash/kill they're left behind and
         # the NEXT bot launch fails with "Failed to create SingletonLock:
-        # File exists". Vexa's own cleanStaleLocks doesn't catch them in
+        # File exists". Recato's own cleanStaleLocks doesn't catch them in
         # all cases. Cheap to be defensive here. Container name is the
-        # local-dev convention (`vexa-lite`); for prod deploy this becomes
+        # local-dev convention (`recato-lite`); for prod deploy this becomes
         # a Recato-side concern, not Conclave's.
         try:
             import subprocess
             subprocess.run(
-                ["docker", "exec", "vexa-lite", "bash", "-c",
+                ["docker", "exec", "recato-lite", "bash", "-c",
                  "find /tmp/browser-data -maxdepth 2 -name 'Singleton*' -delete 2>/dev/null; "
                  "find /tmp/browser-data -maxdepth 3 -name 'lockfile' -delete 2>/dev/null; true"],
                 check=False, timeout=5, capture_output=True,
             )
         except Exception:
-            # Best-effort. If docker isn't on PATH or vexa-lite isn't named
+            # Best-effort. If docker isn't on PATH or recato-lite isn't named
             # that, we'll learn from the bot's failure mode same as before.
             pass
 
@@ -118,7 +118,7 @@ def launch_bot(
         "Accept": "application/json",
     }
     if webhook_url:
-        # Vexa/Recato reads per-meeting webhook config from request HEADERS,
+        # Recato reads per-meeting webhook config from request HEADERS,
         # not the body — see meeting-api/meeting_api/meetings.py around
         # `X-User-Webhook-URL`. Passing it on the body is silently ignored.
         # Verified via the Vexa source after a Phase 2.5 misfire where no
