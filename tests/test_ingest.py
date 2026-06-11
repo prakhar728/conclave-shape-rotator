@@ -130,8 +130,10 @@ def test_empty_parse_is_reported_not_stored(tmp_db, llm_forbidden, tmp_path):
 
 def test_ingest_real_cohort_fixtures_no_llm(tmp_db, llm_forbidden):
     """Smoke: the 13 real cohort transcripts ingest end-to-end with no LLM."""
-    if not FIXTURES.is_dir():
-        pytest.skip("real fixtures not present")
+    if not FIXTURES.is_dir() or not list(FIXTURES.glob("*.txt")):
+        # The .expected.yaml/.md live in git; the real .txt transcripts are
+        # gitignored, so they're absent in fresh checkouts / CI.
+        pytest.skip("real cohort transcripts not present (gitignored)")
     r = ingest_path(FIXTURES)
     # 13 files; the BOM "Notes" one is the known non-Otter exception.
     assert r.stored >= 10
@@ -160,10 +162,16 @@ def test_ingest_default_leaves_owner_none(tmp_db, llm_forbidden, tmp_path):
     assert sessions[0].metadata.owner is None
 
 
-def test_ingest_owner_from_first_speaker_opt_in_stamps_owner(tmp_db, llm_forbidden, tmp_path):
+def test_ingest_owner_from_first_speaker_opt_in_stamps_owner(tmp_db, llm_forbidden, tmp_path, monkeypatch):
     """With the flag, the first speaker in resolved_speakers whose
     record_id is set becomes metadata.owner. Shaw resolves via
-    MOCK_DIRECTORY to shaw-walters in the fixture."""
+    MOCK_DIRECTORY to shaw-walters.
+
+    MOCK_DIRECTORY is built at import time from a roster dir that's absent in
+    fresh checkouts / CI, so patch it explicitly (mirrors test_enrich_mapreduce)
+    to keep this test hermetic instead of depending on local roster data."""
+    from transcripts import identity
+    monkeypatch.setattr(identity, "MOCK_DIRECTORY", {"shaw": "shaw-walters"})
     f = tmp_path / "Session_D_May_20.txt"
     f.write_text("Shaw  0:00\nhello\n\nAlex (flashbots?)  0:05\nhi\n\n", encoding="utf-8")
     ingest_path(f, owner_from_first_speaker=True)

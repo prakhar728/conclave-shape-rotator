@@ -107,7 +107,11 @@ def test_version_changes_when_xml_body_changes(tmp_path):
 # ---------------------------------------------------------------------------
 
 def test_missing_file_returns_none_and_warns(tmp_path, caplog):
-    with caplog.at_level(logging.WARNING):
+    # A prior test's Alembic run (env.py fileConfig defaults to
+    # disable_existing_loggers=True) can leave this logger disabled, which
+    # would silently drop the warning. Re-enable so the record is captured.
+    logging.getLogger("transcripts.team_context").disabled = False
+    with caplog.at_level(logging.WARNING, logger="transcripts.team_context"):
         result = load(tmp_path / "does-not-exist.xml")
     assert result is None
     assert any("file not found" in rec.message for rec in caplog.records)
@@ -116,7 +120,8 @@ def test_missing_file_returns_none_and_warns(tmp_path, caplog):
 def test_malformed_xml_returns_none_and_warns(tmp_path, caplog):
     p = tmp_path / "broken.xml"
     p.write_text("<not><closed>tags", encoding="utf-8")
-    with caplog.at_level(logging.WARNING):
+    logging.getLogger("transcripts.team_context").disabled = False
+    with caplog.at_level(logging.WARNING, logger="transcripts.team_context"):
         result = load(p)
     assert result is None
     assert any("malformed XML" in rec.message for rec in caplog.records)
