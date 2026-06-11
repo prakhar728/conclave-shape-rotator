@@ -145,11 +145,14 @@ cross-meeting gold). Do it there, not as a Phase-1 hack.*
 
 ---
 
-## OI-7 — Entity-resolution over-merge ("black-hole" entities)  ·  DIAGNOSED — fix in progress
-*Found: 2026-06-09 while debugging Connections (feat/connections). Root cause
-CONFIRMED 2026-06-11 (on `fix/entity-resolution-overmerge`). It gates connections
-AND search AND the graph (everything that reads entities). See `transcripts/EVAL.md`
-"entity-resolution over-merge root cause" for the full record.*
+## OI-7 — Entity-resolution over-merge ("black-hole" entities)  ·  RESOLVED (2026-06-11)
+*Found 2026-06-09 (debugging Connections); root cause confirmed + fix shipped
+2026-06-11 on `fix/entity-resolution-overmerge` (7 commits). Full record +
+before/after numbers in `transcripts/EVAL.md` (record E1, "Outcome"). Validation:
+re-ingesting the exact 14 cohort fixtures that caused the black holes now yields a
+clean surface distribution (max 4 surfaces, **0 black holes**; was 94/75/52/46),
+with entity F1 0.59 (≥ 0.55 floor) and obligation type-agnostic 0.27 (≥ 0.21) held.
+Connections re-run on the clean layer is the follow-up.*
 
 **Evidence (real cohort DB):** a few entities have absorbed hundreds of
 unrelated mentions —

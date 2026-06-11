@@ -391,3 +391,24 @@ through the (accurate) LLM tiebreak. D12 was pre-registered `open` with trigger
 After the fix: the new guardrail + no-merge tests pass; **entity F1 stays ≥ C27
 floor (0.55)**; a cohort re-ingest shows no entity > ~10 surfaces (bar genuine
 high-frequency); the Connections junk class disappears.
+
+### Outcome — fix shipped + validated (2026-06-11)
+Shipped across 7 commits (eval signals → extraction definition/role → storage
+category + definition-embedding → lexical-first resolver → API → frontend →
+re-ingest). `resolve_entity` now embeds the entity **definition** (a sentence),
+not the bare name; gates merges **lexical-first**; routes the rest through the LLM
+tiebreak fed names+definitions — **no bare-cosine auto-merge** (the black-hole
+short-circuit is gone). Taxonomy delivered as a derived `category`
+(person/tech/affiliation), **no DB migration**.
+
+- **Mechanism (regression-locked):** `tests/test_entity_resolution.py::
+  test_real_embedder_disjoint_short_names_do_not_merge` flips from xfail to a real
+  pass — collapsed short-name vectors (cos≈1.0) no longer merge.
+- **Old metrics held** (bake-off `one_prompt_v2`, redpill gemma): entity F1
+  **0.59** (≥ C27 floor 0.55), obligation type-agnostic **0.27** (≥ 0.21) — the
+  obligation/insights prompt was untouched.
+- **New metric — re-ingest of ALL 14 cohort fixtures** (the exact transcripts that
+  produced the black holes) into a throwaway DB with the fixed pipeline: **575
+  entities, surface distribution 1:520 / 2:29 / 3:3 / 4:1 — max 4 surfaces, ZERO
+  black holes** (was `DStack` 94 / `CBM` 75 / `Dstack` 52 / `Jupyter Notebook`
+  46). The cliff is gone. (`scripts/eval/reingest_oi7.py`.)
