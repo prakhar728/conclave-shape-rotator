@@ -412,3 +412,43 @@ short-circuit is gone). Taxonomy delivered as a derived `category`
   entities, surface distribution 1:520 / 2:29 / 3:3 / 4:1 — max 4 surfaces, ZERO
   black holes** (was `DStack` 94 / `CBM` 75 / `Dstack` 52 / `Jupyter Notebook`
   46). The cliff is gone. (`scripts/eval/reingest_oi7.py`.)
+
+---
+
+## E2 — parallel extraction wall-clock + resolution effectiveness vs gold (2026-06-11)
+
+*Branch `fix/entity-resolution-overmerge`. Parallelized the per-chunk extraction in
+`kb_extract` (`_extract_all_chunks`, bounded `ThreadPoolExecutor`, env
+`CONCLAVE_EXTRACT_CONCURRENCY`, default 6). Merge / resolution / upsert stay serial.
+`map` is order-preserving → output identical to sequential, locked by
+`tests/test_kb_extract_parallel.py`. Backend: redpill/gemma. Tooling:
+`scripts/eval/reingest_gold.py`, `scripts/eval/score_resolution_vs_gold.py`.*
+
+### Wall-clock (extract stage)
+`dstack-intro-salon` (16 chunks): **conc=1 559.2s → conc=6 117.6s = 4.75× faster.**
+Parallel times for the 3 gold transcripts: dstack 117.6s, elocute 66.5s,
+project-intros 158.8s. Speedup ≈ `min(n_chunks, concurrency)` — scales with chunk
+count (a 42-chunk transcript would gain ~6×).
+
+### Resolution effectiveness vs the Codex gold (parallel gemma re-ingest of 3 gold)
+`score_resolution_vs_gold` over **72 extracted+gold surfaces**:
+- **homogeneity 0.968** (1 = no over-merge — the black-hole fix holds)
+- **completeness 0.961** (1 = no under-merge)
+- **V-measure 0.964**
+Per-transcript consolidation: dstack 24/26, elocute 13/14, project-intros 16/21.
+**The under-merge worry was an ollama-extraction artifact** — on production gemma the
+conservative resolver does NOT fragment (V-measure 0.96). Residual splits are mostly
+cross-category (`Phala` company vs project) + the `CBM`↔`CVM` ASR-garble the
+normalized-exact lexical gate doesn't fold; acceptable for MVP (loosening the gate is
+a tracked option, not needed).
+
+### Insights (obligations) coverage — PRE-EXISTING, untouched by OI-7
+The extractor over-emits obligations vs the curated gold: **dstack 55 vs 10, elocute
+42 vs 8, project-intros 86 vs 10** (high-recall / low-precision; consistent with
+obligation type-agnostic F1 ~0.27, C13). The obligation/insights prompt was not
+touched this branch — this is the existing baseline, flagged for the handover.
+
+### Verdict
+**Entity resolution is MVP-ready** (V-measure 0.96 vs gold; 0 black holes; 4.75×
+faster ingest). **Insights are noisy** (over-extracted) — a separate, pre-existing
+quality item, not this fix's scope. Next: re-run Connections on the clean layer.
