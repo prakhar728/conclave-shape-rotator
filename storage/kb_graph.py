@@ -44,13 +44,43 @@ def find_entity(etype: str, canonical_name: str) -> Optional[dict]:
     return _entity_row(row) if row else None
 
 
-def insert_entity(etype: str, canonical_name: str, raw_mentions: list[str]) -> str:
+# --- Derived 3-category view (no stored-type migration; see OI-7 / EVAL.md E1) --
+#: Coarse category derived from the fine 5-value `type`. Used for resolution
+#: pooling + UI grouping. A true 3-type column is deferred debt.
+_CATEGORY_TYPES = {
+    "person": ("person",),
+    "affiliation": ("company",),
+    "tech": ("tool", "project", "topic"),
+}
+
+
+def category_of(etype: str) -> str:
+    """person→person, company→affiliation, {tool,project,topic}→tech."""
+    if etype == "person":
+        return "person"
+    if etype == "company":
+        return "affiliation"
+    return "tech"
+
+
+def types_in_category(category: str) -> tuple[str, ...]:
+    return _CATEGORY_TYPES.get(category, ("tool", "project", "topic"))
+
+
+def insert_entity(
+    etype: str, canonical_name: str, raw_mentions: list[str],
+    *, definition: Optional[str] = None, role: Optional[str] = None,
+) -> str:
     eid = _new_id()
+    props: dict = {"raw_mentions": raw_mentions}
+    if definition:
+        props["definition"] = definition
+    if role:
+        props["role"] = role
     _get_conn().execute(
         "INSERT INTO entities (id, type, canonical_name, props_json, created_at)"
         " VALUES (?, ?, ?, ?, ?)",
-        (eid, etype, canonical_name,
-         json.dumps({"raw_mentions": raw_mentions}), _now()),
+        (eid, etype, canonical_name, json.dumps(props), _now()),
     )
     return eid
 
@@ -93,20 +123,27 @@ def add_mentions(
 
 
 def entities_for_er(etype: str, *, model_id: str) -> list[dict]:
-    """ER candidate pool: all entities of a type + cached name embeddings."""
+    """ER candidate pool: all entities in the candidate's CATEGORY (person /
+    tech / affiliation) + cached definition-embeddings. Category-pooling lets a
+    `tool` and a `project` that name the same tech resolve together (fixes the
+    old cross-type under-merge). Each dict also carries `definition` (from
+    props) so the resolver + LLM tiebreak can use it as context."""
     conn = _get_conn()
+    cats = types_in_category(category_of(etype))
+    placeholders = ",".join("?" * len(cats))
     rows = conn.execute(
         "SELECT e.id, e.type, e.canonical_name, e.props_json, emb.vec AS vec"
         " FROM entities e"
         " LEFT JOIN embeddings emb ON emb.source_kind = 'entity'"
         "   AND emb.source_id = e.id AND emb.model_id = ?"
-        " WHERE e.type = ?",
-        (model_id, etype),
+        f" WHERE e.type IN ({placeholders})",
+        (model_id, *cats),
     ).fetchall()
     out = []
     for r in rows:
         d = _entity_row(r)
         d["embedding"] = deserialize_f32(r["vec"]) if r["vec"] else None
+        d["definition"] = (d.get("props") or {}).get("definition")
         out.append(d)
     return out
 

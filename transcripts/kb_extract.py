@@ -121,8 +121,9 @@ def _run(session_id: str) -> Optional[dict]:
         else:
             eid = kb_graph.insert_entity(
                 ent["type"], ent["canonical_name"], ent["raw_mentions"],
+                definition=ent.get("definition"), role=ent.get("role"),
             )
-            _try_embed_entity(eid, ent["canonical_name"])
+            _try_embed_entity(eid, ent["canonical_name"], ent.get("definition"))
         entity_id_by_name[ent["canonical_name"].casefold()] = eid
         kb_graph.add_mentions(
             eid, session_id, ent["turn_ids"], ent["raw_mentions"][0],
@@ -194,10 +195,18 @@ def _run(session_id: str) -> Optional[dict]:
     return metrics
 
 
-def _try_embed_entity(entity_id: str, canonical_name: str) -> None:
-    """Cache a name embedding for future ER rounds; failure is non-fatal."""
+def _try_embed_entity(
+    entity_id: str, canonical_name: str, definition: Optional[str] = None,
+) -> None:
+    """Cache a DEFINITION embedding for future ER rounds; failure is non-fatal.
+
+    Embedding a sentence-length ``"name — definition"`` (not a bare 1-token name)
+    is what fixes the OI-7 short-name collapse: bare short names embed to a
+    near-constant vector, definitions don't. Falls back to the bare name only
+    when no definition is available."""
+    text = f"{canonical_name} — {definition}" if definition else canonical_name
     try:
-        vec = embed_texts([canonical_name], kind="document")[0]
+        vec = embed_texts([text], kind="document")[0]
         kb_graph.save_source_embedding("entity", entity_id, vec, model_id=EMBED_MODEL_ID)
     except EmbeddingUnavailable as exc:
         logger.warning("entity embedding skipped for %s: %s", entity_id, exc)
