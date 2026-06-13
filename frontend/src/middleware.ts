@@ -20,6 +20,7 @@ const SESSION_COOKIE = "conclave_session";
 
 const PROTECTED_PREFIXES = [
   "/dashboard",
+  "/calendar",
   "/workspace",
   "/meeting",
   "/invite",
@@ -60,6 +61,7 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: [
     "/dashboard/:path*",
+    "/calendar/:path*",
     "/workspace/:path*",
     "/meeting/:path*",
     "/invite/:path*",

@@ -16,6 +16,7 @@
 "use client";
 
 import {
+  Calendar,
   Check,
   ChevronsUpDown,
   LayoutGrid,
@@ -39,6 +40,7 @@ import { auth, type User } from "@/lib/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
+  { href: "/calendar", label: "Calendar", icon: Calendar },
   { href: "/search", label: "Search", icon: Search },
   { href: "/entities", label: "Entities", icon: Tags },
   { href: "/obligations", label: "Obligations", icon: ListChecks },
@@ -94,18 +96,30 @@ export function AppShell({
           })}
         </nav>
 
-        <Link
-          href="/invite"
-          className="mt-6 flex items-center justify-center gap-2 rounded-full bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
-        >
-          <Plus className="size-3.5" aria-hidden />
-          Invite bot
-        </Link>
+        <div className="mt-6 flex items-center gap-2">
+          <Link
+            href="/invite"
+            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
+          >
+            <Plus className="size-3.5" aria-hidden />
+            Invite bot
+          </Link>
+          <Link
+            href="/calendar"
+            title="Calendar"
+            aria-label="Calendar"
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-sm transition hover:bg-secondary",
+              pathname.startsWith("/calendar")
+                ? "text-primary"
+                : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Calendar className="size-4" aria-hidden />
+          </Link>
+        </div>
 
         <div className="mt-auto space-y-3 border-t border-border pt-4">
-          <div className="px-2">
-            <AttestedBadge />
-          </div>
           <Link
             href="/settings"
             className={cn(
