@@ -141,3 +141,25 @@ def get_account_retention_days(user_id: str) -> Optional[int]:
     if isinstance(val, int) and val > 0:
         return val
     return None
+
+
+def get_auto_record_all_workspace(user_id: str) -> Optional[str]:
+    """Workspace id for the account-wide "record all my meetings" option, or
+    None when it's off.
+
+    When set, the poller auto-records every upcoming Google Meet the user
+    hasn't explicitly opted out of, dropping each transcript in this workspace.
+    """
+    val = get_user_settings(user_id).get("auto_record_all_workspace_id")
+    return val if isinstance(val, str) and val else None
+
+
+def set_auto_record_all(user_id: str, workspace_id: Optional[str]) -> None:
+    """Enable (pass a workspace_id) or disable (pass None) account-wide
+    auto-record. Merges into the existing settings blob."""
+    s = get_user_settings(user_id)
+    if workspace_id:
+        s["auto_record_all_workspace_id"] = workspace_id
+    else:
+        s.pop("auto_record_all_workspace_id", None)
+    set_user_settings(user_id, s)

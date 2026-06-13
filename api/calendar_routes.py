@@ -27,7 +27,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from auth.session import require_current_user
 from config import settings
-from infra import crypto, google_calendar as gc
+from infra import crypto, google_calendar as gc, identity
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,8 @@ def status(user: dict = Depends(require_current_user)):
         "connected": True,
         "scopes": tokens["scopes"],
         "connected_at": tokens["connected_at"],
+        # workspace_id when "record all my meetings" is on, else None.
+        "auto_record_all": identity.get_auto_record_all_workspace(user["id"]),
     }
 
 
@@ -154,11 +156,19 @@ def list_events(
     except gc.GoogleCalendarError as e:
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Annotate with auto-record opt-in state.
+    # Annotate with EFFECTIVE auto-record state: a per-event opt-in, OR the
+    # account-wide "record all" covering any Meet not explicitly opted out.
     from infra import calendar_auto_record as car
     enabled_ids = car.enabled_event_ids(user["id"])
+    all_ws = identity.get_auto_record_all_workspace(user["id"])
+    opted_out = car.disabled_event_ids(user["id"]) if all_ws else set()
     for ev in events:
-        ev["auto_record"] = ev["id"] in enabled_ids
+        if ev["id"] in enabled_ids:
+            ev["auto_record"] = True
+        elif all_ws and ev.get("meet_code") and ev["id"] not in opted_out:
+            ev["auto_record"] = True
+        else:
+            ev["auto_record"] = False
     return {"events": events}
 
 
@@ -246,3 +256,28 @@ def set_auto_record(
         enabled=body.enabled,
     )
     return {"ok": True, "event_id": event_id, "enabled": body.enabled, "meet_code": meet_code}
+
+
+class AutoRecordAllBody(BaseModel):
+    enabled: bool
+    workspace_id: str = Field(min_length=1)
+
+
+@router.post("/auto-record-all")
+def set_auto_record_all(body: AutoRecordAllBody, user: dict = Depends(require_current_user)):
+    """Account-wide opt-in: record every upcoming Google Meet (except meetings
+    explicitly opted out per-event). Transcripts land in `workspace_id`. Pass
+    enabled=false to turn it off (per-event opt-ins are unaffected)."""
+    _require_configured()
+    _require_connected(user["id"])
+
+    if body.enabled:
+        from infra import workspaces
+        ws = workspaces.get_workspace(body.workspace_id)
+        if ws is None or not workspaces.is_member(body.workspace_id, user["id"]):
+            raise HTTPException(status_code=404, detail="Workspace not found")
+        identity.set_auto_record_all(user["id"], body.workspace_id)
+        return {"ok": True, "auto_record_all": body.workspace_id}
+
+    identity.set_auto_record_all(user["id"], None)
+    return {"ok": True, "auto_record_all": None}

@@ -25,6 +25,7 @@ from connectors.recato.launch import (
 from infra import bot_invitations
 from infra import calendar_auto_record as car
 from infra import google_calendar as gc
+from infra import identity
 
 logger = logging.getLogger(__name__)
 
@@ -63,13 +64,25 @@ def _already_handled(meet_code: str, now: datetime) -> bool:
 
 
 def due_meetings_for_user(user_id: str, *, now: datetime, lookahead_min: int = LOOKAHEAD_MIN) -> list[dict]:
-    """Events the user opted into that start within the look-ahead window and
-    have a Meet link. Returns dicts: {event_id, meet_code, workspace_id, title}."""
+    """Meetings to dispatch the bot to, starting within the look-ahead window
+    and carrying a Meet link. Returns dicts: {event_id, meet_code,
+    workspace_id, title}.
+
+    Two ways an event qualifies:
+      1. Per-event opt-in (`calendar_auto_record` enabled=1) — its own workspace.
+      2. Account-wide "record all my meetings" (user setting) — covers every
+         Meet the user hasn't explicitly opted out of, into the chosen workspace.
+    A per-event opt-in/opt-out always beats the account-wide default.
+    """
     enabled_rows = car.list_enabled_for_user(user_id)
-    if not enabled_rows:
-        return []
     ws_by_event = {r["google_event_id"]: r["workspace_id"] for r in enabled_rows}
     enabled_ids = set(ws_by_event)
+
+    all_ws = identity.get_auto_record_all_workspace(user_id)
+    opted_out = car.disabled_event_ids(user_id) if all_ws else set()
+
+    if not enabled_ids and not all_ws:
+        return []
 
     events = gc.list_events(
         user_id,
@@ -78,13 +91,20 @@ def due_meetings_for_user(user_id: str, *, now: datetime, lookahead_min: int = L
     )
     due = []
     for ev in events:
-        if ev["id"] in enabled_ids and ev["meet_code"]:
-            due.append({
-                "event_id": ev["id"],
-                "meet_code": ev["meet_code"],
-                "workspace_id": ws_by_event[ev["id"]],
-                "title": ev["title"],
-            })
+        if not ev["meet_code"]:
+            continue
+        if ev["id"] in enabled_ids:
+            workspace_id = ws_by_event[ev["id"]]      # explicit opt-in wins
+        elif all_ws and ev["id"] not in opted_out:
+            workspace_id = all_ws                      # account-wide record-all
+        else:
+            continue
+        due.append({
+            "event_id": ev["id"],
+            "meet_code": ev["meet_code"],
+            "workspace_id": workspace_id,
+            "title": ev["title"],
+        })
     return due
 
 

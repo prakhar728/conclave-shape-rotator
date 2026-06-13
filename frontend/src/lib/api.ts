@@ -449,7 +449,13 @@ export const ask = {
 
 export type CalendarStatus =
   | { connected: false }
-  | { connected: true; scopes: string; connected_at: string };
+  | {
+      connected: true;
+      scopes: string;
+      connected_at: string;
+      // workspace_id when "record all my meetings" is on, else null.
+      auto_record_all: string | null;
+    };
 
 export type CalendarEvent = {
   id: string;
@@ -479,6 +485,14 @@ export const calendar = {
   setAutoRecord: (eventId: string, enabled: boolean, workspaceId: string) =>
     apiFetch<AutoRecordResp>(
       `/api/calendar/events/${encodeURIComponent(eventId)}/auto-record`,
+      {
+        method: "POST",
+        body: JSON.stringify({ enabled, workspace_id: workspaceId }),
+      },
+    ),
+  setAutoRecordAll: (enabled: boolean, workspaceId: string) =>
+    apiFetch<{ ok: boolean; auto_record_all: string | null }>(
+      "/api/calendar/auto-record-all",
       {
         method: "POST",
         body: JSON.stringify({ enabled, workspace_id: workspaceId }),

@@ -142,13 +142,35 @@ export function CalendarSettings() {
     }
   }
 
+  async function toggleRecordAll(next: boolean) {
+    if (!workspaceId) {
+      setError("Select a workspace first — that's where transcripts land.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await calendar.setAutoRecordAll(next, workspaceId);
+      setStatus((prev) =>
+        prev && prev.connected
+          ? { ...prev, auto_record_all: next ? workspaceId : null }
+          : prev,
+      );
+      // Per-event "effective" auto-record state changes — refresh the list.
+      await loadEvents();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <section className="mt-8 rounded-lg border border-border bg-card p-5">
       <h2 className="text-sm font-medium">Google Calendar</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         Connect your calendar so Conclave can automatically send a recording bot
-        to the meetings you opt in. The bot joins each Google Meet at start time
-        and the transcript lands in your selected workspace.
+        to the meetings you opt in.
       </p>
 
       {note ? <p className="mt-3 text-xs text-muted-foreground">{note}</p> : null}
@@ -172,6 +194,26 @@ export function CalendarSettings() {
               Disconnect
             </Button>
           </div>
+
+          <label className="mt-4 flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+            <span className="min-w-0">
+              <span className="block text-xs font-medium text-foreground">
+                Auto-record all my meetings
+              </span>
+              <span className="block text-[11px] text-muted-foreground">
+                Record every Google Meet on your calendar (you can still turn off
+                individual ones below).
+              </span>
+            </span>
+            <input
+              type="checkbox"
+              checked={status.auto_record_all !== null}
+              disabled={!workspaceId || busy}
+              onChange={(e) => toggleRecordAll(e.target.checked)}
+              className="size-4 shrink-0 accent-primary disabled:opacity-40"
+              aria-label="Auto-record all my meetings"
+            />
+          </label>
 
           {!workspaceId ? (
             <p className="mt-3 text-xs text-destructive">

@@ -54,6 +54,20 @@ def enabled_event_ids(user_id: str) -> set[str]:
     return {r["google_event_id"] for r in rows}
 
 
+def disabled_event_ids(user_id: str) -> set[str]:
+    """Google event ids the user explicitly opted OUT of (enabled=0).
+
+    Used so a per-event opt-out beats the account-wide 'record all my
+    meetings' setting — turning a single meeting off keeps it off.
+    """
+    rows = _get_conn().execute(
+        "SELECT google_event_id FROM calendar_auto_record "
+        "WHERE user_id = ? AND enabled = 0",
+        (user_id,),
+    ).fetchall()
+    return {r["google_event_id"] for r in rows}
+
+
 def find_by_meet_code(meet_code: str) -> Optional[dict]:
     """Most recent opt-in row carrying this Meet code, regardless of enabled
     state. The webhook uses it to recover the Google event id behind a
