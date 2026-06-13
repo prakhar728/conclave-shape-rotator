@@ -107,6 +107,11 @@ app.include_router(kb_router)
 from api.upload_routes import router as upload_router
 app.include_router(upload_router)
 
+# In-person Record ingress — capture → FPM diarize/identify + ASR → merge → ingest
+# (consent plane; see api/record_routes.py docstring).
+from api.record_routes import router as record_router
+app.include_router(record_router)
+
 # Phase 2.1: bot invitation + status polling.
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)

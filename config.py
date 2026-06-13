@@ -78,7 +78,29 @@ class Settings(BaseSettings):
     # operator-blind invariant the rest of the codebase enforces.
     token_enc_key: str = ""
 
+    # In-person Record ingress (Conclave ingress mode 3: bot · upload · record).
+    # Server-side orchestration of the consent plane: a recorded clip is sent to
+    # FPM (diarize + identify) and the NEAR Whisper transcription-service (ASR) —
+    # both behind tokens held HERE, never in the browser — then merged by timestamp
+    # and ingested through the normal upload pipeline. All unset → /record returns 503.
+    fpm_base_url: str = ""          # e.g. http://localhost:8000
+    fpm_api_token: str = ""         # Bearer token scoped for 'diarize'
+    # FPM workspace to diarize against. Empty → use the Conclave workspace_id
+    # verbatim (so demo voiceprints seeded under that id are recognized).
+    fpm_workspace: str = ""
+    transcription_service_url: str = ""    # e.g. http://localhost:8083 (NEAR Whisper)
+    transcription_service_token: str = ""  # optional bearer
+    transcription_model: str = "whisper-1"
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
+
+    def record_meeting_enabled(self) -> bool:
+        """True when both FPM and the transcription service are configured."""
+        return bool(self.fpm_base_url and self.transcription_service_url)
+
+    def fpm_workspace_for(self, workspace_id: str) -> str:
+        """FPM workspace to diarize against for a given Conclave workspace."""
+        return self.fpm_workspace or workspace_id
 
     def google_calendar_enabled(self) -> bool:
         """True when a dedicated Google OAuth client is configured."""

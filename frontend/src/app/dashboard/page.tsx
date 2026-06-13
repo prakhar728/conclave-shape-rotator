@@ -20,6 +20,7 @@ import { FileText, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { RecordMeetingButton } from "@/components/record-meeting";
 import { UploadTranscriptButton } from "@/components/upload-transcript";
 import { useWorkspace } from "@/components/workspace-provider";
 import {
@@ -146,7 +147,10 @@ export default function DashboardPage() {
             </div>
             <div className="hidden items-center gap-3 sm:flex">
               {workspaceId ? (
-                <UploadTranscriptButton workspaceId={workspaceId} />
+                <>
+                  <RecordMeetingButton workspaceId={workspaceId} />
+                  <UploadTranscriptButton workspaceId={workspaceId} />
+                </>
               ) : null}
               <Link
                 href="/invite"
@@ -416,6 +420,7 @@ function EmptyState({ workspaceId }: { workspaceId: string | null }) {
           {workspaceId ? (
             <>
               <span className="text-xs text-muted-foreground">or</span>
+              <RecordMeetingButton workspaceId={workspaceId} />
               <UploadTranscriptButton workspaceId={workspaceId} />
             </>
           ) : null}

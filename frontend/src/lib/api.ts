@@ -140,6 +140,45 @@ export const workspaces = {
       method: "POST",
       body: JSON.stringify(params),
     }),
+  // In-person recording → identified, transcribed meeting. multipart/form-data,
+  // so it bypasses apiFetch (which forces a JSON Content-Type); the session
+  // cookie still rides along via credentials: "same-origin".
+  recordMeeting: async (
+    id: string,
+    params: { blob: Blob; filename?: string; intent?: string },
+  ) => {
+    const fd = new FormData();
+    fd.append("file", params.blob, params.filename ?? "recording.webm");
+    if (params.intent) fd.append("intent", params.intent);
+    const res = await fetch(`/api/workspaces/${id}/record`, {
+      method: "POST",
+      credentials: "same-origin",
+      body: fd,
+    });
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
+    if (!res.ok) {
+      const detail =
+        typeof body === "object" && body !== null && "detail" in body
+          ? (body as { detail: unknown }).detail
+          : body;
+      throw new ApiError(
+        res.status,
+        detail,
+        `${res.status} ${typeof detail === "string" ? detail : "Recording failed"}`,
+      );
+    }
+    return body as {
+      session_id: string;
+      is_processing: boolean;
+      speakers?: string[];
+      status: "accepted" | "duplicate";
+    };
+  },
 };
 
 // --- Meeting detail (legacy /transcripts endpoint, dual-mode in 1.7/1.14) ---
