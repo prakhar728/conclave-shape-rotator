@@ -69,3 +69,7 @@ tmp/
 datasets/qmsum/
 datasets/ami/
 datasets/*.db
+
+# local DB backups (never commit)
+data/*.bak
+*.db.bak

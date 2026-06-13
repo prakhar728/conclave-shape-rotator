@@ -116,14 +116,45 @@ async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
     return final if final is not None else streamed
 
 
+def _ffmpeg_to_wav(audio: bytes) -> bytes:
+    """Transcode arbitrary audio (browser webm/opus) → 16 kHz mono WAV via ffmpeg.
+
+    The browser's MediaRecorder produces webm/opus, which NEAR Whisper rejects
+    (it expects wav/mp3/m4a like the OpenAI API). FPM decodes webm fine, but ASR
+    needs a clean container — so we normalize here before the ASR call.
+    """
+    import subprocess
+
+    proc = subprocess.run(
+        ["ffmpeg", "-loglevel", "error", "-i", "pipe:0", "-ac", "1", "-ar", "16000", "-f", "wav", "pipe:1"],
+        input=audio, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if proc.returncode != 0 or not proc.stdout:
+        raise RuntimeError(proc.stderr.decode()[:200] or "ffmpeg produced no output")
+    return proc.stdout
+
+
 async def _transcribe(client, audio: bytes, filename: str, content_type: str) -> list[dict]:
     """Call the NEAR Whisper transcription-service → ASR segments with timestamps."""
+    import asyncio
+
     headers = ({"Authorization": f"Bearer {settings.transcription_service_token}"}
                if settings.transcription_service_token else {})
+    # Accept either a base URL (we append the path) or a full .../audio/transcriptions
+    # URL (Recato-style), so pointing straight at NEAR Whisper works either way.
+    base = settings.transcription_service_url.rstrip("/")
+    url = base if base.endswith("/audio/transcriptions") else f"{base}/v1/audio/transcriptions"
+    # Normalize to WAV for the ASR provider; fall back to the raw upload if ffmpeg
+    # isn't available (then NEAR may still reject webm — but we don't hard-fail here).
+    try:
+        send = ("audio.wav", await asyncio.to_thread(_ffmpeg_to_wav, audio), "audio/wav")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ffmpeg transcode failed (%s); sending raw upload to ASR", exc)
+        send = (filename, audio, content_type)
     resp = await client.post(
-        f"{settings.transcription_service_url.rstrip('/')}/v1/audio/transcriptions",
+        url,
         headers=headers,
-        files={"file": (filename, audio, content_type)},
+        files={"file": send},
         data={"model": settings.transcription_model, "response_format": "verbose_json"},
     )
     if resp.status_code != 200:
