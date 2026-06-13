@@ -100,6 +100,20 @@ def link_completed_meeting(
 
     save_link(meet_code=meet_code, session_id=session_id, event=event)
 
+    # Calendar agenda/description → per-meeting enrichment intent. Only fill when
+    # no manual intent is already set (a manual /invite-bot "focus" wins).
+    # Best-effort — never abort linking over it.
+    desc = (event.get("description") or "").strip()
+    if session_id and desc:
+        try:
+            from transcripts import store as _store
+            sess = _store.load_session(session_id)
+            if sess is not None and not (sess.metadata.raw_intent or "").strip():
+                sess.metadata.raw_intent = desc
+                _store.set_metadata(session_id, sess.metadata)
+        except Exception:  # noqa: BLE001 — intent is optional grounding
+            logger.exception("link: failed to set raw_intent for %s", session_id)
+
     # Auto-share the recorded meeting with each attendee (keyed by Meet code,
     # matching the manual /invite-bot share convention). Idempotent on the
     # store side.

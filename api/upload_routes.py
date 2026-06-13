@@ -43,6 +43,9 @@ class UploadTranscriptBody(BaseModel):
     # max_length counts characters; combined with the byte check in the
     # handler this bounds memory without rejecting multi-byte text early.
     text: str = Field(min_length=1, max_length=MAX_TEXT_BYTES)
+    # Optional freeform "focus / what to capture" — grounds enrichment
+    # (transcripts/compile_intent.py).
+    intent: Optional[str] = Field(default=None, max_length=4000)
 
 
 def _parse_upload(body: UploadTranscriptBody):
@@ -128,6 +131,8 @@ async def upload_transcript(
 
     session = build_session(ni, session_id=session_id)
     session.metadata.resolved_speakers = resolve_speakers(session)
+    if body.intent and body.intent.strip():
+        session.metadata.raw_intent = body.intent.strip()
     store.save_session(session)
     store.set_workspace(
         session.session_id,

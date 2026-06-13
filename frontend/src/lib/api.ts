@@ -128,7 +128,10 @@ export const workspaces = {
     apiFetch<{ questions: OpenQuestion[] }>(
       `/api/workspaces/${id}/open-questions`,
     ),
-  uploadTranscript: (id: string, params: { filename?: string; text: string }) =>
+  uploadTranscript: (
+    id: string,
+    params: { filename?: string; text: string; intent?: string },
+  ) =>
     apiFetch<{
       session_id: string;
       is_processing: boolean;
@@ -264,6 +267,7 @@ export const bots = {
     meet_url_or_code: string;
     workspace_id: string;
     attendee_emails?: string[];
+    intent?: string;
   }) =>
     apiFetch<BotInviteResp>("/api/meetings/invite-bot", {
       method: "POST",

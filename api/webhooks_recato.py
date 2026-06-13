@@ -158,6 +158,16 @@ async def on_meeting_completed(
             visibility="owner-only",
         )
         bot_invitations.update_status(inv["id"], "completed", completed=True)
+        # Manual invite "focus/intent" → enrichment grounding. Set BEFORE the
+        # calendar fill in 6b so a manual intent wins over the calendar agenda.
+        if status_label == "accepted" and inv.get("intent"):
+            try:
+                sess = transcripts_store.load_session(session_id)
+                if sess is not None:
+                    sess.metadata.raw_intent = inv["intent"]
+                    transcripts_store.set_metadata(session_id, sess.metadata)
+            except Exception:  # noqa: BLE001 — intent is optional grounding
+                logger.exception("webhook: set raw_intent failed for %s", session_id)
     else:
         logger.warning(
             "no bot_invitation found for %s/%s — session lands without "

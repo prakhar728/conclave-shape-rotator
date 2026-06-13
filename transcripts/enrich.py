@@ -113,18 +113,31 @@ def enrich_session(
     tc_fragment = team_ctx.to_prompt_fragment() if team_ctx is not None else ""
     tc_version = team_ctx.version if team_ctx is not None else None
 
+    # Per-meeting intent grounding. Compiled lazily PER SESSION (not the
+    # process-wide cache used for team_context — intent is per-meeting). Sourced
+    # from session.metadata.raw_intent (calendar description or manual field).
+    # Best-effort: None → enrich runs without intent grounding.
+    intent = None
+    if session.metadata.raw_intent:
+        from transcripts import compile_intent as _compile_intent
+        intent = _compile_intent.compile(session.metadata.raw_intent, llm=llm, model=model)
+    mi_fragment = intent.to_prompt_fragment() if intent is not None else ""
+    mi_version = intent.version if intent is not None else None
+
     if len(chunks) <= 1:
         derived = _enrich_single(
             _segments_to_text(chunks[0] if chunks else session.raw_diarization),
             llm=llm,
             model=model,
             team_context_fragment=tc_fragment,
+            meeting_intent_fragment=mi_fragment,
         )
     else:
         partials = [
             _enrich_chunk(
                 _segments_to_text(c), index=i, total=len(chunks),
                 llm=llm, model=model, team_context_fragment=tc_fragment,
+                meeting_intent_fragment=mi_fragment,
             )
             for i, c in enumerate(chunks)
         ]
@@ -135,6 +148,7 @@ def enrich_session(
     session.metadata.enrich_prompt_version = ENRICH_PROMPT_VERSION
     session.metadata.chunk_count = chunk_count
     session.metadata.team_context_version = tc_version
+    session.metadata.meeting_intent_version = mi_version
     return session
 
 
@@ -195,10 +209,11 @@ def enrich_pending(
 def _enrich_single(
     body: str, *, llm: Any, model: Optional[str],
     team_context_fragment: str = "",
+    meeting_intent_fragment: str = "",
 ) -> Derived:
     data = invoke_json(
         [
-            SystemMessage(content=single_system(team_context_fragment)),
+            SystemMessage(content=single_system(team_context_fragment, meeting_intent_fragment)),
             HumanMessage(content=SINGLE_USER(body)),
         ],
         llm=llm,
@@ -211,12 +226,13 @@ def _enrich_single(
 def _enrich_chunk(
     body: str, *, index: int, total: int, llm: Any, model: Optional[str],
     team_context_fragment: str = "",
+    meeting_intent_fragment: str = "",
 ) -> dict:
     """One LLM call per chunk → partial. Returns the raw parsed dict so
     ``_reduce`` can dedupe entities and cap signals deterministically."""
     return invoke_json(
         [
-            SystemMessage(content=chunk_system(team_context_fragment)),
+            SystemMessage(content=chunk_system(team_context_fragment, meeting_intent_fragment)),
             HumanMessage(content=CHUNK_USER(body, index, total)),
         ],
         llm=llm,

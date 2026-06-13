@@ -36,6 +36,9 @@ class InviteBotBody(BaseModel):
     meet_url_or_code: str = Field(min_length=1)
     workspace_id: str = Field(min_length=1)
     attendee_emails: Optional[List[EmailStr]] = None
+    # Optional freeform "focus / what to capture" — grounds enrichment
+    # (transcripts/compile_intent.py) for meetings with no calendar event.
+    intent: Optional[str] = Field(default=None, max_length=4000)
 
 
 def _require_workspace_member(workspace_id: str, user_id: str) -> dict:
@@ -72,6 +75,7 @@ def invite_bot(
         native_meeting_id=meet_code,
         bot_name=DEFAULT_BOT_NAME,
         status="requested",
+        intent=body.intent,
     )
 
     # Per-meeting webhook URL points at our 2.4 receiver. Preferred over
@@ -278,6 +282,15 @@ def _ingest_from_recato_now(
             owner_user_id=inviter_user_id,
             visibility="owner-only",
         )
+        # Carry the manual invite "focus/intent" onto the session so enrichment
+        # can ground on it (set before enrichment kicks below).
+        try:
+            inv = bot_invitations.find_by_meeting("google_meet", session_id)
+            if inv and inv.get("intent"):
+                sess.metadata.raw_intent = inv["intent"]
+                transcripts_store.set_metadata(sess.session_id, sess.metadata)
+        except Exception:  # noqa: BLE001 — intent is optional grounding
+            logger.exception("post-stop ingest: set raw_intent failed for %s", sess.session_id)
         logger.info("post-stop ingest: saved + bound %s, kicking enrichment", sess.session_id)
         # Sync context (the route isn't async), so use a plain thread.
         # _enrich_in_background is itself sync; the webhook handler wraps it

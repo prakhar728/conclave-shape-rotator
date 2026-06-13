@@ -358,6 +358,9 @@ def _normalize_event(event: dict) -> dict:
     return {
         "id": event.get("id"),
         "title": event.get("summary") or "(no title)",
+        # The organizer's freeform agenda / notes — used as per-meeting enrichment
+        # intent (transcripts/compile_intent.py). Previously dropped here.
+        "description": event.get("description"),
         "start": start.get("dateTime") or start.get("date"),
         "end": end.get("dateTime") or end.get("date"),
         "organizer": (event.get("organizer") or {}).get("email"),

@@ -54,6 +54,7 @@ function UploadModal({
   const router = useRouter();
   const [text, setText] = useState("");
   const [filename, setFilename] = useState<string | null>(null);
+  const [intent, setIntent] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +83,7 @@ function UploadModal({
       const resp = await workspaces.uploadTranscript(workspaceId, {
         filename: filename ?? undefined,
         text,
+        intent: intent.trim() || undefined,
       });
       router.push(`/meeting/${resp.session_id}`);
     } catch (err) {
@@ -200,6 +202,14 @@ function UploadModal({
           rows={5}
           disabled={busy}
           className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        />
+
+        <input
+          value={intent}
+          onChange={(e) => setIntent(e.target.value)}
+          placeholder="Focus / intent (optional) — what should the notes focus on?"
+          disabled={busy}
+          className="mt-3 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         />
 
         {error ? (

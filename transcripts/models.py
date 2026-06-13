@@ -57,6 +57,16 @@ class SessionMetadata(BaseModel):
     #: at enrich time. Lets A/B-tests over the XML show up as a distinct
     #: backfill key without conflating with prompt-version changes.
     team_context_version: Optional[str] = None
+    #: Per-meeting intent — freeform text stating what the meeting is about /
+    #: what the organizer wants out of the notes (agenda, focus, desired
+    #: outputs). Sourced from the Google Calendar event description or a manual
+    #: "focus" field at invite/upload time. Compiled at enrich time into a
+    #: structured grounding fragment (see transcripts/compile_intent.py). JSON
+    #: metadata, so no SQL migration.
+    raw_intent: Optional[str] = None
+    #: SHA-256 prefix (first 8 chars) of the raw_intent compiled at enrich
+    #: time — the intent analogue of team_context_version (A/B + provenance).
+    meeting_intent_version: Optional[str] = None
     #: Explicit attendance roster when known (Google Meet / Zoom / calendar
     #: connector, future v1.1 work). When None, callers fall back to
     #: deriving "who was in the room" from distinct speaker labels in

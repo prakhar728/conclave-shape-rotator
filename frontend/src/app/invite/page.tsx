@@ -43,6 +43,7 @@ export default function InvitePage() {
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meetInput, setMeetInput] = useState("");
   const [attendees, setAttendees] = useState("");
+  const [intent, setIntent] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState<LiveState | null>(null);
@@ -93,6 +94,7 @@ export default function InvitePage() {
         meet_url_or_code: meetInput.trim(),
         workspace_id: workspaceId,
         attendee_emails: emails.length ? emails : undefined,
+        intent: intent.trim() || undefined,
       });
       setLive({
         invitationId: resp.invitation_id,
@@ -170,6 +172,22 @@ export default function InvitePage() {
               <p className="mt-1 text-xs text-muted-foreground">
                 One per line or comma-separated. They&apos;ll get a magic
                 link to view the meeting once it&apos;s processed.
+              </p>
+            </div>
+            <div>
+              <label className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+                Focus / intent (optional)
+              </label>
+              <textarea
+                className="mt-2 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                rows={3}
+                value={intent}
+                onChange={(e) => setIntent(e.target.value)}
+                placeholder={"What should the notes focus on? e.g. decisions on pricing, action items for the launch."}
+                disabled={busy}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tunes the summary &amp; insights toward what you care about.
               </p>
             </div>
             <Button type="submit" disabled={busy || !meetInput.trim()}>

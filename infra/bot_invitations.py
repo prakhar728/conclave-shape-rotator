@@ -32,8 +32,13 @@ def create_invitation(
     bot_name: str = "Conclave",
     recato_bot_id: Optional[int] = None,
     status: str = "requested",
+    intent: Optional[str] = None,
 ) -> dict:
-    """Insert a new row. Returns the inserted dict."""
+    """Insert a new row. Returns the inserted dict.
+
+    ``intent`` is the optional freeform "focus / what to capture" the user
+    supplied at invite time — carried to the session at ingest and compiled
+    into enrichment grounding (transcripts/compile_intent.py)."""
     if status not in VALID_STATUSES:
         raise ValueError(f"invalid status: {status}")
     inv_id = _new_invitation_id()
@@ -41,10 +46,10 @@ def create_invitation(
     _get_conn().execute(
         "INSERT INTO bot_invitations "
         "(id, user_id, workspace_id, platform, native_meeting_id, recato_bot_id, "
-        " status, bot_name, created_at, completed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+        " status, bot_name, intent, created_at, completed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
         (inv_id, user_id, workspace_id, platform, native_meeting_id,
-         recato_bot_id, status, bot_name, now),
+         recato_bot_id, status, bot_name, intent, now),
     )
     return {
         "id": inv_id,
@@ -55,6 +60,7 @@ def create_invitation(
         "recato_bot_id": recato_bot_id,
         "status": status,
         "bot_name": bot_name,
+        "intent": intent,
         "created_at": now,
         "completed_at": None,
     }
@@ -63,7 +69,7 @@ def create_invitation(
 def get_invitation(invitation_id: str) -> Optional[dict]:
     row = _get_conn().execute(
         "SELECT id, user_id, workspace_id, platform, native_meeting_id, "
-        "recato_bot_id, status, bot_name, created_at, completed_at "
+        "recato_bot_id, status, bot_name, intent, created_at, completed_at "
         "FROM bot_invitations WHERE id = ?",
         (invitation_id,),
     ).fetchone()
@@ -74,7 +80,7 @@ def find_by_meeting(platform: str, native_meeting_id: str) -> Optional[dict]:
     """Look up the most recent invitation for a given Meet code."""
     row = _get_conn().execute(
         "SELECT id, user_id, workspace_id, platform, native_meeting_id, "
-        "recato_bot_id, status, bot_name, created_at, completed_at "
+        "recato_bot_id, status, bot_name, intent, created_at, completed_at "
         "FROM bot_invitations WHERE platform = ? AND native_meeting_id = ? "
         "ORDER BY created_at DESC LIMIT 1",
         (platform, native_meeting_id),
