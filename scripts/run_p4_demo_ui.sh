@@ -23,7 +23,7 @@ FPM_WS=live-test
 TOKEN=conclave-tok
 FPM_PORT=8091
 CONCLAVE_PORT=8001
-WEB_PORT=3001
+WEB_PORT=3009   # dedicated demo port so it can't clash with your real frontend on :3001
 
 FPM_DATA=$FPM_WT/data-p4demo
 CONCLAVE_DATA=$CONCLAVE_WT/data-p4demo
@@ -66,7 +66,7 @@ echo "== start Conclave API :$CONCLAVE_PORT =="
 ( cd "$CONCLAVE_WT" && exec "$CONCLAVE_PY" -m uvicorn main:app --port "$CONCLAVE_PORT" --log-level warning ) &
 CONCLAVE_PID=$!
 echo "== start Conclave frontend :$WEB_PORT =="
-( cd "$CONCLAVE_WT/frontend" && NEXT_PUBLIC_API_BASE="http://localhost:$CONCLAVE_PORT" exec npm run dev ) &
+( cd "$CONCLAVE_WT/frontend" && NEXT_PUBLIC_API_BASE="http://localhost:$CONCLAVE_PORT" exec ./node_modules/.bin/next dev -p "$WEB_PORT" ) &
 WEB_PID=$!
 
 cleanup() { kill "$FPM_PID" "$CONCLAVE_PID" "$WEB_PID" 2>/dev/null || true; }
