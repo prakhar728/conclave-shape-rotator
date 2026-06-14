@@ -1,9 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, ShieldAlert, ShieldCheck, Zap, Database, Terminal, Check } from "lucide-react";
+import { ArrowDown, Check } from "lucide-react";
 
-import { AttestedBadge } from "@/components/attested-badge";
 import { Wordmark } from "@/components/wordmark";
 
 export default function Home() {
@@ -20,18 +19,14 @@ export default function Home() {
             <a href="#features" className="hover:text-muted-foreground transition-colors">Features</a>
             <a href="#security" className="hover:text-muted-foreground transition-colors">Security</a>
             <a href="#process" className="hover:text-muted-foreground transition-colors">How it works</a>
-            <Link href="/meeting/example-conclave-demo" className="hover:text-muted-foreground transition-colors">Demo</Link>
           </nav>
 
           <div className="flex items-center gap-6">
-            <span className="hidden sm:block">
-              <AttestedBadge />
-            </span>
             <Link
               href="/login"
               className="text-xs font-bold tracking-widest uppercase border-b border-foreground pb-0.5 hover:text-muted-foreground hover:border-muted-foreground transition-all"
             >
-              Work with us &rarr;
+              Record &rarr;
             </Link>
           </div>
         </div>
@@ -43,17 +38,8 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-8">
             
             {/* Left Column: Big Headlines */}
-            <div className="lg:col-span-8 flex flex-col justify-between">
+            <div className="lg:col-span-12 flex flex-col justify-between">
               <div>
-                {/* Attestation VM Ping */}
-                <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-1.5 shadow-sm text-xs font-semibold uppercase tracking-wider">
-                  <span className="relative flex h-2 w-2" aria-hidden>
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-attested opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-attested" />
-                  </span>
-                  <span>Confidential VM · Intel TDX Active</span>
-                </div>
-
                 {/* Massive Typography matching Screenshot 1 */}
                 <h1 className="font-heading text-6xl font-black leading-[0.9] tracking-tighter text-foreground sm:text-7xl md:text-8xl lg:text-[7.5rem] uppercase">
                   *Ideas Worth<br />
@@ -93,41 +79,6 @@ export default function Home() {
                   <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-sm transition hover:bg-secondary">
                     <ArrowDown className="h-6 w-6 text-foreground stroke-[2.5]" />
                   </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Status Card / visual */}
-            <div className="lg:col-span-4 flex flex-col justify-center">
-              <div className="border-4 border-foreground bg-card p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] dark:shadow-[8px_8px_0px_0px_rgba(255,255,255,1)]">
-                <div className="mb-6 flex items-center gap-2 text-xs font-bold tracking-widest uppercase text-muted-foreground">
-                  <Terminal className="h-4 w-4 text-attested" />
-                  Live Enclave Audit
-                </div>
-                <div className="space-y-4">
-                  <div className="flex justify-between border-b border-border pb-2 text-xs">
-                    <span className="font-semibold uppercase text-muted-foreground">Provider</span>
-                    <span className="font-mono font-bold">Intel&reg; SGX / TDX</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border pb-2 text-xs">
-                    <span className="font-semibold uppercase text-muted-foreground">Memory State</span>
-                    <span className="font-mono font-bold text-attested">Encrypted (AES-MKTME)</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border pb-2 text-xs">
-                    <span className="font-semibold uppercase text-muted-foreground">Attestation Report</span>
-                    <span className="font-mono font-bold text-attested">VERIFIED</span>
-                  </div>
-                  <div className="flex justify-between border-b border-border pb-2 text-xs">
-                    <span className="font-semibold uppercase text-muted-foreground">Operator Access</span>
-                    <span className="font-mono font-bold text-destructive uppercase">Blocked</span>
-                  </div>
-                </div>
-
-                <div className="mt-8 flex items-center gap-3 bg-secondary p-4 rounded">
-                  <ShieldCheck className="h-8 w-8 shrink-0 text-attested" />
-                  <p className="text-xs font-medium leading-normal">
-                    Remote attestation mathematically proves the software version running in the enclave is secure and untouched.
-                  </p>
                 </div>
               </div>
             </div>
