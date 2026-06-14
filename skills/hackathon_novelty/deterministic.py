@@ -5,7 +5,6 @@ from difflib import SequenceMatcher
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.cluster import KMeans
-from sentence_transformers import SentenceTransformer
 from scipy.stats import rankdata
 
 from config import settings
@@ -34,6 +33,11 @@ def _get_model() -> SentenceTransformer | None:
         return None
     if _model is None:
         try:
+            # Lazy import: sentence-transformers (→ torch) is OPTIONAL and not installed
+            # in the deployed image — the core product embeds via nomic/Ollama. Absent
+            # package raises ImportError here → caught below → graceful fallback.
+            from sentence_transformers import SentenceTransformer
+
             # Keep the deterministic pipeline runnable in offline CI/local environments.
             _model = SentenceTransformer(settings.embedding_model, local_files_only=True)
         except Exception:
