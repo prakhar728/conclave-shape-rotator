@@ -68,11 +68,11 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* ── Sidebar (Vantage mockup) ── */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-4 md:flex">
+      {/* ── Sidebar (Brutalist style) ── */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
         <WorkspaceSwitcher />
 
-        <nav className="space-y-1">
+        <nav className="space-y-1.5">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = pathname.startsWith(href);
             return (
@@ -80,14 +80,14 @@ export function AppShell({
                 key={href}
                 href={href}
                 className={cn(
-                  "flex items-center gap-2 rounded-md px-2 py-2 text-xs transition",
+                  "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
                   active
-                    ? "border border-border bg-card font-medium text-foreground shadow-sm"
-                    : "text-muted-foreground hover:bg-secondary",
+                    ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
+                    : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
                 )}
               >
                 <Icon
-                  className={cn("size-3.5", active && "text-primary")}
+                  className="size-3.5"
                   aria-hidden
                 />
                 {label}
@@ -99,7 +99,7 @@ export function AppShell({
         <div className="mt-6 flex items-center gap-2">
           <Link
             href="/invite"
-            className="flex flex-1 items-center justify-center gap-2 rounded-full bg-primary px-3 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
+            className="flex flex-1 items-center justify-center gap-2 rounded-none border border-foreground bg-primary px-3 py-2.5 text-xs font-bold uppercase tracking-widest text-primary-foreground transition-all hover:bg-muted-foreground active:scale-98"
           >
             <Plus className="size-3.5" aria-hidden />
             Invite bot
@@ -109,9 +109,9 @@ export function AppShell({
             title="Calendar"
             aria-label="Calendar"
             className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-full border border-border bg-card shadow-sm transition hover:bg-secondary",
+              "flex size-9 shrink-0 items-center justify-center rounded-none border border-border bg-card shadow-sm transition hover:bg-secondary",
               pathname.startsWith("/calendar")
-                ? "text-primary"
+                ? "text-primary border-foreground"
                 : "text-muted-foreground hover:text-foreground",
             )}
           >
@@ -123,27 +123,24 @@ export function AppShell({
           <Link
             href="/settings"
             className={cn(
-              "flex items-center gap-2 rounded-md px-2 py-2 text-xs transition",
+              "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
               pathname.startsWith("/settings")
-                ? "border border-border bg-card font-medium text-foreground shadow-sm"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+                ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
             )}
           >
             <Settings
-              className={cn(
-                "size-3.5",
-                pathname.startsWith("/settings") && "text-primary",
-              )}
+              className="size-3.5"
               aria-hidden
             />
             Settings
           </Link>
-          <p className="truncate px-2 text-[11px] text-muted-foreground">
+          <p className="truncate px-3 text-[10px] font-mono tracking-tight text-muted-foreground">
             {user.email}
           </p>
           <button
             onClick={handleLogout}
-            className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-xs text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent transition-all"
           >
             <LogOut className="size-3.5" aria-hidden />
             Sign out
@@ -156,7 +153,7 @@ export function AppShell({
         {/* Mobile-only slim bar (sidebar is hidden <md). */}
         <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
           <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-sm font-bold text-background">
+            <span className="flex size-7 items-center justify-center rounded-none border border-foreground bg-foreground text-sm font-black text-background">
               C
             </span>
             <span className="text-sm font-bold tracking-tight">Conclave</span>
@@ -165,7 +162,7 @@ export function AppShell({
             <AttestedBadge />
             <button
               onClick={handleLogout}
-              className="text-xs text-muted-foreground"
+              className="text-xs font-bold tracking-wider uppercase text-muted-foreground"
             >
               Sign out
             </button>
@@ -178,8 +175,7 @@ export function AppShell({
 }
 
 /**
- * Sidebar workspace chip → dropdown: list with checkmark on current,
- * "+ New workspace" prompts for a name and creates+selects it.
+ * Sidebar workspace switcher: simple dropdown menu with brutalist border style.
  */
 function WorkspaceSwitcher() {
   const { workspaces, workspace, selectWorkspace, createWorkspace } =
@@ -216,14 +212,14 @@ function WorkspaceSwitcher() {
     <div ref={boxRef} className="relative mb-8">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-lg p-2 text-left transition hover:bg-secondary"
+        className="flex w-full items-center gap-3 rounded-none border border-border bg-card p-2.5 text-left transition hover:bg-secondary hover:border-foreground"
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-full border border-card bg-foreground text-sm font-bold text-background shadow-sm">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-none border border-foreground bg-foreground text-sm font-black text-background shadow-sm">
           C
         </span>
-        <span className="min-w-0 flex-1 truncate text-xs font-bold">
+        <span className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wider">
           {workspace?.name ?? (workspaces === null ? "…" : "Conclave")}
         </span>
         <ChevronsUpDown
@@ -235,7 +231,7 @@ function WorkspaceSwitcher() {
       {open ? (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-xl border border-border bg-card p-1 shadow-xl"
+          className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-none border border-foreground bg-card p-1 shadow-md"
         >
           {(workspaces ?? []).map((w) => (
             <button
@@ -246,18 +242,18 @@ function WorkspaceSwitcher() {
                 selectWorkspace(w.id);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-xs font-medium transition hover:bg-secondary"
+              className="flex w-full items-center gap-2 rounded-none px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider transition hover:bg-secondary"
             >
               <span className="min-w-0 flex-1 truncate">{w.name}</span>
               {w.id === workspace?.id ? (
-                <Check className="size-3.5 shrink-0 text-primary" aria-hidden />
+                <Check className="size-3.5 shrink-0 text-foreground" aria-hidden />
               ) : null}
             </button>
           ))}
           <button
             onClick={handleCreate}
             disabled={busy}
-            className="flex w-full items-center gap-2 rounded-lg border-t border-border px-2 py-2 text-left text-xs font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50"
+            className="flex w-full items-center gap-2 rounded-none border-t border-border px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50"
           >
             <Plus className="size-3.5" aria-hidden />
             {busy ? "Creating…" : "New workspace"}

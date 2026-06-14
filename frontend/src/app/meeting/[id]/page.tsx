@@ -100,16 +100,17 @@ export default function MeetingPage({
       <main className="mx-auto max-w-3xl px-6 py-10">
         <Link
           href="/dashboard"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground border-b border-transparent hover:border-foreground pb-0.5"
         >
-          ← Back
+          &larr; Back to Dashboard
         </Link>
-        <div className="mt-4 mb-10">
-          <h1 className="text-2xl font-bold tracking-tight leading-snug">
+        
+        <div className="mt-8 mb-10 border-b border-border pb-6">
+          <h1 className="font-heading text-3xl font-black uppercase tracking-tight leading-none text-foreground sm:text-4xl">
             {meeting.summary || `${meeting.source} — ${meeting.date}`}
           </h1>
-          <p className="mt-3 font-mono text-xs text-muted-foreground">
-            {meeting.date} · {meeting.source} · {meeting.session_id}
+          <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
           </p>
         </div>
 
@@ -130,7 +131,7 @@ export default function MeetingPage({
         />
 
         {meeting.is_owner ? (
-          <>
+          <div className="space-y-6 mt-12 border-t border-border pt-8">
             <OwnerControls
               sessionId={meeting.session_id}
               initialVisibility={
@@ -143,26 +144,23 @@ export default function MeetingPage({
               initialOverride={meeting.retention_override}
               rawDeleted={meeting.raw_transcript_deleted}
             />
-          </>
+          </div>
         ) : null}
 
         {meeting.entities.length > 0 ? (
-          <section className="mt-8">
-            <h2 className="mb-3 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-              Entities
+          <section className="mt-10 border-t border-border pt-8">
+            <h2 className="mb-4 font-heading text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Entities Mentioned
             </h2>
-            <ul className="flex flex-wrap gap-2">
+            <ul className="flex flex-wrap gap-2.5">
               {meeting.entities.map((e, idx) => (
                 <li key={`${e.name}-${idx}`}>
-                  {/* 3.5b C21 — chips link to the entity page. The KB
-                      entity may not exist (pipeline flag off / older
-                      sessions); the entity page 404-states gracefully. */}
                   <Link
                     href={`/entity/${encodeURIComponent(e.name)}`}
-                    className="inline-block rounded-full border border-border px-3 py-1 text-xs transition-colors hover:border-primary/50"
+                    className="inline-block rounded-none border border-border bg-card px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-colors hover:border-foreground hover:bg-secondary"
                   >
-                    <span className="text-foreground">{e.name}</span>
-                    <span className="ml-2 text-muted-foreground">{e.type}</span>
+                    <span className="text-foreground uppercase">{e.name}</span>
+                    <span className="ml-2.5 text-[10px] font-mono text-muted-foreground uppercase">{e.type}</span>
                   </Link>
                 </li>
               ))}
@@ -170,14 +168,13 @@ export default function MeetingPage({
           </section>
         ) : null}
 
-        {/* Gated raw transcript. Only workspace-mode / demo responses carry
-            can_view_transcript; legacy cohort sessions leave it undefined and
-            never expose a transcript surface. */}
         {meeting.can_view_transcript !== undefined ? (
-          <TranscriptPanel
-            sessionId={meeting.session_id}
-            canView={meeting.can_view_transcript}
-          />
+          <div className="mt-10 border-t border-border pt-8">
+            <TranscriptPanel
+              sessionId={meeting.session_id}
+              canView={meeting.can_view_transcript}
+            />
+          </div>
         ) : null}
       </main>
     </AppShell>
@@ -187,15 +184,15 @@ export default function MeetingPage({
 /**
  * Per-signal-kind accent (UI-NOW.md §3): colored left bar on each card
  * makes the readout scannable in 2 seconds — same color language as the
- * obligations board (action=emerald, open_question=amber, insight=sky).
+ * obligations board (action=cyber-green, open_question=amber, insight=sky).
  */
 const SIGNAL_ACCENT: Record<string, { bar: string; dot: string }> = {
-  action: { bar: "border-l-primary", dot: "bg-primary" },
+  action: { bar: "border-l-attested", dot: "bg-attested" },
   open_question: {
-    bar: "border-l-signal-warn",
-    dot: "bg-signal-warn",
+    bar: "border-l-yellow-500",
+    dot: "bg-yellow-500",
   },
-  insight: { bar: "border-l-signal-entity", dot: "bg-signal-entity" },
+  insight: { bar: "border-l-blue-500", dot: "bg-blue-500" },
 };
 
 function SignalGroup({
@@ -211,19 +208,19 @@ function SignalGroup({
   const { bar, dot } = SIGNAL_ACCENT[accent];
   return (
     <section className="mb-8">
-      <h2 className="mb-4 flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-muted-foreground">
-        <span className={`size-1.5 rounded-full ${dot}`} aria-hidden />
+      <h2 className="mb-4 flex items-center gap-2 font-heading text-xs font-bold uppercase tracking-widest text-foreground">
+        <span className={`size-2 rounded-none ${dot}`} aria-hiddenBytes />
         {title}
       </h2>
       <ul className="flex flex-col gap-3">
         {signals.map((s, idx) => (
           <li
             key={`${s.kind}-${idx}`}
-            className={`rounded-xl border border-border border-l-2 bg-card p-4 shadow-sm ${bar}`}
+            className={`rounded-none border border-border border-l-4 bg-card p-4 shadow-sm ${bar}`}
           >
-            <p className="text-sm leading-relaxed">{s.text}</p>
+            <p className="text-xs font-bold uppercase tracking-wide leading-relaxed">{s.text}</p>
             {s.source_quote ? (
-              <p className="mt-1.5 text-sm italic leading-relaxed text-muted-foreground">
+              <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">
                 &ldquo;{s.source_quote}&rdquo;
               </p>
             ) : null}

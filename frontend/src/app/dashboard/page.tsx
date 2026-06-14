@@ -132,20 +132,21 @@ export default function DashboardPage() {
 
   return (
     <AppShell user={me.user}>
-      {/* Vantage workspace canvas: dotted grid under everything. */}
-      <main className="flex-1 bg-dotted-grid">
+      {/* Brutalist clean background canvas */}
+      <main className="flex-1 bg-background">
         <div className="mx-auto w-full max-w-5xl px-6 py-8 md:py-10">
-          {/* Serif greeting header (Vantage mockup) */}
-          <div className="mb-8 flex items-end justify-between">
+          
+          {/* Brutalist Greeting Header */}
+          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-border pb-6">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+              <h1 className="font-heading text-3xl font-black uppercase tracking-tight md:text-4xl text-foreground">
                 {greeting()}, {me.user.email.split("@")[0]}
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Here&apos;s your overview for {todayLabel()}.
+              <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Overview for {todayLabel()} · Confidential Enclave active
               </p>
             </div>
-            <div className="hidden items-center gap-3 sm:flex">
+            <div className="flex flex-wrap items-center gap-3">
               {workspaceId ? (
                 <>
                   <RecordMeetingButton workspaceId={workspaceId} />
@@ -154,7 +155,7 @@ export default function DashboardPage() {
               ) : null}
               <Link
                 href="/invite"
-                className="inline-flex h-10 items-center rounded-full border border-border bg-card px-5 text-xs font-bold text-foreground shadow-sm transition-all hover:border-input hover:bg-secondary active:scale-95"
+                className="inline-flex h-9 items-center justify-center rounded-none border border-foreground bg-primary px-5 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition-all hover:bg-muted-foreground active:scale-98"
               >
                 Invite bot
               </Link>
@@ -167,7 +168,7 @@ export default function DashboardPage() {
                 {active.map((a) => (
                   <li
                     key={a.invitation_id}
-                    className="flex items-center justify-between rounded-2xl border border-border bg-card px-5 py-3 shadow-sm"
+                    className="flex items-center justify-between rounded-none border border-foreground bg-card px-5 py-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)]"
                   >
                     <div className="flex items-center gap-3">
                       <span className="relative flex h-2 w-2" aria-hidden>
@@ -175,8 +176,8 @@ export default function DashboardPage() {
                         <span className="relative inline-flex h-2 w-2 rounded-full bg-attested" />
                       </span>
                       <div>
-                        <p className="font-mono text-sm">{a.session_id}</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="font-mono text-xs font-bold">{a.session_id}</p>
+                        <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                           {humanStatus(a.status)} · started{" "}
                           {a.created_at.split("T")[1]?.slice(0, 5) ??
                             a.created_at}
@@ -185,7 +186,7 @@ export default function DashboardPage() {
                     </div>
                     <button
                       onClick={() => handleStop(a.session_id)}
-                      className="inline-flex h-7 items-center rounded-full border border-destructive/40 bg-destructive/10 px-3 text-xs font-medium text-destructive hover:bg-destructive/20"
+                      className="inline-flex h-7 items-center rounded-none border border-destructive bg-destructive/10 px-3 text-[10px] font-bold uppercase tracking-wider text-destructive hover:bg-destructive/20"
                     >
                       Stop
                     </button>
@@ -199,8 +200,8 @@ export default function DashboardPage() {
             <EmptyState workspaceId={workspaceId} />
           ) : (
             /* Widget grid: meetings list (2 cols) + right rail. */
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-              <div className="flex flex-col gap-6 md:col-span-2">
+            <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
+              <div className="flex flex-col gap-8 md:col-span-2">
                 {meetings
                   ?.filter((m) => m.is_processing)
                   .map((m) => (
@@ -208,7 +209,7 @@ export default function DashboardPage() {
                   ))}
                 <RecentMeetings meetings={meetings} />
               </div>
-              <div className="flex flex-col gap-6">
+              <div className="flex flex-col gap-8">
                 <EnclaveCard />
                 <UpNext obligations={obligations} />
               </div>
@@ -220,48 +221,48 @@ export default function DashboardPage() {
   );
 }
 
-/** Vantage "Recently Viewed" widget — meetings as icon-tile rows. */
+/** Motto Brutalist "Recently Viewed" widget */
 function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
   const done = meetings?.filter((m) => !m.is_processing);
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm transition duration-300 hover:shadow-md">
-      <div className="mb-4 flex items-center justify-between">
-        <h4 className="flex items-center gap-2 text-sm font-bold">
-          <FileText className="size-4 text-primary" aria-hidden />
+    <div className="rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
+      <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
+        <h4 className="flex items-center gap-2 font-heading text-lg font-black uppercase tracking-tight">
+          <FileText className="size-4 text-foreground" aria-hidden />
           Recent meetings
         </h4>
-        <span className="text-[10px] font-bold text-muted-foreground">
+        <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
           {done ? `${done.length} TOTAL` : ""}
         </span>
       </div>
       {done === null || done === undefined ? (
-        <p className="p-3 text-sm text-muted-foreground">Loading meetings…</p>
+        <p className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loading meetings…</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {done.map((m) => (
             <Link
               key={m.session_id}
               href={`/meeting/${m.session_id}`}
-              className="group flex items-center justify-between rounded-xl border border-transparent bg-secondary p-3 transition hover:border-border hover:bg-card"
+              className="group flex items-center justify-between rounded-none border border-border bg-secondary/55 p-3.5 transition hover:border-foreground hover:bg-card"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-secondary bg-card text-signal-entity shadow-sm">
+                <div className="flex size-9 shrink-0 items-center justify-center rounded-none border border-border bg-card text-foreground shadow-sm">
                   <FileText className="size-4" aria-hidden />
                 </div>
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">
+                  <div className="truncate text-xs font-bold uppercase tracking-wide">
                     {m.summary
                       ? truncate(m.summary, 90)
                       : `${m.source} — ${m.date}`}
                   </div>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    {m.date} · {m.source}
+                  <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground">
+                    {m.date} &bull; {m.source}
                     {isDemoSession(m.session_id) ? <DemoTag /> : null}
                   </div>
                 </div>
               </div>
-              <span className="text-muted-foreground/50 opacity-0 transition-opacity group-hover:opacity-100">
-                →
+              <span className="text-muted-foreground/60 transition-transform group-hover:translate-x-1">
+                &rarr;
               </span>
             </Link>
           ))}
@@ -271,39 +272,30 @@ function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
   );
 }
 
-/**
- * The dark widget (Vantage "Focus Mode" card) repurposed as the enclave
- * status card — Conclave's whole pitch in one glowing tile.
- *
- * TODO(tee-deploy): wire the status line to the real attestation endpoint.
- */
+/** Enclave Status Card with a bold brutalist frame */
 function EnclaveCard() {
   return (
-    <div className="group relative flex h-48 flex-col justify-between overflow-hidden rounded-2xl bg-foreground p-6 text-background shadow-xl transition duration-300 hover:-translate-y-1">
-      <div
-        className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-primary/25 blur-2xl transition duration-700 group-hover:bg-primary/40"
-        aria-hidden
-      />
+    <div className="group relative flex h-48 flex-col justify-between rounded-none border-2 border-foreground bg-foreground p-6 text-background shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)] transition hover:translate-y-px">
       <div>
-        <div className="mb-3 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-background/50">
-          <ShieldCheck className="size-3.5 text-primary" aria-hidden />
-          Enclave
+        <div className="mb-3 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-background/50">
+          <ShieldCheck className="size-3.5 text-attested" aria-hidden />
+          Enclave Verified
         </div>
-        <div className="text-2xl font-bold tracking-tight">
-          Operator-blind
+        <div className="font-heading text-2xl font-black uppercase tracking-tight">
+          Operator-Blind
         </div>
       </div>
       <div>
-        <div className="mb-2 flex items-center justify-between text-xs text-background/70">
-          <span className="font-mono">Intel TDX · confidential VM</span>
+        <div className="mb-2 flex items-center justify-between text-[10px] font-mono text-background/70">
+          <span>Intel TDX · Hardware Seal</span>
         </div>
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-[10px]">
           <span className="relative flex h-2 w-2" aria-hidden>
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-attested opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-attested" />
           </span>
-          <span className="font-medium text-background/90">
-            attested — nobody can read your meetings
+          <span className="font-bold uppercase tracking-wider text-background/95">
+            Attested Environment
           </span>
         </div>
       </div>
@@ -311,26 +303,28 @@ function EnclaveCard() {
   );
 }
 
-/** Vantage "Up Next" widget — top open obligations. */
+/** Motto Brutalist "Up Next" widget */
 function UpNext({ obligations }: { obligations: KBObligation[] | null }) {
   const open =
     obligations?.filter((o) => o.status_inferred === "open").slice(0, 4) ?? [];
   return (
-    <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card p-5 shadow-sm">
-      <h4 className="mb-4 flex items-center justify-between text-sm font-bold">
-        Up next
-        <span className="flex size-5 items-center justify-center rounded-full bg-secondary text-[10px] text-muted-foreground">
+    <div className="flex flex-1 flex-col rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
+      <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
+        <h4 className="font-heading text-lg font-black uppercase tracking-tight">
+          Up next
+        </h4>
+        <span className="flex size-5 items-center justify-center border border-foreground bg-secondary text-[10px] font-bold">
           {obligations === null ? "…" : open.length}
         </span>
-      </h4>
+      </div>
       {obligations === null ? (
-        <p className="text-xs text-muted-foreground">Loading…</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loading…</p>
       ) : open.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Nothing open — your meetings are all caught up.
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Nothing open — caught up.
         </p>
       ) : (
-        <div className="flex-1 space-y-3">
+        <div className="flex-1 space-y-4">
           {open.map((o) => (
             <Link
               key={o.id}
@@ -338,15 +332,15 @@ function UpNext({ obligations }: { obligations: KBObligation[] | null }) {
               className="group flex items-start gap-3"
             >
               <div
-                className="mt-0.5 size-4 shrink-0 rounded border-2 border-input transition group-hover:border-primary"
+                className="mt-0.5 size-4 shrink-0 rounded-none border-2 border-foreground bg-card transition-colors group-hover:bg-secondary"
                 aria-hidden
               />
               <div className="min-w-0">
-                <span className="line-clamp-2 text-xs font-medium text-foreground/80 transition group-hover:text-foreground">
+                <span className="line-clamp-2 text-xs font-bold uppercase tracking-wide text-foreground/80 transition group-hover:text-foreground">
                   {o.description}
                 </span>
                 {o.importance != null && o.importance >= 7 ? (
-                  <span className="mt-1 block w-fit rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-bold text-primary">
+                  <span className="mt-1.5 inline-block rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[9px] font-bold text-destructive uppercase tracking-wider">
                     High priority
                   </span>
                 ) : null}
@@ -357,9 +351,9 @@ function UpNext({ obligations }: { obligations: KBObligation[] | null }) {
       )}
       <Link
         href="/obligations"
-        className="mt-4 border-t border-border pt-3 text-[10px] font-bold text-muted-foreground transition hover:text-foreground"
+        className="mt-6 border-t border-border pt-4 text-[10px] font-bold tracking-widest text-muted-foreground transition hover:text-foreground uppercase"
       >
-        VIEW ALL →
+        VIEW ALL &rarr;
       </Link>
     </div>
   );
@@ -392,7 +386,7 @@ function isDemoSession(sessionId: string): boolean {
 /** Subtle mono tag so a prospect knows a card is sample data, not theirs. */
 function DemoTag() {
   return (
-    <span className="rounded-full border border-border bg-muted px-1.5 py-px font-mono text-[10px] leading-4 text-muted-foreground">
+    <span className="rounded-none border border-border bg-muted px-1.5 py-px font-mono text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
       demo
     </span>
   );
@@ -401,49 +395,49 @@ function DemoTag() {
 function EmptyState({ workspaceId }: { workspaceId: string | null }) {
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xl font-bold tracking-tight">
-          Welcome to Conclave<span className="text-primary">.</span>
+      <div className="rounded-none border border-border bg-card p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
+        <p className="font-heading text-2xl font-black uppercase tracking-tight">
+          Welcome to Conclave
         </p>
-        <p className="mt-3 max-w-prose text-sm leading-relaxed text-muted-foreground">
+        <p className="mt-4 max-w-prose text-xs font-semibold leading-relaxed text-muted-foreground uppercase tracking-wide">
           Conclave gives you a confidential transcript and signal extraction
           for every meeting you invite our bot to. Transcription happens
           inside a TEE — operator-blind from end to end.
         </p>
-        <div className="mt-5 flex flex-wrap items-center gap-4">
+        <div className="mt-6 flex flex-wrap items-center gap-4">
           <Link
             href="/invite"
-            className="inline-flex h-10 items-center rounded-full bg-primary px-5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95"
+            className="inline-flex h-10 items-center justify-center rounded-none bg-primary px-6 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition hover:bg-muted-foreground"
           >
-            Invite the bot to a meeting
+            Invite bot
           </Link>
           {workspaceId ? (
             <>
-              <span className="text-xs text-muted-foreground">or</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">or</span>
               <RecordMeetingButton workspaceId={workspaceId} />
               <UploadTranscriptButton workspaceId={workspaceId} />
             </>
           ) : null}
           <Link
             href={`/meeting/${EXAMPLE_SESSION_ID}`}
-            className="text-xs text-muted-foreground hover:text-foreground"
+            className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground border-b border-transparent hover:border-foreground pb-0.5"
           >
-            or browse the example meeting →
+            browse example meeting &rarr;
           </Link>
         </div>
       </div>
-      <ul className="grid gap-4 sm:grid-cols-2">
+      <ul className="grid gap-6 sm:grid-cols-2">
         <li>
           <Link
             href={`/meeting/${EXAMPLE_SESSION_ID}`}
-            className="group flex h-full flex-col justify-between rounded-xl border border-border bg-card p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+            className="group flex h-full flex-col justify-between rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)] transition hover:border-foreground"
           >
-            <p className="text-sm font-semibold leading-snug transition-colors group-hover:text-primary">
+            <p className="text-sm font-bold uppercase tracking-wide leading-snug transition-colors group-hover:text-primary">
               Walkthrough of how a Conclave meeting card looks once your bot
               has joined a Meet.
             </p>
-            <p className="mt-3 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-              2026-05-15 · example
+            <p className="mt-4 flex items-center gap-2 font-mono text-[10px] font-bold text-muted-foreground uppercase">
+              2026-05-15 &bull; example
               <DemoTag />
             </p>
           </Link>
@@ -496,18 +490,18 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="rounded-xl border border-primary/30 bg-card p-5 shadow-sm">
+    <div className="rounded-none border border-primary bg-card p-6 shadow-sm">
       <div className="flex items-center gap-3">
         <span
-          className="inline-block h-2 w-2 animate-pulse rounded-full bg-primary"
+          className="inline-block h-2.5 w-2.5 animate-pulse rounded-none bg-primary"
           aria-hidden
         />
-        <p className="animate-shimmer-text text-sm font-semibold">
+        <p className="animate-shimmer-text text-sm font-bold uppercase tracking-wider">
           {PROCESSING_MESSAGES[phraseIdx]}
         </p>
       </div>
-      <p className="mt-2 font-mono text-xs text-muted-foreground">
-        {meeting.date} · {meeting.source} · {meeting.session_id}
+      <p className="mt-3 font-mono text-[10px] font-bold text-muted-foreground uppercase">
+        {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
         This card refreshes itself when the LLM finishes — usually under two

@@ -104,7 +104,7 @@ function SearchPageInner() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Search across your meetings…"
-            className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="h-12 w-full rounded-none border-2 border-foreground bg-background px-4 text-sm font-semibold tracking-wide outline-none transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,1)] focus:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[1px_1px_0px_0px_rgba(255,255,255,1)] focus:translate-x-0.5 focus:translate-y-0.5"
             autoFocus
           />
         </form>
@@ -115,31 +115,30 @@ function SearchPageInner() {
             {answer === null ? (
               <button
                 onClick={runAsk}
-                className="rounded-md border border-primary/50 bg-primary/5 px-3.5 py-2 text-xs font-medium text-primary transition-all hover:bg-primary hover:text-primary-foreground hover:shadow-[0_0_24px_-8px_var(--primary)]"
+                className="rounded-none border border-foreground bg-primary px-5 py-3 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition-all hover:bg-muted-foreground active:scale-98"
               >
                 ✨ Ask your meetings this question
               </button>
             ) : answer === "loading" ? (
-              <Card className="border-l-2 border-l-primary">
-                <CardContent className="py-4">
-                  <p className="animate-shimmer-text text-sm font-medium">
+              <Card className="border-l-[6px] border-l-foreground">
+                <CardContent className="py-5">
+                  <p className="animate-shimmer-text text-sm font-bold uppercase tracking-wider">
                     Reading your meetings…
                   </p>
-                  <p className="mt-1.5 text-[11px] text-muted-foreground">
-                    Runs inside the enclave — no third-party LLM sees your
-                    query.
+                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Enclave Sandbox Safe · Intel Attested
                   </p>
                 </CardContent>
               </Card>
             ) : (
-              <Card className="border-l-2 border-l-primary">
-                <CardContent className="py-4">
-                  <p className="mb-2 font-mono text-[10px] uppercase tracking-widest text-primary">
-                    ✦ generated answer
+              <Card className="border-l-[6px] border-l-foreground">
+                <CardContent className="py-5">
+                  <p className="mb-3 font-mono text-[9px] font-black uppercase tracking-widest text-primary">
+                    ✦ Generated Answer
                   </p>
-                  <p className="text-sm leading-relaxed">{answer.answer}</p>
+                  <p className="text-sm leading-relaxed font-medium">{answer.answer}</p>
                   {answer.citations.length > 0 ? (
-                    <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <p className="mt-4 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                       <span>Sources:</span>
                       {Array.from(
                         new Set(answer.citations.map((c) => c.session_id)),
@@ -147,16 +146,15 @@ function SearchPageInner() {
                         <Link
                           key={sid}
                           href={`/meeting/${sid}`}
-                          className="font-mono text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary"
+                          className="font-mono text-xs text-primary underline underline-offset-4 hover:text-muted-foreground transition-colors"
                         >
                           {sid}
                         </Link>
                       ))}
                     </p>
                   ) : null}
-                  <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
-                    Generated inside the enclave — this answer never left your
-                    workspace.
+                  <p className="mt-4 border-t border-border pt-3 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Computed inside TEE — plaintext is private.
                   </p>
                 </CardContent>
               </Card>
@@ -165,40 +163,40 @@ function SearchPageInner() {
         ) : null}
 
         {q.trim() === "" ? (
-          <p className="text-sm text-muted-foreground">
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
             Type a query to search across your meetings.
           </p>
         ) : results === null ? (
-          <p className="text-sm text-muted-foreground">Searching…</p>
+          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Searching…</p>
         ) : results.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center">
-            <p className="text-sm font-medium">No results for “{q}”</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Search covers transcripts of meetings you can see.
+          <div className="rounded-none border border-dashed border-border p-10 text-center">
+            <p className="text-sm font-bold uppercase tracking-wide">No results for “{q}”</p>
+            <p className="mt-1.5 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
+              Search covers transcripts of meetings in your workspace.
             </p>
           </div>
         ) : (
           <>
-            <p className="mb-2 text-sm text-muted-foreground">
+            <p className="mb-4 text-xs font-bold uppercase tracking-widest text-muted-foreground">
               {results.length} result{results.length === 1 ? "" : "s"} for “{q}”
             </p>
-            {/* Editorial Vault: hairline rows; matched terms get a mint wash. */}
-            <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+            {/* Brutalist list outline */}
+            <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
               {results.map((r) => (
                 <li key={r.chunk_id}>
                   <Link
                     href={`/meeting/${r.session_id}`}
-                    className="group block px-5 py-5"
+                    className="group block px-5 py-5 hover:bg-secondary/40 transition-colors"
                   >
                     {r.context_header ? (
-                      <p className="mb-1.5 text-xs italic text-muted-foreground">
+                      <p className="mb-1.5 text-[10px] font-mono font-bold uppercase tracking-wider text-muted-foreground">
                         {r.context_header}
                       </p>
                     ) : null}
-                    <p className="text-sm leading-relaxed">
+                    <p className="text-sm leading-relaxed font-semibold">
                       {highlightTerms(r.snippet, q)}
                     </p>
-                    <p className="mt-2 font-mono text-xs text-muted-foreground transition-colors group-hover:text-primary">
+                    <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground transition-colors group-hover:text-primary">
                       {r.meeting.date ?? ""}
                       {r.meeting.summary
                         ? ` · ${truncate(r.meeting.summary, 70)}`

@@ -9,7 +9,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
-  --font-heading: var(--font-sans);
+  --font-heading: var(--font-heading);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -39,7 +39,7 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  /* Brand constant utilities (Vantage accent set) */
+  /* Brand constant utilities */
   --color-accent-mint: var(--accent-mint);
   --color-signal-speaker: var(--signal-speaker);
   --color-signal-entity: var(--signal-entity);
@@ -57,95 +57,94 @@
 }
 
 :root {
-  /* ───── Vantage (locked 2026-06-04, user-supplied reference): warm
-     stone neutrals, orange-600 primary, white cards on stone-50.
-     Green appears ONLY as the trust/operational color (attested). ───── */
-  --background: #FAFAF9;            /* stone-50 canvas */
-  --foreground: #1C1917;            /* stone-900 ink */
-  --card: #FFFFFF;
-  --card-foreground: #1C1917;
+  /* ───── Motto Brutalist (monochromatic light mode with cyber green accents) ───── */
+  --background: #F0F0F1;            /* cool grey architectural canvas */
+  --foreground: #000000;            /* stark black ink */
+  --card: #FFFFFF;                  /* clean white card contrast */
+  --card-foreground: #000000;
   --popover: #FFFFFF;
-  --popover-foreground: #1C1917;
-  --primary: #EA580C;               /* orange-600 */
+  --popover-foreground: #000000;
+  --primary: #000000;               /* stark black for primary UI */
   --primary-foreground: #FFFFFF;
-  --secondary: #F5F5F4;             /* stone-100 */
-  --secondary-foreground: #1C1917;
-  --muted: #F5F5F4;
-  --muted-foreground: #78716C;      /* stone-500 */
-  --accent: #F5F5F4;
-  --accent-foreground: #1C1917;
-  --destructive: #DC2626;
-  --border: #E7E5E4;                /* stone-200 */
-  --input: #D6D3D1;                 /* stone-300 */
-  --ring: #EA580C;
-  --chart-1: #EA580C;               /* orange */
-  --chart-2: #3B82F6;               /* blue */
-  --chart-3: #9333EA;               /* purple */
-  --chart-4: #16A34A;               /* green */
-  --chart-5: #A8A29E;               /* stone */
-  --radius: 1rem;
-  --sidebar: #FAFAF9;
-  --sidebar-foreground: #1C1917;
-  --sidebar-primary: #EA580C;
+  --secondary: #E5E5E6;             /* cool medium grey */
+  --secondary-foreground: #000000;
+  --muted: #E5E5E6;
+  --muted-foreground: #5A5A5E;      /* neutral dark grey */
+  --accent: #E5E5E6;
+  --accent-foreground: #000000;
+  --destructive: #E11D48;
+  --border: #DBDBDC;                /* fine architectural hairline */
+  --input: #C4C4C6;
+  --ring: #000000;
+  --chart-1: #000000;
+  --chart-2: #2563EB;
+  --chart-3: #7C3AED;
+  --chart-4: #059669;
+  --chart-5: #6B7280;
+  --radius: 0.125rem;               /* sharp brutalist corners */
+  --sidebar: #F0F0F1;
+  --sidebar-foreground: #000000;
+  --sidebar-primary: #000000;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F5F5F4;
-  --sidebar-accent-foreground: #1C1917;
-  --sidebar-border: #F5F5F4;        /* stone-100 hairlines, per mockup */
-  --sidebar-ring: #EA580C;
+  --sidebar-accent: #E5E5E6;
+  --sidebar-accent-foreground: #000000;
+  --sidebar-border: #E5E5E6;
+  --sidebar-ring: #000000;
 
-  /* Brand constants (Vantage accent set). */
-  --accent-mint: #FB923C;           /* orange-400 — glow / highlight wash */
-  --signal-speaker: #9333EA;        /* purple-600 — people/speakers */
-  --signal-entity: #3B82F6;         /* blue-500 — entities/topics */
-  --signal-meeting: #A8A29E;        /* stone-400 — meetings */
-  --signal-warn: #CA8A04;           /* yellow-600 — open/pending */
-  --signal-positive: #16A34A;       /* green-600 — done/commitment */
-  --attested: #22C55E;              /* green-500 — trust dot, "operational" */
+  /* Brand constants */
+  --accent-mint: #00D261;
+  --signal-speaker: #7C3AED;
+  --signal-entity: #2563EB;
+  --signal-meeting: #6B7280;
+  --signal-warn: #D97706;
+  --signal-positive: #059669;
+  --attested: #00D261;              /* cyber green trust indicator */
 }
 
 .dark {
-  /* ───── Enclave Emerald (UI-NOW.md §1, locked 2026-06-04) ───── */
-  --background: #0A0F0D;            /* near-black, faintly green canvas */
-  --foreground: #ECFDF5;            /* mint-white */
-  --card: #111816;
-  --card-foreground: #ECFDF5;
-  --popover: #111816;
-  --popover-foreground: #ECFDF5;
-  --primary: #34D399;               /* emerald — buttons, active, links */
-  --primary-foreground: #04120C;    /* text on emerald */
-  --secondary: #1A2420;
-  --secondary-foreground: #ECFDF5;
-  --muted: #1A2420;
-  --muted-foreground: #8BA39B;
-  --accent: #1A2420;
-  --accent-foreground: #ECFDF5;
-  --destructive: #F87171;
-  --border: #1F2A26;                /* hairlines */
-  --input: #243029;                 /* field borders */
-  --ring: #34D399;                  /* emerald focus rings */
-  --chart-1: #34D399;               /* emerald */
-  --chart-2: #38BDF8;               /* sky */
-  --chart-3: #F59E0B;               /* amber */
-  --chart-4: #A7F3D0;               /* mint */
-  --chart-5: #64748B;               /* slate */
-  --sidebar: #111816;
-  --sidebar-foreground: #ECFDF5;
-  --sidebar-primary: #34D399;
-  --sidebar-primary-foreground: #04120C;
-  --sidebar-accent: #1A2420;
-  --sidebar-accent-foreground: #ECFDF5;
-  --sidebar-border: #1F2A26;
-  --sidebar-ring: #34D399;
+  /* ───── Motto Dark (monochromatic dark mode) ───── */
+  --background: #0C0C0D;            /* matte black canvas */
+  --foreground: #FFFFFF;            /* stark white ink */
+  --card: #141416;                  /* deep dark contrast card */
+  --card-foreground: #FFFFFF;
+  --popover: #141416;
+  --popover-foreground: #FFFFFF;
+  --primary: #FFFFFF;               /* stark white for primary UI */
+  --primary-foreground: #000000;
+  --secondary: #1E1E21;             /* deep charcoal grey */
+  --secondary-foreground: #FFFFFF;
+  --muted: #1E1E21;
+  --muted-foreground: #9A9A9E;      /* medium grey text */
+  --accent: #1E1E21;
+  --accent-foreground: #FFFFFF;
+  --destructive: #EF4444;
+  --border: #2B2B2E;                /* dark line grids */
+  --input: #3F3F43;
+  --ring: #FFFFFF;
+  --chart-1: #FFFFFF;
+  --chart-2: #60A5FA;
+  --chart-3: #A78BFA;
+  --chart-4: #34D399;
+  --chart-5: #9CA3AF;
+  --sidebar: #141416;
+  --sidebar-foreground: #FFFFFF;
+  --sidebar-primary: #FFFFFF;
+  --sidebar-primary-foreground: #000000;
+  --sidebar-accent: #1E1E21;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #2B2B2E;
+  --sidebar-ring: #FFFFFF;
 
-  /* Brand constants — non-shadcn (UI-NOW.md §1 table 2) */
-  --accent-mint: #A7F3D0;           /* hover glow, graph search-hit glow */
-  --signal-speaker: #F59E0B;        /* amber — speakers */
-  --signal-entity: #38BDF8;         /* sky — entities */
-  --signal-meeting: #64748B;        /* slate — meetings */
-  --attested: #34D399;              /* verified/TEE trust (= primary) */
-
-  /* Editorial Vault: squarer corners — dossier, not bubble. */
-  --radius: 0.375rem;
+  /* Brand constants */
+  --accent-mint: #00D261;
+  --signal-speaker: #A78BFA;
+  --signal-entity: #60A5FA;
+  --signal-meeting: #9CA3AF;
+  --signal-warn: #F59E0B;
+  --signal-positive: #34D399;
+  --attested: #00D261;
+  
+  --radius: 0.125rem;
 }
 
 /* Warm glow atmosphere (Vantage hero): a soft primary-tinted bloom from

@@ -229,19 +229,19 @@ export default function GraphPage() {
 
       <div className="relative hidden flex-1 md:block">
         {/* filter panel (C32) */}
-        <div className="absolute left-4 top-4 z-10 w-60 rounded-md border border-border bg-background/95 p-3 text-xs shadow">
-          <p className="mb-2 font-medium">Filters</p>
-          <label className="mb-2 block">
-            <span className="text-muted-foreground">As of date</span>
+        <div className="absolute left-4 top-4 z-10 w-64 rounded-none border-2 border-foreground bg-background p-4 text-xs shadow-sm">
+          <p className="mb-3 font-heading text-sm font-black uppercase tracking-tight">Filters</p>
+          <label className="mb-3 block">
+            <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px]">As of date</span>
             <input
               type="date"
               value={asOf}
               onChange={(e) => setAsOf(e.target.value)}
-              className="mt-1 h-7 w-full rounded border border-border bg-background px-1"
+              className="mt-1 h-8 w-full rounded-none border border-foreground bg-background px-2"
             />
           </label>
-          <p className="mb-1 text-muted-foreground">Entity types</p>
-          <div className="mb-2 flex flex-wrap gap-1">
+          <p className="mb-1.5 text-muted-foreground font-bold uppercase tracking-wider text-[10px]">Entity types</p>
+          <div className="mb-3 flex flex-wrap gap-1">
             {ENTITY_TYPES.map((t) => (
               <button
                 key={t}
@@ -251,18 +251,18 @@ export default function GraphPage() {
                   else next.add(t);
                   setEnabledTypes(next);
                 }}
-                className={`rounded-full border px-2 py-0.5 capitalize ${
+                className={`rounded-none border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider transition-colors ${
                   enabledTypes.has(t)
-                    ? "border-primary/60 text-primary"
-                    : "border-border text-muted-foreground"
+                    ? "border-foreground bg-primary text-primary-foreground"
+                    : "border-border text-muted-foreground hover:border-foreground hover:text-foreground"
                 }`}
               >
                 {t}
               </button>
             ))}
           </div>
-          <label className="block">
-            <span className="text-muted-foreground">
+          <label className="block mb-3">
+            <span className="text-muted-foreground font-bold uppercase tracking-wider text-[10px]">
               Min mentions: {minMentions}
             </span>
             <input
@@ -271,25 +271,25 @@ export default function GraphPage() {
               max={10}
               value={minMentions}
               onChange={(e) => setMinMentions(Number(e.target.value))}
-              className="mt-1 w-full"
+              className="mt-1.5 w-full accent-foreground"
             />
           </label>
-          <div className="mt-3 border-t border-border pt-2">
+          <div className="mt-3 border-t border-border pt-3">
             <input
               value={graphQuery}
               onChange={(e) => setGraphQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && runGraphSearch()}
               placeholder="Highlight by search…"
-              className="h-7 w-full rounded border border-border bg-background px-1"
+              className="h-8 w-full rounded-none border border-foreground bg-background px-2 text-xs"
             />
           </div>
         </div>
 
         {/* legend (C33 / 3.5d.9) */}
         {legendOpen ? (
-          <div className="absolute bottom-4 right-4 z-10 rounded-md border border-border bg-background/95 p-3 text-xs shadow">
-            <div className="mb-1 flex items-center justify-between gap-6">
-              <p className="font-medium">Legend</p>
+          <div className="absolute bottom-4 right-4 z-10 rounded-none border-2 border-foreground bg-background p-4 text-xs shadow-sm">
+            <div className="mb-2.5 flex items-center justify-between gap-6 border-b border-border pb-1.5">
+              <p className="font-heading text-[10px] font-black uppercase tracking-widest">Legend</p>
               <button
                 onClick={() => setLegendOpen(false)}
                 className="text-muted-foreground hover:text-foreground"
@@ -298,9 +298,9 @@ export default function GraphPage() {
               </button>
             </div>
             {NODE_KINDS.map((kind) => (
-              <p key={kind} className="flex items-center gap-2 capitalize">
+              <p key={kind} className="flex items-center gap-2 capitalize font-semibold tracking-wide">
                 <span
-                  className={`inline-block h-2.5 w-2.5 rounded-full ${
+                  className={`inline-block h-2.5 w-2.5 rounded-none ${
                     kind === "meeting"
                       ? "bg-signal-meeting"
                       : kind === "entity"
@@ -311,8 +311,8 @@ export default function GraphPage() {
                 {kind}
               </p>
             ))}
-            <p className="mt-1 text-muted-foreground">
-              Node size = mentions · edge = appears in
+            <p className="mt-2 border-t border-border pt-1.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Size = mentions &bull; edge = appears in
             </p>
           </div>
         ) : null}
