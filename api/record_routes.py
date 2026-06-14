@@ -289,11 +289,14 @@ async def record_meeting(
             content={"session_id": session_id, "is_processing": False, "status": "duplicate"},
         )
 
-    from transcripts.identity import resolve_speakers
     from transcripts.parse import build_session
 
     session = build_session(ni, session_id=session_id)
-    session.metadata.resolved_speakers = resolve_speakers(session)
+    # Build resolved_speakers from the FPM identity segments (carrying
+    # voiceprint_id), NOT the cohort name-matcher: a recorded meeting's labels
+    # are FPM emails/`Speaker N`, a different keyspace from the cohort roster.
+    # voiceprint_id is the stable key P4/P5 build on (architecture C3).
+    session.metadata.resolved_speakers = build_resolved_speakers(identity)
     if intent and intent.strip():
         session.metadata.raw_intent = intent.strip()
     store.save_session(session)

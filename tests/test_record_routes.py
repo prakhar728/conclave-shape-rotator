@@ -210,6 +210,27 @@ def test_record_happy_path_persists_identified_transcript(client: TestClient, mo
     assert fields["workspace_id"] == wsid and fields["visibility"] == "owner-only"
 
 
+def test_record_persists_resolved_speakers_c3(client: TestClient, monkeypatch):
+    """The recorded meeting's resolved_speakers carries voiceprint_id per C3,
+    keyed by the display label, with exactly {voiceprint_id, name, confidence}."""
+    _enable_record(monkeypatch)
+    _login(client, "alice@example.com")
+    wsid = _my_workspace_id(client)
+    r = client.post(f"/api/workspaces/{wsid}/record", files=_audio())
+    assert r.status_code == 202, r.text
+    sid = r.json()["session_id"]
+
+    session = store.load_session(sid)
+    rs = session.metadata.resolved_speakers
+    assert rs["alice@x.com"] == {"voiceprint_id": "vp_a", "name": "alice@x.com", "confidence": None}
+    assert rs["bob@x.com"]["voiceprint_id"] == "vp_b"
+    assert rs["Speaker 3"] == {"voiceprint_id": "vp_c", "name": None, "confidence": None}
+    for entry in rs.values():
+        assert set(entry) == {"voiceprint_id", "name", "confidence"}
+    # The display label stays the immutable join key on the raw segments.
+    assert [s.speaker for s in session.raw_diarization] == ["alice@x.com", "bob@x.com", "Speaker 3"]
+
+
 def test_record_nonmember_404(client: TestClient, monkeypatch):
     _enable_record(monkeypatch)
     _login(client, "owner@example.com")
