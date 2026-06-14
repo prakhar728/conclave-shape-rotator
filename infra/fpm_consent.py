@@ -9,6 +9,7 @@ dashboard (the data subject signing in with Google), never proxied through Concl
 """
 from __future__ import annotations
 
+import os
 import time
 
 import httpx
@@ -18,9 +19,10 @@ from config import settings
 
 # Read-side consent cache (C4): {(workspace, voiceprint_id): (value, expiry_monotonic)}.
 # A short TTL keeps the transcript read path cheap while still reflecting a confirm/revoke
-# within ~a minute. Cleared in tests via `_cache.clear()`.
+# within ~a minute. Tunable via CONCLAVE_CONSENT_TTL_SEC (0 = always fresh, used by the
+# two-actor demo gate). Cleared in tests via `_cache.clear()`.
 _cache: dict[tuple[str, str], tuple[dict, float]] = {}
-_CACHE_TTL_SEC = 60.0
+_CACHE_TTL_SEC = float(os.environ.get("CONCLAVE_CONSENT_TTL_SEC", "60"))
 
 
 def _headers() -> dict:
