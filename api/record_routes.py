@@ -21,6 +21,7 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from pydantic import BaseModel
 
 from api.workspaces_routes import _require_member
 from auth.session import require_current_user
@@ -345,3 +346,50 @@ async def record_meeting(
 
     return {"session_id": session.session_id, "is_processing": True,
             "speakers": sorted({m["speaker"] for m in merged}), "status": "accepted"}
+
+
+class TagSpeakerBody(BaseModel):
+    label: str
+    name: str
+    email: str
+
+
+@router.post("/{workspace_id}/meetings/{session_id}/tag-speaker")
+async def tag_speaker(
+    workspace_id: str,
+    session_id: str,
+    body: TagSpeakerBody,
+    user: dict = Depends(require_current_user),
+):
+    """P4 host tag: bind a meeting's `Speaker N` to a (name, email) via FPM (contract C4).
+
+    Maps the display label → `voiceprint_id` (from the session's `resolved_speakers`),
+    proposes the binding to FPM with `proposed_by` = the host's logged-in email, and —
+    when FPM auto-confirms (self-tag / dev flag) — re-resolves the name across this
+    workspace's transcripts immediately. A pending proposal flips no name (Phase 2: the
+    target confirms on the FPM consent dashboard, surfaced on next load).
+    """
+    _require_member(workspace_id, user["id"])
+    from transcripts import store
+
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(404, "session not found")
+    entry = (session.metadata.resolved_speakers or {}).get(body.label)
+    voiceprint_id = entry.get("voiceprint_id") if isinstance(entry, dict) else None
+    if not voiceprint_id:
+        raise HTTPException(404, f"no voiceprint for label '{body.label}'")
+
+    from infra import fpm_consent
+
+    result = await fpm_consent.propose_binding(
+        settings.fpm_workspace_for(workspace_id), voiceprint_id,
+        proposed_email=body.email, proposed_by=(user.get("email") or ""),
+        proposed_name=body.name,
+    )
+    if result.get("status") == "confirmed":
+        store.reresolve_voiceprint(voiceprint_id, result.get("name") or body.name,
+                                   workspace_id=workspace_id)
+    return {"label": body.label, "voiceprint_id": voiceprint_id,
+            "status": result.get("status"), "name": result.get("name"),
+            "proposal_id": result.get("proposal_id")}
