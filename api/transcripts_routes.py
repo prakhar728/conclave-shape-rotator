@@ -285,6 +285,37 @@ def to_view(session: Session) -> dict:
     return card
 
 
+def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
+    """Refresh `resolved_speakers` names from FPM's live consent decision (P4 read-time gate).
+
+    Pulls the current name/visibility for the session's voiceprints (cached ~60s) so a confirm
+    that happened without a re-tag surfaces on next load, and revoked consent withholds the name
+    at read time. Fail-open: if FPM is unreachable, the stored names stand. Rewrites only
+    `resolved_speakers[label]["name"]` — never the label key or `raw_diarization` (C3).
+    """
+    speakers = session.metadata.resolved_speakers or {}
+    vids = sorted({m["voiceprint_id"] for m in speakers.values()
+                   if isinstance(m, dict) and m.get("voiceprint_id")})
+    if not vids:
+        return
+    from config import settings
+    from infra import fpm_consent
+    try:
+        resolved = fpm_consent.consent_resolve_batch_sync(settings.fpm_workspace_for(workspace_id), vids)
+    except Exception:  # noqa: BLE001 — never let a consent lookup break the read
+        return
+    changed = False
+    for meta in speakers.values():
+        if isinstance(meta, dict) and meta.get("voiceprint_id") in resolved:
+            new_name = resolved[meta["voiceprint_id"]].get("name")
+            if meta.get("name") != new_name:
+                meta["name"] = new_name
+                changed = True
+    if changed:
+        from transcripts import store as _store
+        _store.set_metadata(session.session_id, session.metadata)
+
+
 def to_transcript(session: Session) -> dict:
     """Raw-transcript projection — the ONLY shape that carries verbatim text.
 
@@ -475,6 +506,8 @@ def get_session_transcript(session_id: str, request: Request) -> dict:
     # AFTER the gate so 'summary_only' recipients still see 403, not 410.
     if ws_row.get("raw_transcript_deleted_at"):
         raise HTTPException(status_code=410, detail="transcript auto-deleted")
+    # P4: refresh names from FPM's live consent decision before projecting (cached, fail-open).
+    _apply_consent_backstop(session, ws_row["workspace_id"])
     return to_transcript(session)
 
 

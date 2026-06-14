@@ -9,10 +9,18 @@ dashboard (the data subject signing in with Google), never proxied through Concl
 """
 from __future__ import annotations
 
+import time
+
 import httpx
 from fastapi import HTTPException
 
 from config import settings
+
+# Read-side consent cache (C4): {(workspace, voiceprint_id): (value, expiry_monotonic)}.
+# A short TTL keeps the transcript read path cheap while still reflecting a confirm/revoke
+# within ~a minute. Cleared in tests via `_cache.clear()`.
+_cache: dict[tuple[str, str], tuple[dict, float]] = {}
+_CACHE_TTL_SEC = 60.0
 
 
 def _headers() -> dict:
@@ -58,3 +66,38 @@ async def consent_resolve_batch(workspace: str, voiceprint_ids: list[str]) -> di
     if resp.status_code != 200:
         raise HTTPException(502, f"FPM consent-resolve failed ({resp.status_code}): {resp.text[:200]}")
     return resp.json().get("resolved", {})
+
+
+def _http_resolve(workspace: str, voiceprint_ids: list[str]) -> dict:
+    """Blocking POST /v1/consent/resolve/{workspace} → `resolved` map (read-path use)."""
+    with httpx.Client(timeout=10.0) as client:
+        resp = client.post(
+            f"{_base()}/v1/consent/resolve/{workspace}", headers=_headers(),
+            json={"voiceprint_ids": voiceprint_ids},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(502, f"FPM consent-resolve failed ({resp.status_code}): {resp.text[:200]}")
+    return resp.json().get("resolved", {})
+
+
+def consent_resolve_batch_sync(workspace: str, voiceprint_ids: list[str]) -> dict:
+    """Cached, synchronous consent-resolve for the transcript read path (C4 ~60s TTL).
+
+    Serves cached entries within the TTL and only hits FPM for the missing voiceprints.
+    Returns `{vid: {name, owner_email, visibility}}` for the requested ids it could resolve.
+    """
+    now = time.monotonic()
+    out: dict[str, dict] = {}
+    missing: list[str] = []
+    for vid in voiceprint_ids:
+        hit = _cache.get((workspace, vid))
+        if hit and hit[1] > now:
+            out[vid] = hit[0]
+        else:
+            missing.append(vid)
+    if missing:
+        fresh = _http_resolve(workspace, missing)
+        for vid, val in fresh.items():
+            _cache[(workspace, vid)] = (val, now + _CACHE_TTL_SEC)
+            out[vid] = val
+    return out
