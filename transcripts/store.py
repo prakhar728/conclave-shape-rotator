@@ -46,6 +46,40 @@ def set_metadata(session_id: str, metadata: SessionMetadata) -> None:
     sqlite.update_transcript_metadata(session_id, metadata.model_dump())
 
 
+def reresolve_voiceprint(
+    voiceprint_id: str,
+    name: Optional[str],
+    workspace_id: Optional[str] = None,
+) -> int:
+    """P4 — propagate a confirmed binding's name across every stored transcript.
+
+    On observing a `confirmed` proposal (self-tag / autoconfirm), Conclave sweeps its
+    sessions and rewrites **only** `resolved_speakers[label]["name"]` for entries whose
+    `voiceprint_id` matches — never the label key (the immutable C3 join key for
+    `Signal.said_by`) nor `raw_diarization`. Cross-transcript by construction: the same
+    voiceprint in two meetings gets the name in both. Scoped to a workspace when given
+    (P4 is per-room); global otherwise. Returns the number of sessions updated.
+
+    Legacy cohort entries (`{record_id, name, mock}`, no `voiceprint_id`) never match,
+    so the two `resolved_speakers` value shapes coexist untouched.
+    """
+    sessions = (
+        list_workspace_sessions(workspace_id) if workspace_id is not None else list_sessions()
+    )
+    updated = 0
+    for s in sessions:
+        changed = False
+        for entry in (s.metadata.resolved_speakers or {}).values():
+            if isinstance(entry, dict) and entry.get("voiceprint_id") == voiceprint_id:
+                if entry.get("name") != name:
+                    entry["name"] = name
+                    changed = True
+        if changed:
+            set_metadata(s.session_id, s.metadata)
+            updated += 1
+    return updated
+
+
 def replace_session(session: Session) -> None:
     """Hard-replace a session row (delete + save). Use only for `--force` ingest;
     the default ingest path is `save_session` (raw-write-once)."""
