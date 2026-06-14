@@ -173,6 +173,8 @@ export default function MeetingPage({
             <TranscriptPanel
               sessionId={meeting.session_id}
               canView={meeting.can_view_transcript}
+              workspaceId={meeting.workspace_id ?? null}
+              canTag={Boolean(meeting.is_owner)}
             />
           </div>
         ) : null}

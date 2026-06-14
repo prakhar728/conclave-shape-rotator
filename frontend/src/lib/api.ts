@@ -219,6 +219,9 @@ export type MeetingView = {
   // without an extra round-trip.
   is_owner?: boolean;
   effective_visibility?: string;
+  // P4 — the meeting's workspace, used to POST speaker tags. Present in
+  // workspace-mode (authed user + workspace-bound session).
+  workspace_id?: string | null;
   // Transcript Saving — whether THIS viewer may load the raw transcript.
   // Drives the transcript panel's state (show vs. "not shared with you").
   can_view_transcript?: boolean;
@@ -244,11 +247,32 @@ export type TranscriptView = {
   segments: TranscriptSegment[];
 };
 
+// --- P4 speaker tagging (trust handshake) ---------------------------------
+
+export type TagSpeakerResult = {
+  label: string;
+  voiceprint_id: string;
+  status: "confirmed" | "pending" | string;
+  name: string | null;
+  proposal_id: string | null;
+};
+
 export const meetings = {
   get: (sessionId: string) =>
     apiFetch<MeetingView>(`/api/transcripts/sessions/${sessionId}`),
   transcript: (sessionId: string) =>
     apiFetch<TranscriptView>(`/api/transcripts/sessions/${sessionId}/transcript`),
+  tagSpeaker: (
+    workspaceId: string,
+    sessionId: string,
+    body: { label: string; name: string; email: string },
+  ) =>
+    apiFetch<TagSpeakerResult>(
+      `/api/workspaces/${encodeURIComponent(workspaceId)}/meetings/${encodeURIComponent(
+        sessionId,
+      )}/tag-speaker`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
 };
 
 // --- Magic links ----------------------------------------------------------
