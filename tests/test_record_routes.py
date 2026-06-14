@@ -44,6 +44,32 @@ def test_merge_drops_empty_text():
     assert out == []
 
 
+def test_merge_numbering_deterministic_independent_of_segment_order():
+    """Speaker N must be stable when identity segments arrive in a different
+    order (the live vs post passes don't agree on first-appearance order).
+    Numbering keys off voiceprint_id, not arrival order."""
+    out_fwd = merge_by_timestamp(_ASR, _IDENTITY)
+    out_rev = merge_by_timestamp(_ASR, list(reversed(_IDENTITY)))
+    assert [s["speaker"] for s in out_fwd] == [s["speaker"] for s in out_rev]
+    # vp_a < vp_b < vp_c → the anonymous one (vp_c) is the 3rd voiceprint.
+    assert out_fwd[2]["speaker"] == "Speaker 3"
+
+
+def test_merge_anonymous_numbered_by_sorted_voiceprint_id():
+    """All-anonymous speakers are numbered by sorted voiceprint_id, so the
+    same set of voiceprints always yields the same Speaker N."""
+    anon = [
+        {"start": 0.0, "end": 2.0, "name": None, "local_speaker": "s0", "voiceprint_id": "vp_z"},
+        {"start": 2.0, "end": 4.0, "name": None, "local_speaker": "s1", "voiceprint_id": "vp_a"},
+    ]
+    asr = [{"start": 0.0, "end": 2.0, "text": "first"},
+           {"start": 2.0, "end": 4.0, "text": "second"}]
+    out = merge_by_timestamp(asr, anon)
+    # sorted: vp_a=1, vp_z=2 → the vp_z window is Speaker 2, the vp_a window Speaker 1.
+    assert out[0]["speaker"] == "Speaker 2"
+    assert out[1]["speaker"] == "Speaker 1"
+
+
 # ── route contract ───────────────────────────────────────────
 
 @pytest.fixture(autouse=True)

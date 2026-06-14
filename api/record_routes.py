@@ -51,26 +51,57 @@ def _best_overlap(start: float, end: float, idsegs: list[dict]) -> Optional[dict
     return idsegs[0] if idsegs else None
 
 
+def _speaker_key(d: dict) -> str:
+    """Stable cross-pass identity key for one identity segment.
+
+    Prefers ``voiceprint_id`` (the only key that survives an engine swap and
+    agrees between the live and post passes — architecture C1/C2). Falls back
+    to ``local_speaker`` when no voiceprint is present: the live read-only pass
+    (P1) mints nothing, and the post confidence gate (P3) leaves
+    permanently-unnameable speakers at ``voiceprint_id=None`` — in both cases
+    two distinct speakers must stay distinct, so the engine-private cluster id
+    is the fallback. ``"spk"`` is the last resort for malformed segments.
+    """
+    return d.get("voiceprint_id") or d.get("local_speaker") or "spk"
+
+
+def _label_index(identity_segments: list[dict]) -> dict[str, int]:
+    """``{speaker_key: N}`` numbered 1..k by **sorted** key.
+
+    Deterministic by construction: the same set of voiceprints yields the same
+    ``Speaker N`` regardless of who spoke first or which engine ran. This is
+    what makes the live→post replace safe — re-running the post pass on the
+    same audio reproduces identical labels, so already-enriched ``said_by``
+    labels keep joining (architecture C3). The order across live (keyed by
+    ``local_speaker``) and post (keyed by minted ``voiceprint_id``) may differ
+    for *unknowns*, which is fine: the post pass replaces the live transcript
+    wholesale (architecture §10).
+    """
+    keys = sorted({_speaker_key(d) for d in identity_segments})
+    return {k: i + 1 for i, k in enumerate(keys)}
+
+
 def merge_by_timestamp(asr_segments: list[dict], identity_segments: list[dict]) -> list[dict]:
     """ASR words ∥ FPM identity → `[{speaker, text, start, end}]` (the batch merge).
 
-    Speakers are numbered globally by first appearance; a named voiceprint shows its
-    name, an anonymous/suppressed one shows `Speaker N`. So 2 known + 1 unknown reads
-    as `[Alice] … [Bob] … [Speaker 3] …`.
+    A named voiceprint shows its name; an anonymous/suppressed one shows
+    `Speaker N`, numbered **deterministically by sorted speaker key** (see
+    `_label_index`), not by first appearance. So 2 known + 1 unknown reads as
+    `[Alice] … [Bob] … [Speaker 3] …`, and the same identities always map to
+    the same labels across re-runs and the live→post swap.
+
+    `voiceprint_id` is intentionally **not** carried onto the returned segments:
+    it cannot survive the upload re-parse (`sources._normalize_json_segment`
+    strips to `{speaker,text,start,end}`) and must not ride on the immutable
+    `RawSegment`. It is persisted separately via `build_resolved_speakers`.
     """
     idsegs = sorted(identity_segments, key=lambda s: float(s.get("start") or 0.0))
-
-    def key_of(d: dict) -> str:
-        return d.get("local_speaker") or d.get("voiceprint_id") or "spk"
-
-    index: dict[str, int] = {}
-    for d in idsegs:
-        index.setdefault(key_of(d), len(index) + 1)
+    index = _label_index(identity_segments)
 
     def label_for(d: Optional[dict]) -> str:
         if d is None:
             return "Speaker 1"
-        return d.get("name") or f"Speaker {index.get(key_of(d), '?')}"
+        return d.get("name") or f"Speaker {index.get(_speaker_key(d), '?')}"
 
     out: list[dict] = []
     for a in asr_segments:
