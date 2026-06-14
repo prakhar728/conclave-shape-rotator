@@ -7,6 +7,8 @@ background enrichment chain is a no-op (as in test_upload_routes).
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -113,6 +115,50 @@ def test_build_resolved_speakers_graceful_without_voiceprint():
         "Speaker 1": {"voiceprint_id": None, "name": None, "confidence": None}
     }
     assert build_resolved_speakers([]) == {}
+
+
+# ── /v1/diarize NDJSON parse (C2 consumer, voiceprint_id guarantee) ──
+
+def test_parse_diarize_ndjson_backfills_voiceprint_from_streamed():
+    """If FPM's final transcript view is display-only (no voiceprint_id),
+    back-fill identity from the best-overlapping streamed line, which C2
+    guarantees carries it. Closes the cross-repo final-message ambiguity."""
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = "\n".join([
+        json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_a",
+                    "name": "alice@x.com", "confidence": 0.8, "local_speaker": "s0"}),
+        json.dumps({"start": 2.0, "end": 4.0, "voiceprint_id": "vp_b",
+                    "name": None, "confidence": 0.5, "local_speaker": "s1"}),
+        json.dumps({"type": "transcript", "segments": [
+            {"start": 0.0, "end": 2.0, "text": "hi", "local_speaker": "s0"},
+            {"start": 2.0, "end": 4.0, "text": "yo", "local_speaker": "s1"},
+        ]}),
+    ])
+    segs = _parse_diarize_ndjson(body)
+    assert segs[0]["voiceprint_id"] == "vp_a" and segs[0]["name"] == "alice@x.com"
+    assert segs[1]["voiceprint_id"] == "vp_b"
+
+
+def test_parse_diarize_ndjson_keeps_identity_bearing_final():
+    """When the final view already carries voiceprint_id it is authoritative —
+    never clobbered by the streamed (provisional) value."""
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = "\n".join([
+        json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_stream", "local_speaker": "s0"}),
+        json.dumps({"type": "transcript", "segments": [
+            {"start": 0.0, "end": 2.0, "voiceprint_id": "vp_final", "name": "X", "confidence": 0.9},
+        ]}),
+    ])
+    assert _parse_diarize_ndjson(body)[0]["voiceprint_id"] == "vp_final"
+
+
+def test_parse_diarize_ndjson_streamed_only_when_no_final():
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_a", "local_speaker": "s0"})
+    assert _parse_diarize_ndjson(body)[0]["voiceprint_id"] == "vp_a"
 
 
 # ── route contract ───────────────────────────────────────────

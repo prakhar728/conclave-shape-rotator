@@ -155,6 +155,51 @@ def build_resolved_speakers(identity_segments: list[dict]) -> dict[str, dict]:
     }
 
 
+#: Identity fields carried per C2 segment. Back-filled onto the final view from
+#: the streamed lines if the final ("transcript") message omits them.
+_C2_IDENTITY_FIELDS = ("voiceprint_id", "name", "confidence", "local_speaker")
+
+
+def _parse_diarize_ndjson(text: str) -> list[dict]:
+    """Parse a /v1/diarize NDJSON body → identity segments carrying voiceprint_id.
+
+    C2 streams per-segment lines `{start, end, voiceprint_id, name, decision,
+    confidence, local_speaker}` then a final `{"type":"transcript","segments":
+    [...]}` (seal-corrected). The final view is authoritative for boundaries and
+    is preferred — but B's persistence needs `voiceprint_id`, and FPM source
+    isn't in this repo to guarantee the final segments carry it. So if a final
+    segment lacks the `voiceprint_id` key, identity is back-filled from the
+    best-overlapping streamed line (which C2 *does* guarantee). Net: correct
+    whether or not FPM's final view is identity-bearing, no FPM change needed.
+    """
+    final, streamed = None, []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "transcript":
+            final = obj.get("segments", [])
+        elif "start" in obj:
+            streamed.append(obj)
+    if final is None:
+        return streamed
+    if streamed:
+        for seg in final:
+            if "voiceprint_id" in seg:
+                continue  # final already identity-bearing — authoritative, no clobber
+            src = _best_overlap(float(seg.get("start") or 0.0),
+                                float(seg.get("end") or 0.0), streamed)
+            if src:
+                for k in _C2_IDENTITY_FIELDS:
+                    if k in src:
+                        seg[k] = src[k]
+    return final
+
+
 async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
                        fpm_workspace: str) -> list[dict]:
     """Call FPM /v1/diarize (offline) → identity segments (final corrected view)."""
@@ -167,20 +212,7 @@ async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
     )
     if resp.status_code != 200:
         raise HTTPException(502, f"FPM diarize failed ({resp.status_code}): {resp.text[:200]}")
-    final, streamed = None, []
-    for line in resp.text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if obj.get("type") == "transcript":
-            final = obj.get("segments", [])
-        elif "start" in obj:
-            streamed.append(obj)
-    return final if final is not None else streamed
+    return _parse_diarize_ndjson(resp.text)
 
 
 def _ffmpeg_to_wav(audio: bytes) -> bytes:
