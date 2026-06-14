@@ -119,6 +119,42 @@ def merge_by_timestamp(asr_segments: list[dict], identity_segments: list[dict]) 
     return out
 
 
+def build_resolved_speakers(identity_segments: list[dict]) -> dict[str, dict]:
+    """FPM identity segments → C3 `resolved_speakers` (the P2 persistence).
+
+    `{display_label: {voiceprint_id, name, confidence}}`, keyed by the **same**
+    display label `merge_by_timestamp` assigns, so it joins the persisted
+    `RawSegment.speaker` (the immutable join key — architecture C3). One entry
+    per distinct speaker key; the representative `name`/`confidence` come from
+    the highest-confidence segment for that speaker.
+
+    `voiceprint_id` is carried here — not on the segments — precisely because it
+    can't survive the upload re-parse and must not live on the immutable raw
+    segment. The value shape is frozen to exactly three keys: engine-private
+    fields (`local_speaker`, `decision`) never cross the repo boundary. Total
+    over empty/partial input so it can never crash the ingest path.
+    """
+    index = _label_index(identity_segments)
+    best: dict[str, dict] = {}
+    for d in identity_segments:
+        key = _speaker_key(d)
+        conf = d.get("confidence")
+        conf_sort = float(conf) if conf is not None else -1.0
+        if key not in best or conf_sort > best[key]["_conf"]:
+            best[key] = {
+                "label": d.get("name") or f"Speaker {index[key]}",
+                "voiceprint_id": d.get("voiceprint_id"),
+                "name": d.get("name"),
+                "confidence": conf,
+                "_conf": conf_sort,
+            }
+    return {
+        v["label"]: {"voiceprint_id": v["voiceprint_id"], "name": v["name"],
+                     "confidence": v["confidence"]}
+        for v in best.values()
+    }
+
+
 async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
                        fpm_workspace: str) -> list[dict]:
     """Call FPM /v1/diarize (offline) → identity segments (final corrected view)."""

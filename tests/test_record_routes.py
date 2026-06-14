@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from api.record_routes import merge_by_timestamp
+from api.record_routes import build_resolved_speakers, merge_by_timestamp
 from storage.sqlite import _get_conn
 from transcripts import store
 
@@ -68,6 +68,51 @@ def test_merge_anonymous_numbered_by_sorted_voiceprint_id():
     # sorted: vp_a=1, vp_z=2 → the vp_z window is Speaker 2, the vp_a window Speaker 1.
     assert out[0]["speaker"] == "Speaker 2"
     assert out[1]["speaker"] == "Speaker 1"
+
+
+# ── build_resolved_speakers — C3 producer ────────────────────
+
+def test_build_resolved_speakers_c3_shape():
+    """Per-speaker C3 entry {voiceprint_id, name, confidence}, keyed by the
+    SAME display label merge_by_timestamp assigns (so it joins RawSegment)."""
+    out = build_resolved_speakers(_IDENTITY)
+    assert out == {
+        "alice@x.com": {"voiceprint_id": "vp_a", "name": "alice@x.com", "confidence": None},
+        "bob@x.com": {"voiceprint_id": "vp_b", "name": "bob@x.com", "confidence": None},
+        "Speaker 3": {"voiceprint_id": "vp_c", "name": None, "confidence": None},
+    }
+    # Labels match what merge produces — the join invariant.
+    assert set(out) == {s["speaker"] for s in merge_by_timestamp(_ASR, _IDENTITY)}
+
+
+def test_build_resolved_speakers_keeps_only_c3_keys():
+    """Never leak engine-private fields (local_speaker / decision) across the
+    repo boundary — C3 freezes the value shape to exactly three keys."""
+    seg = [{"start": 0.0, "end": 1.0, "name": "X", "voiceprint_id": "vp_x",
+            "local_speaker": "s0", "decision": "MATCH", "confidence": 0.8}]
+    entry = build_resolved_speakers(seg)["X"]
+    assert set(entry) == {"voiceprint_id", "name", "confidence"}
+
+
+def test_build_resolved_speakers_picks_max_confidence_segment():
+    """One entry per voiceprint; the representative confidence is the max seen."""
+    segs = [
+        {"start": 0.0, "end": 1.0, "voiceprint_id": "vp_x", "name": "X", "confidence": 0.4, "local_speaker": "s0"},
+        {"start": 1.0, "end": 2.0, "voiceprint_id": "vp_x", "name": "X", "confidence": 0.9, "local_speaker": "s0"},
+    ]
+    assert build_resolved_speakers(segs) == {
+        "X": {"voiceprint_id": "vp_x", "name": "X", "confidence": 0.9}
+    }
+
+
+def test_build_resolved_speakers_graceful_without_voiceprint():
+    """C2-degrade: segments with no voiceprint_id (older FPM / live read-only)
+    don't crash; keyed by local_speaker, voiceprint_id stored as None."""
+    segs = [{"start": 0.0, "end": 1.0, "name": None, "local_speaker": "s0"}]
+    assert build_resolved_speakers(segs) == {
+        "Speaker 1": {"voiceprint_id": None, "name": None, "confidence": None}
+    }
+    assert build_resolved_speakers([]) == {}
 
 
 # ── route contract ───────────────────────────────────────────
