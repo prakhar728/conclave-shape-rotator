@@ -308,6 +308,38 @@ def test_to_transcript_helper_deliberately_carries_raw():
     assert seg["speaker_name"] == "Shaw Walters"  # resolved from metadata
 
 
+def test_transcript_projects_voiceprint_name_without_rewriting_label():
+    """Branch B (P2): a C3 resolved_speakers entry {voiceprint_id, name,
+    confidence} projects its name at read time, while the display label stays
+    the immutable join key on both the raw segment and Signal.said_by."""
+    from api.transcripts_routes import to_transcript
+
+    sess = Session(
+        session_id="vp1",
+        raw_diarization=[
+            RawSegment(speaker="Speaker 3", text=_SECRET_RAW_TEXT, start=0.0, end=1.0)
+        ],
+        metadata=SessionMetadata(
+            date="2026-06-13", source="record",
+            resolved_speakers={
+                "Speaker 3": {"voiceprint_id": "vp_c", "name": "Carla", "confidence": 0.9}
+            },
+        ),
+        derived=Derived(
+            summary="ok",
+            signals=[Signal(kind="action_item", text="ship", said_by=["Speaker 3"])],
+        ),
+    )
+    seg = to_transcript(sess)["segments"][0]
+    assert seg["speaker"] == "Speaker 3"        # immutable join key — never rewritten
+    assert seg["speaker_name"] == "Carla"       # voiceprint_id → name, projected at read time
+
+    # The read path must not rewrite said_by (it stays the label, not the name).
+    view = to_view(sess)
+    assert view["signals"][0]["said_by"] == ["Speaker 3"]
+    assert sess.derived.signals[0].said_by == ["Speaker 3"]
+
+
 def test_transcript_endpoint_requires_auth(client):
     """Anonymous callers get 401 — no legacy `?viewer=` bypass for raw text."""
     _store_session("demo")
