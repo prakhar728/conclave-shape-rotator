@@ -30,3 +30,12 @@ def test_dev_login_sets_session_when_enabled(client, monkeypatch):
     # the session cookie now authenticates /auth/v1/me
     me = client.get("/auth/v1/me")
     assert me.status_code == 200 and me.json()["user"]["email"] == "alice@x.com"
+
+
+def test_dev_login_redirects_with_next(client, monkeypatch):
+    monkeypatch.setenv("CONCLAVE_DEV_LOGIN", "1")
+    r = client.get("/auth/v1/dev-login", params={"email": "a@x.com", "next": "/meeting/p4demo-m1"},
+                   follow_redirects=False)
+    assert r.status_code == 303 and r.headers["location"] == "/meeting/p4demo-m1"
+    # and we're signed in (the redirect carried the session cookie)
+    assert client.get("/auth/v1/me").status_code == 200

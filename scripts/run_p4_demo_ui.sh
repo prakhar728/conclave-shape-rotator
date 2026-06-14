@@ -82,10 +82,9 @@ cat <<EOF
 ────────────────────────────────────────────────────────────────────
 P4 demo is live. Click through:
 
- 1. Sign in as the host (sets the cookie):
-      http://localhost:$WEB_PORT/api/auth/v1/dev-login?email=$HOST_EMAIL
- 2. Open the meeting and tag a speaker (click a speaker name):
-      http://localhost:$WEB_PORT/meeting/p4demo-m1
+ 1. ONE CLICK — sign in as the host AND open the meeting (use a fresh/incognito window):
+      http://localhost:$WEB_PORT/api/auth/v1/dev-login?email=$HOST_EMAIL&next=/meeting/p4demo-m1
+ 2. In the meeting, click a speaker name to tag them:
       - tag a speaker as YOURSELF ($HOST_EMAIL) -> name fills in instantly everywhere
       - tag a speaker as $TARGET_EMAIL -> shows "pending"$( [ "${FPM_NOTIFY_EMAIL:-}" = "1" ] && echo " + sends a real email" )
  3. Confirm as the target (their dashboard):

@@ -16,6 +16,7 @@ from __future__ import annotations
 import os
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from auth import session as auth_session
@@ -153,12 +154,14 @@ def exchange_token_route(
 
 
 @router.get("/dev-login")
-def dev_login_route(email: str, response: Response, request: Request):
+def dev_login_route(
+    email: str, response: Response, request: Request, next: str | None = None,
+):
     """Local-demo bypass — sign in as `email` without Supabase. Gated on CONCLAVE_DEV_LOGIN.
 
     Mirrors FPM's `/auth/dev-login`: upsert the user, ensure a workspace, issue a session,
-    set the httpOnly cookie. Lets the P4 demo line a browser session up with seeded data
-    without a real OTP round-trip. NEVER enable in production.
+    set the httpOnly cookie. With `?next=/some/path` it 303-redirects there already signed in
+    (so one click lands you in the meeting); otherwise it returns JSON. NEVER enable in prod.
     """
     if os.environ.get("CONCLAVE_DEV_LOGIN", "").lower() not in ("1", "true", "yes"):
         raise HTTPException(status_code=404, detail="dev login disabled")
@@ -166,6 +169,10 @@ def dev_login_route(email: str, response: Response, request: Request):
     user = identity.upsert_user_by_supabase(supabase_id=f"sb-{e}", email=e)
     workspace = workspaces.ensure_personal_workspace(user["id"])
     token = auth_session.issue_session(user["id"])
+    if next and next.startswith("/"):  # relative paths only (no open redirect)
+        resp = RedirectResponse(next, status_code=303)
+        auth_session.set_session_cookie(resp, token, request=request)
+        return resp
     auth_session.set_session_cookie(response, token, request=request)
     return {"user": _user_to_public(user), "workspace": workspace}
 
