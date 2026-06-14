@@ -25,6 +25,29 @@ logger = logging.getLogger(__name__)
 # Synchronous setup runs at import — tests rely on this without needing to
 # enter the lifespan context.
 storage.init_db()
+
+
+def _apply_migrations() -> None:
+    """Apply Alembic migrations after init_db().
+
+    Per alembic/versions/0001_baseline: `_init_schema` (init_db) owns the 8
+    legacy tables; Alembic owns everything from 1.3 on (users, workspaces,
+    google_oauth_tokens, …). The intended fresh-DB flow is init_db → upgrade
+    head. Without this a fresh CVM DB is missing `users` etc. → 500 on login.
+    Idempotent: 0001 is a no-op and later migrations are version-tracked.
+    """
+    import os as _os
+
+    from alembic import command as _cmd
+    from alembic.config import Config as _Cfg
+
+    _here = _os.path.dirname(_os.path.abspath(__file__))
+    _cfg = _Cfg(_os.path.join(_here, "alembic.ini"))
+    _cfg.set_main_option("script_location", _os.path.join(_here, "alembic"))
+    _cmd.upgrade(_cfg, "head")
+
+
+_apply_migrations()
 register_skills()
 
 
