@@ -134,3 +134,14 @@ def test_unauthenticated_401(client):
     r = client.post("/api/workspaces/w/meetings/m/tag-speaker",
                     json={"label": "Speaker 1", "name": "X", "email": "x@x.com"})
     assert r.status_code == 401
+
+
+def test_session_detail_exposes_workspace_id(client):
+    """The meeting view carries workspace_id so the UI knows where to POST tags."""
+    user = _login(client)
+    wsid = _wsid(client)
+    _make_session("ws_detail", wsid, user["id"],
+                  {"Speaker 1": {"voiceprint_id": "vp_d", "name": None, "confidence": 0.5}})
+    r = client.get("/transcripts/sessions/ws_detail")
+    assert r.status_code == 200
+    assert r.json()["workspace_id"] == wsid

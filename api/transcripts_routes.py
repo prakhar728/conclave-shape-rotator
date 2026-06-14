@@ -442,6 +442,9 @@ def get_session(
         # typed visibility value (separate from the legacy JSON one).
         view["effective_visibility"] = row.get("visibility")
         view["is_owner"] = row.get("owner_user_id") == user["id"]
+        # The meeting's workspace — the UI needs it to POST speaker tags
+        # (/api/workspaces/{workspace_id}/meetings/{id}/tag-speaker).
+        view["workspace_id"] = row.get("workspace_id")
         # Lets the transcript panel pick its state (show transcript vs.
         # "not shared with you") without a round-trip that 403s.
         view["can_view_transcript"] = can_see_transcript(user, row)
