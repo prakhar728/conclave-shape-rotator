@@ -34,7 +34,13 @@ class RawSegment(BaseModel):
 class SessionMetadata(BaseModel):
     date: str  # ISO date (YYYY-MM-DD), used for Layer-2 date-range queries
     source: str  # 'voxterm', 'whisper', 'assemblyai', ...
-    # label -> {name, confidence, ...}; empty until Layer-2 speaker resolution.
+    # label -> speaker metadata; empty until speaker resolution runs. Two value
+    # shapes share this field (mutable JSON, no SQL migration):
+    #   - record/voiceprint path (C3): {voiceprint_id, name, confidence} — the
+    #     stable key P4 (email binding) / P5 (redaction) build on. name is a
+    #     read-time projection of voiceprint_id; the label string is the
+    #     immutable join key for already-enriched Signal.said_by.
+    #   - legacy cohort path: {record_id, name, mock} (identity.resolve_speakers).
     resolved_speakers: dict[str, Any] = Field(default_factory=dict)
     tags: list[str] = Field(default_factory=list)
     pipeline_version: str = PIPELINE_VERSION

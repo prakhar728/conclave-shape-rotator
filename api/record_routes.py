@@ -51,26 +51,57 @@ def _best_overlap(start: float, end: float, idsegs: list[dict]) -> Optional[dict
     return idsegs[0] if idsegs else None
 
 
+def _speaker_key(d: dict) -> str:
+    """Stable cross-pass identity key for one identity segment.
+
+    Prefers ``voiceprint_id`` (the only key that survives an engine swap and
+    agrees between the live and post passes — architecture C1/C2). Falls back
+    to ``local_speaker`` when no voiceprint is present: the live read-only pass
+    (P1) mints nothing, and the post confidence gate (P3) leaves
+    permanently-unnameable speakers at ``voiceprint_id=None`` — in both cases
+    two distinct speakers must stay distinct, so the engine-private cluster id
+    is the fallback. ``"spk"`` is the last resort for malformed segments.
+    """
+    return d.get("voiceprint_id") or d.get("local_speaker") or "spk"
+
+
+def _label_index(identity_segments: list[dict]) -> dict[str, int]:
+    """``{speaker_key: N}`` numbered 1..k by **sorted** key.
+
+    Deterministic by construction: the same set of voiceprints yields the same
+    ``Speaker N`` regardless of who spoke first or which engine ran. This is
+    what makes the live→post replace safe — re-running the post pass on the
+    same audio reproduces identical labels, so already-enriched ``said_by``
+    labels keep joining (architecture C3). The order across live (keyed by
+    ``local_speaker``) and post (keyed by minted ``voiceprint_id``) may differ
+    for *unknowns*, which is fine: the post pass replaces the live transcript
+    wholesale (architecture §10).
+    """
+    keys = sorted({_speaker_key(d) for d in identity_segments})
+    return {k: i + 1 for i, k in enumerate(keys)}
+
+
 def merge_by_timestamp(asr_segments: list[dict], identity_segments: list[dict]) -> list[dict]:
     """ASR words ∥ FPM identity → `[{speaker, text, start, end}]` (the batch merge).
 
-    Speakers are numbered globally by first appearance; a named voiceprint shows its
-    name, an anonymous/suppressed one shows `Speaker N`. So 2 known + 1 unknown reads
-    as `[Alice] … [Bob] … [Speaker 3] …`.
+    A named voiceprint shows its name; an anonymous/suppressed one shows
+    `Speaker N`, numbered **deterministically by sorted speaker key** (see
+    `_label_index`), not by first appearance. So 2 known + 1 unknown reads as
+    `[Alice] … [Bob] … [Speaker 3] …`, and the same identities always map to
+    the same labels across re-runs and the live→post swap.
+
+    `voiceprint_id` is intentionally **not** carried onto the returned segments:
+    it cannot survive the upload re-parse (`sources._normalize_json_segment`
+    strips to `{speaker,text,start,end}`) and must not ride on the immutable
+    `RawSegment`. It is persisted separately via `build_resolved_speakers`.
     """
     idsegs = sorted(identity_segments, key=lambda s: float(s.get("start") or 0.0))
-
-    def key_of(d: dict) -> str:
-        return d.get("local_speaker") or d.get("voiceprint_id") or "spk"
-
-    index: dict[str, int] = {}
-    for d in idsegs:
-        index.setdefault(key_of(d), len(index) + 1)
+    index = _label_index(identity_segments)
 
     def label_for(d: Optional[dict]) -> str:
         if d is None:
             return "Speaker 1"
-        return d.get("name") or f"Speaker {index.get(key_of(d), '?')}"
+        return d.get("name") or f"Speaker {index.get(_speaker_key(d), '?')}"
 
     out: list[dict] = []
     for a in asr_segments:
@@ -88,6 +119,87 @@ def merge_by_timestamp(asr_segments: list[dict], identity_segments: list[dict]) 
     return out
 
 
+def build_resolved_speakers(identity_segments: list[dict]) -> dict[str, dict]:
+    """FPM identity segments → C3 `resolved_speakers` (the P2 persistence).
+
+    `{display_label: {voiceprint_id, name, confidence}}`, keyed by the **same**
+    display label `merge_by_timestamp` assigns, so it joins the persisted
+    `RawSegment.speaker` (the immutable join key — architecture C3). One entry
+    per distinct speaker key; the representative `name`/`confidence` come from
+    the highest-confidence segment for that speaker.
+
+    `voiceprint_id` is carried here — not on the segments — precisely because it
+    can't survive the upload re-parse and must not live on the immutable raw
+    segment. The value shape is frozen to exactly three keys: engine-private
+    fields (`local_speaker`, `decision`) never cross the repo boundary. Total
+    over empty/partial input so it can never crash the ingest path.
+    """
+    index = _label_index(identity_segments)
+    best: dict[str, dict] = {}
+    for d in identity_segments:
+        key = _speaker_key(d)
+        conf = d.get("confidence")
+        conf_sort = float(conf) if conf is not None else -1.0
+        if key not in best or conf_sort > best[key]["_conf"]:
+            best[key] = {
+                "label": d.get("name") or f"Speaker {index[key]}",
+                "voiceprint_id": d.get("voiceprint_id"),
+                "name": d.get("name"),
+                "confidence": conf,
+                "_conf": conf_sort,
+            }
+    return {
+        v["label"]: {"voiceprint_id": v["voiceprint_id"], "name": v["name"],
+                     "confidence": v["confidence"]}
+        for v in best.values()
+    }
+
+
+#: Identity fields carried per C2 segment. Back-filled onto the final view from
+#: the streamed lines if the final ("transcript") message omits them.
+_C2_IDENTITY_FIELDS = ("voiceprint_id", "name", "confidence", "local_speaker")
+
+
+def _parse_diarize_ndjson(text: str) -> list[dict]:
+    """Parse a /v1/diarize NDJSON body → identity segments carrying voiceprint_id.
+
+    C2 streams per-segment lines `{start, end, voiceprint_id, name, decision,
+    confidence, local_speaker}` then a final `{"type":"transcript","segments":
+    [...]}` (seal-corrected). The final view is authoritative for boundaries and
+    is preferred — but B's persistence needs `voiceprint_id`, and FPM source
+    isn't in this repo to guarantee the final segments carry it. So if a final
+    segment lacks the `voiceprint_id` key, identity is back-filled from the
+    best-overlapping streamed line (which C2 *does* guarantee). Net: correct
+    whether or not FPM's final view is identity-bearing, no FPM change needed.
+    """
+    final, streamed = None, []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if obj.get("type") == "transcript":
+            final = obj.get("segments", [])
+        elif "start" in obj:
+            streamed.append(obj)
+    if final is None:
+        return streamed
+    if streamed:
+        for seg in final:
+            if "voiceprint_id" in seg:
+                continue  # final already identity-bearing — authoritative, no clobber
+            src = _best_overlap(float(seg.get("start") or 0.0),
+                                float(seg.get("end") or 0.0), streamed)
+            if src:
+                for k in _C2_IDENTITY_FIELDS:
+                    if k in src:
+                        seg[k] = src[k]
+    return final
+
+
 async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
                        fpm_workspace: str) -> list[dict]:
     """Call FPM /v1/diarize (offline) → identity segments (final corrected view)."""
@@ -100,20 +212,7 @@ async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
     )
     if resp.status_code != 200:
         raise HTTPException(502, f"FPM diarize failed ({resp.status_code}): {resp.text[:200]}")
-    final, streamed = None, []
-    for line in resp.text.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if obj.get("type") == "transcript":
-            final = obj.get("segments", [])
-        elif "start" in obj:
-            streamed.append(obj)
-    return final if final is not None else streamed
+    return _parse_diarize_ndjson(resp.text)
 
 
 def _ffmpeg_to_wav(audio: bytes) -> bytes:
@@ -222,11 +321,14 @@ async def record_meeting(
             content={"session_id": session_id, "is_processing": False, "status": "duplicate"},
         )
 
-    from transcripts.identity import resolve_speakers
     from transcripts.parse import build_session
 
     session = build_session(ni, session_id=session_id)
-    session.metadata.resolved_speakers = resolve_speakers(session)
+    # Build resolved_speakers from the FPM identity segments (carrying
+    # voiceprint_id), NOT the cohort name-matcher: a recorded meeting's labels
+    # are FPM emails/`Speaker N`, a different keyspace from the cohort roster.
+    # voiceprint_id is the stable key P4/P5 build on (architecture C3).
+    session.metadata.resolved_speakers = build_resolved_speakers(identity)
     if intent and intent.strip():
         session.metadata.raw_intent = intent.strip()
     store.save_session(session)

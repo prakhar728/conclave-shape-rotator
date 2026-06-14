@@ -7,10 +7,12 @@ background enrichment chain is a no-op (as in test_upload_routes).
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from fastapi.testclient import TestClient
 
-from api.record_routes import merge_by_timestamp
+from api.record_routes import build_resolved_speakers, merge_by_timestamp
 from storage.sqlite import _get_conn
 from transcripts import store
 
@@ -42,6 +44,121 @@ def test_merge_no_identity_falls_back_to_single_speaker():
 def test_merge_drops_empty_text():
     out = merge_by_timestamp([{"start": 0, "end": 1, "text": "  "}], _IDENTITY)
     assert out == []
+
+
+def test_merge_numbering_deterministic_independent_of_segment_order():
+    """Speaker N must be stable when identity segments arrive in a different
+    order (the live vs post passes don't agree on first-appearance order).
+    Numbering keys off voiceprint_id, not arrival order."""
+    out_fwd = merge_by_timestamp(_ASR, _IDENTITY)
+    out_rev = merge_by_timestamp(_ASR, list(reversed(_IDENTITY)))
+    assert [s["speaker"] for s in out_fwd] == [s["speaker"] for s in out_rev]
+    # vp_a < vp_b < vp_c → the anonymous one (vp_c) is the 3rd voiceprint.
+    assert out_fwd[2]["speaker"] == "Speaker 3"
+
+
+def test_merge_anonymous_numbered_by_sorted_voiceprint_id():
+    """All-anonymous speakers are numbered by sorted voiceprint_id, so the
+    same set of voiceprints always yields the same Speaker N."""
+    anon = [
+        {"start": 0.0, "end": 2.0, "name": None, "local_speaker": "s0", "voiceprint_id": "vp_z"},
+        {"start": 2.0, "end": 4.0, "name": None, "local_speaker": "s1", "voiceprint_id": "vp_a"},
+    ]
+    asr = [{"start": 0.0, "end": 2.0, "text": "first"},
+           {"start": 2.0, "end": 4.0, "text": "second"}]
+    out = merge_by_timestamp(asr, anon)
+    # sorted: vp_a=1, vp_z=2 → the vp_z window is Speaker 2, the vp_a window Speaker 1.
+    assert out[0]["speaker"] == "Speaker 2"
+    assert out[1]["speaker"] == "Speaker 1"
+
+
+# ── build_resolved_speakers — C3 producer ────────────────────
+
+def test_build_resolved_speakers_c3_shape():
+    """Per-speaker C3 entry {voiceprint_id, name, confidence}, keyed by the
+    SAME display label merge_by_timestamp assigns (so it joins RawSegment)."""
+    out = build_resolved_speakers(_IDENTITY)
+    assert out == {
+        "alice@x.com": {"voiceprint_id": "vp_a", "name": "alice@x.com", "confidence": None},
+        "bob@x.com": {"voiceprint_id": "vp_b", "name": "bob@x.com", "confidence": None},
+        "Speaker 3": {"voiceprint_id": "vp_c", "name": None, "confidence": None},
+    }
+    # Labels match what merge produces — the join invariant.
+    assert set(out) == {s["speaker"] for s in merge_by_timestamp(_ASR, _IDENTITY)}
+
+
+def test_build_resolved_speakers_keeps_only_c3_keys():
+    """Never leak engine-private fields (local_speaker / decision) across the
+    repo boundary — C3 freezes the value shape to exactly three keys."""
+    seg = [{"start": 0.0, "end": 1.0, "name": "X", "voiceprint_id": "vp_x",
+            "local_speaker": "s0", "decision": "MATCH", "confidence": 0.8}]
+    entry = build_resolved_speakers(seg)["X"]
+    assert set(entry) == {"voiceprint_id", "name", "confidence"}
+
+
+def test_build_resolved_speakers_picks_max_confidence_segment():
+    """One entry per voiceprint; the representative confidence is the max seen."""
+    segs = [
+        {"start": 0.0, "end": 1.0, "voiceprint_id": "vp_x", "name": "X", "confidence": 0.4, "local_speaker": "s0"},
+        {"start": 1.0, "end": 2.0, "voiceprint_id": "vp_x", "name": "X", "confidence": 0.9, "local_speaker": "s0"},
+    ]
+    assert build_resolved_speakers(segs) == {
+        "X": {"voiceprint_id": "vp_x", "name": "X", "confidence": 0.9}
+    }
+
+
+def test_build_resolved_speakers_graceful_without_voiceprint():
+    """C2-degrade: segments with no voiceprint_id (older FPM / live read-only)
+    don't crash; keyed by local_speaker, voiceprint_id stored as None."""
+    segs = [{"start": 0.0, "end": 1.0, "name": None, "local_speaker": "s0"}]
+    assert build_resolved_speakers(segs) == {
+        "Speaker 1": {"voiceprint_id": None, "name": None, "confidence": None}
+    }
+    assert build_resolved_speakers([]) == {}
+
+
+# ── /v1/diarize NDJSON parse (C2 consumer, voiceprint_id guarantee) ──
+
+def test_parse_diarize_ndjson_backfills_voiceprint_from_streamed():
+    """If FPM's final transcript view is display-only (no voiceprint_id),
+    back-fill identity from the best-overlapping streamed line, which C2
+    guarantees carries it. Closes the cross-repo final-message ambiguity."""
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = "\n".join([
+        json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_a",
+                    "name": "alice@x.com", "confidence": 0.8, "local_speaker": "s0"}),
+        json.dumps({"start": 2.0, "end": 4.0, "voiceprint_id": "vp_b",
+                    "name": None, "confidence": 0.5, "local_speaker": "s1"}),
+        json.dumps({"type": "transcript", "segments": [
+            {"start": 0.0, "end": 2.0, "text": "hi", "local_speaker": "s0"},
+            {"start": 2.0, "end": 4.0, "text": "yo", "local_speaker": "s1"},
+        ]}),
+    ])
+    segs = _parse_diarize_ndjson(body)
+    assert segs[0]["voiceprint_id"] == "vp_a" and segs[0]["name"] == "alice@x.com"
+    assert segs[1]["voiceprint_id"] == "vp_b"
+
+
+def test_parse_diarize_ndjson_keeps_identity_bearing_final():
+    """When the final view already carries voiceprint_id it is authoritative —
+    never clobbered by the streamed (provisional) value."""
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = "\n".join([
+        json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_stream", "local_speaker": "s0"}),
+        json.dumps({"type": "transcript", "segments": [
+            {"start": 0.0, "end": 2.0, "voiceprint_id": "vp_final", "name": "X", "confidence": 0.9},
+        ]}),
+    ])
+    assert _parse_diarize_ndjson(body)[0]["voiceprint_id"] == "vp_final"
+
+
+def test_parse_diarize_ndjson_streamed_only_when_no_final():
+    from api.record_routes import _parse_diarize_ndjson
+
+    body = json.dumps({"start": 0.0, "end": 2.0, "voiceprint_id": "vp_a", "local_speaker": "s0"})
+    assert _parse_diarize_ndjson(body)[0]["voiceprint_id"] == "vp_a"
 
 
 # ── route contract ───────────────────────────────────────────
@@ -137,6 +254,27 @@ def test_record_happy_path_persists_identified_transcript(client: TestClient, mo
     assert speakers == ["alice@x.com", "bob@x.com", "Speaker 3"]
     fields = store.get_workspace_fields(sid)
     assert fields["workspace_id"] == wsid and fields["visibility"] == "owner-only"
+
+
+def test_record_persists_resolved_speakers_c3(client: TestClient, monkeypatch):
+    """The recorded meeting's resolved_speakers carries voiceprint_id per C3,
+    keyed by the display label, with exactly {voiceprint_id, name, confidence}."""
+    _enable_record(monkeypatch)
+    _login(client, "alice@example.com")
+    wsid = _my_workspace_id(client)
+    r = client.post(f"/api/workspaces/{wsid}/record", files=_audio())
+    assert r.status_code == 202, r.text
+    sid = r.json()["session_id"]
+
+    session = store.load_session(sid)
+    rs = session.metadata.resolved_speakers
+    assert rs["alice@x.com"] == {"voiceprint_id": "vp_a", "name": "alice@x.com", "confidence": None}
+    assert rs["bob@x.com"]["voiceprint_id"] == "vp_b"
+    assert rs["Speaker 3"] == {"voiceprint_id": "vp_c", "name": None, "confidence": None}
+    for entry in rs.values():
+        assert set(entry) == {"voiceprint_id", "name", "confidence"}
+    # The display label stays the immutable join key on the raw segments.
+    assert [s.speaker for s in session.raw_diarization] == ["alice@x.com", "bob@x.com", "Speaker 3"]
 
 
 def test_record_nonmember_404(client: TestClient, monkeypatch):
