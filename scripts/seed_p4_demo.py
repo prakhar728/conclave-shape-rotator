@@ -54,17 +54,22 @@ def main() -> None:
     token = auth_session.issue_session(user["id"])
     fpm_ws = settings.fpm_workspace_for(ws["id"])
 
-    # Two meetings, same voiceprint, deliberately different display labels.
-    meetings = {"p4demo-m1": a.label, "p4demo-m2": "Speaker 1"}
-    for sid, lbl in meetings.items():
+    # m1+m2 share the primary voiceprint (deliberately different labels → cross-label re-resolve);
+    # m3 carries a second voiceprint, used by the Phase-2 deny arm.
+    vid2 = a.voiceprint_id + "2"
+    meetings = {
+        "p4demo-m1": (a.label, a.voiceprint_id),
+        "p4demo-m2": ("Speaker 1", a.voiceprint_id),
+        "p4demo-m3": ("Speaker 1", vid2),
+    }
+    for sid, (lbl, vid) in meetings.items():
         _sqlite.delete_transcript_session(sid)  # clean slate for re-runs
         sess = Session(
             session_id=sid,
             raw_diarization=[RawSegment(speaker=lbl, text=f"{lbl}: hello from {sid}", start=0.0)],
             metadata=SessionMetadata(
                 date="2026-06-14", source="record",
-                resolved_speakers={lbl: {"voiceprint_id": a.voiceprint_id,
-                                         "name": None, "confidence": 0.9}},
+                resolved_speakers={lbl: {"voiceprint_id": vid, "name": None, "confidence": 0.9}},
             ),
             derived=Derived(summary="demo",
                             signals=[Signal(kind="action_item", text="t", said_by=[lbl])]),
@@ -80,7 +85,9 @@ def main() -> None:
         f.write(f"export GATE_FPM_WORKSPACE={fpm_ws}\n")
         f.write("export GATE_SESSION=p4demo-m1\n")
         f.write("export GATE_SECOND_SESSION=p4demo-m2\n")
+        f.write("export GATE_DENY_SESSION=p4demo-m3\n")
         f.write(f"export GATE_LABEL={a.label!r}\n")
+        f.write("export GATE_DENY_LABEL='Speaker 1'\n")
         f.write(f"export GATE_EMAIL={a.email}\n")
         f.write(f"export GATE_NAME={a.name!r}\n")
     print(f"[conclave-seed] user={a.email} ws={ws['id']} fpm_ws={fpm_ws} "
