@@ -233,3 +233,23 @@ change + a re-embed. The OI-7 fix **de-risks this** — resolution becomes lexic
 + LLM-tiebreak, so the embedder is no longer the arbiter of entity identity, and the
 remaining embeddings (chunk retrieval + entity definitions) work on any decent
 sentence-embedder.
+
+---
+
+## OI-6 — Connections Stage-2 LLM: live vs batch placement  ·  DEFERRED
+*Raised: 2026-06-08 (Phase 3 v1, `companion/connect_reason.py`).*
+
+The connection-judge LLM (`config.get_llm`, in-TEE RedPill) is the precision
+layer over the Stage-1 graph. **It is an LLM, and Conclave's core thesis is
+"no LLM on the query path — operator can't read your data."** v1 runs it
+OFFLINE (the `collab_review.py` runner), so the live query path stays
+pure-SQL and the thesis holds. Productionizing requires a decision:
+
+- **Batch / nightly enrichment (recommended):** judge offline, write validated
+  suggestions back to the DB; live path just reads them → query path stays
+  LLM-free, operator-blind claim intact.
+- **Live in-TEE at query time:** fresher, still in-TEE, but puts an LLM on the
+  live query path (weakens the "pure-SQL query path" story).
+
+**Resolve before productionizing.** Until then, keep Stage-2 invocation
+offline/batch only.

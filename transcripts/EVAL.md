@@ -452,3 +452,64 @@ touched this branch — this is the existing baseline, flagged for the handover.
 **Entity resolution is MVP-ready** (V-measure 0.96 vs gold; 0 black holes; 4.75×
 faster ingest). **Insights are noisy** (over-extracted) — a separate, pre-existing
 quality item, not this fix's scope. Next: re-run Connections on the clean layer.
+
+---
+
+## H2 — connection-judge prompt bake-off (2026-06-09)
+
+The Connections feature (Phase 3 v1) is two stages: a symbolic graph
+matcher (Stage 1, `companion/collab_match.py`) that over-produces candidate
+"A is stuck on X → B knows X" connections, and an **LLM judge** (Stage 2,
+`companion/connect_reason.py`, the in-TEE gemma model) that decides which to
+surface. This record picks the judge's prompt **empirically** rather than
+shipping one by default.
+
+### Method (isolated, no-leakage)
+- **Candidates:** 30 real Stage-1 outputs over the cohort DB
+  (`scripts/eval/dump_candidates.py`; written to a file, never the
+  orchestrator's context).
+- **Gold (cross-family from the gemma judge):** a **labeler** subagent
+  assigned `{invalid|unsure|strong}` on one criterion ("does the capability
+  address the *specific* need, or is X a coincidental shared keyword?"); a
+  separate **verifier** subagent independently audited the verdicts seeing
+  only candidates + verdicts (not the labeler's reasoning). Agreement
+  **27/30**; the 3 disputed dropped → 27-candidate gold (19 invalid, 8
+  unsure, **0 strong** — Stage-1 surfaced no clearly-good connections on this
+  corpus). Labeler/verifier are Claude (cross-family from the gemma judge);
+  small + model-labelled → relative comparison only.
+- **Bake-off:** each prompt run on the **production gemma judge** over the
+  gold (`scripts/eval/judge_bakeoff.py`). Pre-registered rule: max
+  invalid-recall s.t. strong-recall ≥ 0.8 floor.
+
+### Results (n=27, gemma judge)
+
+| prompt | exact acc | invalid-recall | invalid-prec | strong-recall |
+|---|---|---|---|---|
+| v1_strict (naive) | 0.11 | 0.16 | 0.30 | n/a (0 gold) |
+| v2_fewshot | 0.44 | 0.58 | 0.61 | n/a |
+| **v3_rubric** | **0.44** | **0.63** | 0.60 | n/a |
+
+**Decision: `v3_rubric` is the production judge prompt** (set as
+`DEFAULT_PROMPT`). Strong-recall floor was vacuous (0 strong in gold) → ranked
+on invalid-recall.
+
+### Reading
+1. **Don't ship prompts blind:** the naive strict prompt (v1) caught only
+   **16%** of coincidental matches (it hedged them to `unsure`, which would
+   still surface). An explicit rubric (v3) ~4×'d that to **63%** at similar
+   precision. This is the bake-off paying for itself.
+2. **The judge is useful but not yet a strong filter:** even v3 misses ~37%
+   of coincidental connections. Room to improve (more few-shot, stronger
+   model) — tracked.
+3. **0 strong candidates** is itself a finding: on this corpus, Stage-1's
+   loose need↔entity link (turn co-occurrence) produced only coincidental /
+   unconfirmed connections — no clearly-good ones to affirm. Tightening that
+   link is the Stage-1 lever; the judge can't manufacture strong matches that
+   the graph never surfaced.
+
+### Caveats
+- Gold is small (27) and Claude-labelled (cross-family from gemma, but one
+  model's opinion + insider-verifiable). Relative prompt ranking is sound;
+  the numbers are not an absolute accuracy claim.
+- Re-run the bake-off (`judge_bakeoff.py`) if `PROMPTS` change — it's the
+  regression guard on the prompt choice.
