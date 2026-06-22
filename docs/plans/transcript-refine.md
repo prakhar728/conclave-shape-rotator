@@ -366,5 +366,71 @@ Remaining, in order:
   - **8b** `approve_and_build` re-derives enrich over the corrected v2 + clears
     stale; Part-2 detailed NOT run. IN-1/4/5, G-11.
 - Order: 6a→6b→6c→7a→7b→8a→8b, each test-gated before the next.
+
+## 18. Frontend build increments (commit-level)
+
+Stack: **Next 16.2.7 / React 19.2.4 / Tailwind 4**. The editor is a NEW additive
+route `app/meeting/[id]/refine/page.tsx` — existing read-only meeting view +
+`transcript-panel` untouched; promote/retire after proven. Per-user (NOT
+collaborative). Each commit: code + RTL/Vitest test → green → commit → next.
+
+**The real API contract (what the client calls — verify the path prefix in F1a):**
+`GET /transcripts/sessions/{id}/v2` → `{session_id, status:"draft"|"approved",
+approved_at, insights_stale, segments:[{segment_id, speaker_label, speaker_name,
+tokens:string[]}], annotations:[{span:{segment_id,token_start,token_end}, surface,
+state:"known"|"candidate"|"oov", type, source, confidence}]}` ·
+`POST …/v2/edit-token {segment_id,token_idx,new_text}`→`{decision,v2}` ·
+`POST …/v2/tag-entity {segment_id,token_start,token_end,surface,type}`→`{v2}` ·
+`POST …/v2/assign-speaker {segment_id,name}`→`{v2}` ·
+`POST …/approve`→`{session_id,status}` ·
+`GET …/suggestions/speakers`→`{speakers:string[]}` ·
+`GET /transcripts/suggestions/vocab?prefix=`→`{vocab:string[]}`.
+
+**Reuse:** `apiFetch` (lib/api.ts — relative path, httpOnly cookie auto-attached,
+`ApiError`), `PageLoading`/`PageError`, `AppShell`, the existing `TagForm`
+(transcript-panel.tsx), the entity-tint pattern (lib/entity-tints.ts), `ui/*`.
+
+### Increments
+- **F0 — test runner.** Install `vitest @vitejs/plugin-react jsdom
+  @testing-library/react @testing-library/jest-dom`; `vitest.config.ts` (jsdom,
+  `@`→src alias); `package.json` `test` script. Gate: a trivial smoke test runs.
+- **F1a — API client.** Add a `refineApi` namespace to `lib/api.ts` with the REAL
+  types + calls above. **Verify the path prefix** — the transcripts router is
+  `/transcripts` (NO `/api`); confirm the `next.config.ts` rewrite (an existing
+  transcripts call in `api.ts` settles it). Gate: unit test mocks `fetch`, asserts
+  URL/method/body per call.
+- **F1b — route shell (render draft).** `app/meeting/[id]/refine/page.tsx`:
+  `"use client"`, `params: Promise<{id}>` + `use(params)`, fetch `auth.me()` +
+  `refineApi.getV2(id)` in parallel; PageLoading/PageError (401→login, 403→no
+  access, 404→no draft); AppShell; render segments read-only (speaker_name||label
+  + joined tokens). Gate: RTL renders a mocked draft (segments+speakers); 404 path.
+- **F1c — token-state rendering (FE-1).** Render each token as a `<span>`; map
+  `annotations[].span` ranges → token tints via a new `token-tints.ts`
+  (known/candidate/oov, mirroring entity-tints). Gate: RTL — known/candidate/oov
+  tokens get the right classes; plain tokens none.
+- **F2a — edit-token (FE local-first).** Click token → inline input →
+  `refineApi.editToken()`; **optimistic local update first**, network async;
+  handle 409 (approved)/400 (range). Gate: RTL — edit calls editToken w/ right
+  args + UI updates without awaiting network; 409 shows a notice.
+- **F2b — tag-entity (FE-5).** Select a span → `entity-tag-form` (type select) →
+  `refineApi.tagEntity()`; span renders `known` after. Gate: RTL — tag calls
+  tagEntity w/ `{segment_id,token_start,token_end,surface,type}`.
+- **F2c — assign-speaker + suggestions (FE-4).** Adapt `TagForm` (name-only) →
+  `refineApi.assignSpeaker()`; speaker chips from `suggestSpeakers`; vocab
+  autocomplete from `suggestVocab`. Gate: RTL — assign calls assignSpeaker;
+  suggestion chips render (not blank).
+- **F3 — stale badge + approve (FE-3).** Passive "⟳ updates on approve" badge when
+  `insights_stale`; Approve button → `refineApi.approve()` → route to
+  `/meeting/[id]`. Gate: RTL — badge shows when stale; approve calls + navigates.
+
+### Gotchas (Next 16 / React 19)
+- Dynamic params are `Promise<{...}>` + `use(params)` — both required.
+- Tailwind v4 `@theme` tokens (globals.css); class names resolve from tokens, no
+  hardcoded hex. Add token-state colors there.
+- Owner-gating: the backend 403s non-owners — the source of truth; don't gate
+  client-only.
+- The page shows v1 insights marked stale; the detailed re-derive is Part 2 — out
+  of scope here.
+- Order: F0→F1a→F1b→F1c→F2a→F2b→F2c→F3, each test-gated.
 - **9 — trust state** — BLOCKED on §12 #3/#7.
 - **F0–F3 — frontend** (test-runner is net-new) — BLOCKED on §12 #4/#5.
