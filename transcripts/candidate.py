@@ -1,0 +1,68 @@
+"""Candidate detection — the spaCy pass that finds entity candidates
+(docs/plans/transcript-refine.md §15).
+
+Isolated behind this one module so the deterministic test tier can monkeypatch
+`spacy_pass` without the 15 MB model, and CI stays green without spaCy. v0:
+noun-phrase candidates only; NER (`ent.label_` pre-typing) stays dormant for v1.
+
+The pass OWNS tokenization: `spacy_pass` returns `(tokens, spans)` where spans are
+token-relative to those tokens — so the v2 layer should store these tokens (5c),
+keeping candidate anchors aligned with the editable token list.
+"""
+from __future__ import annotations
+
+from functools import lru_cache
+from typing import Optional
+
+from pydantic import BaseModel
+
+#: POS tags whose chunks carry no entity signal — a noun_chunk made up only of
+#: these (e.g. "we", "that thing") is dropped.
+_FUNCTION_POS = {"PRON", "DET", "ADP", "CCONJ", "CONJ", "PART", "PUNCT", "SCONJ"}
+
+
+class CandidateSpan(BaseModel):
+    """A candidate detected in one segment's text. Token-relative anchor."""
+
+    token_start: int
+    token_end: int  # exclusive
+    surface: str
+    state: str = "candidate"  # known | candidate | oov (5b assigns)
+    type: Optional[str] = None  # NER pre-type lands here in v1
+    source: str = "nlp"
+
+
+@lru_cache(maxsize=1)
+def _nlp():
+    import spacy
+    return spacy.load("en_core_web_sm")
+
+
+def spacy_pass(text: str) -> tuple[list[str], list[CandidateSpan]]:
+    """Tokenize `text` and return (tokens, candidate spans).
+
+    v0: each spaCy `noun_chunk` becomes a candidate span (token-relative), unless
+    the whole chunk is function/pronoun words. State is left as 'candidate' here;
+    5b assigns known/oov via the dictionary + vocab.
+    """
+    doc = _nlp()(text)
+    tokens = [t.text for t in doc]
+    spans: list[CandidateSpan] = []
+    for chunk in doc.noun_chunks:
+        if all(t.pos_ in _FUNCTION_POS for t in chunk):
+            continue
+        spans.append(
+            CandidateSpan(
+                token_start=chunk.start,
+                token_end=chunk.end,
+                surface=chunk.text,
+            )
+        )
+    return tokens, spans
+
+
+def reparse_token(token_text: str) -> str:
+    """POS tag of a single edited token — drives the correction filter (5c):
+    NOUN/PROPN → promote to candidate/vocab; function/grammar → text-only."""
+    doc = _nlp()(token_text)
+    return doc[0].pos_ if len(doc) else "X"

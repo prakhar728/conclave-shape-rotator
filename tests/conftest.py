@@ -118,6 +118,11 @@ def pytest_configure(config):
         "requires_ollama: mark test as requiring a reachable local Ollama daemon "
         "with the configured CONCLAVE_OLLAMA_MODEL pulled. Auto-skipped otherwise.",
     )
+    config.addinivalue_line(
+        "markers",
+        "requires_spacy: mark test as requiring spacy + the en_core_web_sm model "
+        "(Part 1 candidate detection). Auto-skipped otherwise.",
+    )
 
 
 def _ollama_ready() -> tuple[bool, str]:
@@ -140,6 +145,18 @@ def _ollama_ready() -> tuple[bool, str]:
         return False, f"Ollama not reachable: {type(exc).__name__}: {exc}"
 
 
+def _spacy_ready() -> tuple[bool, str]:
+    """Return (ready, reason). Checks the model is installed WITHOUT loading it
+    (is_package is cheap), so non-spacy runs don't pay the ~1s model load."""
+    try:
+        import spacy
+        if spacy.util.is_package("en_core_web_sm"):
+            return True, ""
+        return False, "en_core_web_sm not installed (python -m spacy download en_core_web_sm)"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"spacy unavailable: {type(exc).__name__}: {exc}"
+
+
 def pytest_collection_modifyitems(config, items):
     api_key = os.environ.get("CONCLAVE_NEARAI_API_KEY", "").strip()
     skip_live = pytest.mark.skip(reason="CONCLAVE_NEARAI_API_KEY not set — live tests skipped")
@@ -147,11 +164,16 @@ def pytest_collection_modifyitems(config, items):
     ollama_ready, ollama_reason = _ollama_ready()
     skip_ollama = pytest.mark.skip(reason=f"requires_ollama: {ollama_reason}")
 
+    spacy_ready, spacy_reason = _spacy_ready()
+    skip_spacy = pytest.mark.skip(reason=f"requires_spacy: {spacy_reason}")
+
     for item in items:
         if "live" in item.keywords and not api_key:
             item.add_marker(skip_live)
         if "requires_ollama" in item.keywords and not ollama_ready:
             item.add_marker(skip_ollama)
+        if "requires_spacy" in item.keywords and not spacy_ready:
+            item.add_marker(skip_spacy)
 
 
 # ---------------------------------------------------------------------------
