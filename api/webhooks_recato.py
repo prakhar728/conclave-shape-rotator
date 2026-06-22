@@ -197,9 +197,20 @@ async def on_meeting_completed(
         except Exception:  # noqa: BLE001
             logger.exception("calendar link failed for %s", native_id)
 
-    # 7. Enrichment kicks asynchronously (mirrors /transcripts/ingest).
+    # 7. Post-meeting identity (P4) THEN enrichment, async. Identity first so
+    # resolved_speakers carries voiceprint_ids before enrichment + the read path.
     if status_label == "accepted":
         from api.transcripts_routes import _enrich_in_background
-        asyncio.create_task(asyncio.to_thread(_enrich_in_background, session_id))
+        from connectors.capture.identify import identify_meeting
+        ws_for_identity = inv["workspace_id"] if inv else None
+
+        async def _identify_then_enrich():
+            try:
+                await identify_meeting(session_id, native_id, ws_for_identity)
+            except Exception:  # noqa: BLE001 — identity is best-effort
+                logger.exception("post-meeting identity failed for %s", session_id)
+            await asyncio.to_thread(_enrich_in_background, session_id)
+
+        asyncio.create_task(_identify_then_enrich())
 
     return {"session_id": session_id, "status": status_label}

@@ -9,6 +9,7 @@ dashboard (the data subject signing in with Google), never proxied through Concl
 """
 from __future__ import annotations
 
+import json
 import os
 import time
 
@@ -23,6 +24,7 @@ from config import settings
 # two-actor demo gate). Cleared in tests via `_cache.clear()`.
 _cache: dict[tuple[str, str], tuple[dict, float]] = {}
 _CACHE_TTL_SEC = float(os.environ.get("CONCLAVE_CONSENT_TTL_SEC", "60"))
+DIARIZE_TIMEOUT = float(os.environ.get("CONCLAVE_FPM_DIARIZE_TIMEOUT", "600"))  # batch diarize is slow (RTF~1.3)
 
 
 def _headers() -> dict:
@@ -79,6 +81,49 @@ async def push_knowledge(
     if resp.status_code != 200:
         raise HTTPException(502, f"FPM knowledge failed ({resp.status_code}): {resp.text[:200]}")
     return resp.json()
+
+
+async def diarize_audio(
+    workspace: str,
+    audio: bytes,
+    *,
+    tag: str = "offline",
+    filename: str = "audio.wav",
+) -> list[dict]:
+    """POST /v1/diarize — acoustic diarization + identity on a mixed recording (P4).
+
+    `tag="offline"` = authoritative write (post-meeting); `tag="live"` = read-only
+    (mints nothing). FPM streams NDJSON: per-segment lines then a final
+    `{type:"transcript", segments:[...]}` carrying the retro-relabeled authoritative
+    view — we prefer that when present. Each segment:
+    `{start, end, voiceprint_id, name, local_speaker, decision, confidence}`.
+    Identity stays in FPM; only anonymous diarization + matched ids come back.
+    """
+    segments: list[dict] = []
+    async with httpx.AsyncClient(timeout=DIARIZE_TIMEOUT) as client:
+        async with client.stream(
+            "POST", f"{_base()}/v1/diarize", headers=_headers(),
+            files={"file": (filename, audio, "audio/wav")},
+            data={"workspace": workspace, "tag": tag},
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                raise HTTPException(
+                    502, f"FPM diarize failed ({resp.status_code}): {body[:200]!r}"
+                )
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue  # heartbeat
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get("type") == "transcript":
+                    segments = obj.get("segments", segments)  # final authoritative
+                elif "start" in obj:
+                    segments.append(obj)  # provisional fallback if no final line
+    return segments
 
 
 async def consent_resolve_batch(workspace: str, voiceprint_ids: list[str]) -> dict:
