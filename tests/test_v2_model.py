@@ -165,3 +165,14 @@ def test_edit_after_approve_rejected():  # §4 contract / V2-3
     store.approve_v2("v2-x")
     with pytest.raises(ValueError):
         store.edit_token("v2-x", 0, 0, "nope")
+
+
+def test_v2_cascades_on_session_delete():  # FK ON DELETE CASCADE (0015)
+    from storage import sqlite as ss
+    _saved("v2-casc")
+    store.create_v2_draft("v2-casc")
+    assert store.load_v2("v2-casc") is not None
+    ss._get_conn().execute(
+        "DELETE FROM transcript_sessions WHERE session_id = ?", ("v2-casc",)
+    )
+    assert store.load_v2("v2-casc") is None  # cascaded away with the session

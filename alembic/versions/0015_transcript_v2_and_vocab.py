@@ -39,7 +39,8 @@ def upgrade() -> None:
         "transcript_v2",
         sa.Column(
             "session_id", sa.Text,
-            sa.ForeignKey("transcript_sessions.session_id"), primary_key=True,
+            sa.ForeignKey("transcript_sessions.session_id", ondelete="CASCADE"),
+            primary_key=True,
         ),
         sa.Column("status", sa.Text, nullable=False, server_default="draft"),
         sa.Column("doc_json", sa.Text, nullable=False, server_default="{}"),
