@@ -332,3 +332,24 @@ aren't lost). The two *decisions* live in §12 (#6 personal memory, #7 auto-user
 - **N7 — verify the calendar→insight-seed link.** Cold-start (§6, test CS-2)
   assumes calendar event text lands in `metadata.raw_intent`. Confirm calendar
   events actually populate that field before relying on it as the only seed.
+
+## 17. Build increments (commit-level)
+
+Each code increment = code + its tests → green in the canonical venv → commit →
+then the next. Done so far on `feat/transcript-refine`:
+`1a` migration 0015 · `1b` v2 model + store seams · `1c` vocab seam · `2` staged
+gate (`CONCLAVE_REFINE_GATE`, default off; all 5 ingest paths).
+
+Remaining, in order:
+- **3 — KB build reads approved v2** (`store.v2_segments_or_raw`; `index_session`
+  sources it). G-5 + fallback.
+- **4 — approve + v2-read API endpoints** (`POST /sessions/{id}/approve`,
+  `GET /sessions/{id}/v2`). G-9 + 401/403.
+- **5 — candidate detection** (deps dev-only): 5a marker+`candidate.py` seam ·
+  5b noun_chunks/OOV/state · 5c POS correction-filter + wire into draft. CD-*.
+- **6 — ground-truth writes** (`ground_truth.py` → `vocab.put`; type override;
+  grammar-fix filtered). GT-1..7.
+- **7 — suggestion engine + cold-start** (`suggest.py`). SP-*, CS-*.
+- **8 — insights stale-on-edit + re-derive-on-approve** (incl. G-11). IN-1..6.
+- **9 — trust state** — BLOCKED on §12 #3/#7.
+- **F0–F3 — frontend** (test-runner is net-new) — BLOCKED on §12 #4/#5.
