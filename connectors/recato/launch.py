@@ -60,11 +60,16 @@ def launch_bot(
     language: str = "en",
     bot_name: str = DEFAULT_BOT_NAME,
     webhook_url: Optional[str] = None,
+    api_token: Optional[str] = None,
+    base_url: Optional[str] = None,
     timeout_s: float = 30.0,
 ) -> dict:
-    """POST /bots on Recato. Returns the JSON body (typically `{id, status, ...}`)."""
-    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
-    token = os.environ.get("RECATO_API_TOKEN") or ""
+    """POST /bots on the capture service. Returns the JSON body (typically `{id, status, ...}`).
+
+    `api_token`/`base_url` (the per-workspace capture credentials) are preferred over the
+    legacy shared `RECATO_API_*` env vars when supplied by the dispatcher (P1)."""
+    base = (base_url or os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
+    token = api_token or os.environ.get("RECATO_API_TOKEN") or ""
     if not base or not token:
         raise RecatoLaunchError(
             "Recato is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"

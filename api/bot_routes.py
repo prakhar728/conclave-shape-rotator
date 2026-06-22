@@ -27,7 +27,7 @@ from connectors.recato.launch import (
     parse_meet_input,
     stop_bot,
 )
-from infra import bot_invitations, workspaces
+from infra import bot_invitations, dispatcher, workspaces
 
 router = APIRouter(prefix="/api/meetings", tags=["meetings"])
 
@@ -66,7 +66,15 @@ def invite_bot(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Create the invitation row BEFORE calling Recato so even a failed launch
+    # P1: Conclave owns meeting concurrency now (was Recato's per-token limit).
+    # Enforce per-workspace + global caps and pick the warmed capture account
+    # BEFORE creating the row, so the cap math doesn't count this attempt.
+    try:
+        account_id = dispatcher.check_and_assign(body.workspace_id)
+    except dispatcher.CapacityError as e:
+        raise HTTPException(status_code=429, detail=str(e))
+
+    # Create the invitation row BEFORE launching so even a failed launch
     # leaves an audit trail the user can see in /bot-status.
     invitation = bot_invitations.create_invitation(
         user_id=user["id"],
@@ -76,6 +84,7 @@ def invite_bot(
         bot_name=DEFAULT_BOT_NAME,
         status="requested",
         intent=body.intent,
+        assigned_account_id=account_id,
     )
 
     # Per-meeting webhook URL points at our 2.4 receiver. Preferred over

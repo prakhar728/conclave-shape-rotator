@@ -33,6 +33,7 @@ def create_invitation(
     recato_bot_id: Optional[int] = None,
     status: str = "requested",
     intent: Optional[str] = None,
+    assigned_account_id: Optional[str] = None,
 ) -> dict:
     """Insert a new row. Returns the inserted dict.
 
@@ -46,10 +47,10 @@ def create_invitation(
     _get_conn().execute(
         "INSERT INTO bot_invitations "
         "(id, user_id, workspace_id, platform, native_meeting_id, recato_bot_id, "
-        " status, bot_name, intent, created_at, completed_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
+        " status, bot_name, intent, assigned_account_id, created_at, completed_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
         (inv_id, user_id, workspace_id, platform, native_meeting_id,
-         recato_bot_id, status, bot_name, intent, now),
+         recato_bot_id, status, bot_name, intent, assigned_account_id, now),
     )
     return {
         "id": inv_id,
@@ -61,6 +62,7 @@ def create_invitation(
         "status": status,
         "bot_name": bot_name,
         "intent": intent,
+        "assigned_account_id": assigned_account_id,
         "created_at": now,
         "completed_at": None,
     }
