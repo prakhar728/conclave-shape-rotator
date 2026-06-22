@@ -339,3 +339,25 @@ holds the DiariZen HTTP connection open for the whole ~6-minute job and is lost 
 planned next step is a **durable diarization job queue** (Redis-backed, retryable, horizontally scalable
 across GPU workers) — full spec in `JOBS-QUEUE-HANDOFF-PROMPT.md`. Cut a new `feat/` branch off `main` for
 that work; keep `main` clean.
+
+---
+
+## Transcript-refine editor — local manual testing
+
+The refinement editor lives in **`frontend/`** (npm, `:3001`) and is **inline on the meeting page**
+(the standalone `/refine` route was removed).
+
+```bash
+cd conclave-transcript-refine
+alembic upgrade head                                                    # v2 / vocab / trust tables (0018–0020)
+CONCLAVE_DEV_LOGIN=1 CONCLAVE_REFINE_DEBUG=1 uvicorn main:app --reload   # :8000
+cd frontend && npm run dev                                              # :3001 (proxies /api → :8000)
+```
+
+Sign in once (no Supabase): `http://localhost:3001/api/auth/v1/dev-login?email=you@example.com&next=/dashboard`.
+Then open **`/meeting/<session_id>`** — as the owner you edit in place (edit a word · vocab-autocomplete ·
+tag an entity · name a speaker → **Approve & build** re-derives the summary + insights); viewers see the
+approved corrected transcript. Append `?debug=1` for the live backend-state panel, or run
+`python scripts/inspect_session.py <session_id>`.
+
+> `CONCLAVE_DEV_LOGIN` / `CONCLAVE_REFINE_DEBUG` are **local-only** — never enable in production.
