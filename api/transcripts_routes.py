@@ -841,6 +841,34 @@ def v2_assign_speaker(session_id: str, body: _AssignSpeakerBody, request: Reques
     return {"v2": store.load_v2(session_id).model_dump()}
 
 
+@router.get("/sessions/{session_id}/suggestions/speakers")
+def get_speaker_suggestions(session_id: str, request: Request) -> dict:
+    """Speaker-name suggestions for the editor (warm voiceprints + invitees +
+    mentions). Authed + can-see (read surface, not owner-only)."""
+    from auth.session import try_current_user
+    from transcripts import suggest
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if store.load_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    row = _ws_row(session_id)
+    if row is not None and not can_user_see(user, row):
+        raise HTTPException(status_code=403, detail="not allowed")
+    return {"speakers": suggest.speaker_suggestions(session_id)}
+
+
+@router.get("/suggestions/vocab")
+def get_vocab_suggestions(request: Request, prefix: str = "") -> dict:
+    """Per-user vocab autocomplete (the requester's own dictionary)."""
+    from auth.session import try_current_user
+    from transcripts import suggest
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    return {"vocab": suggest.vocab_suggestions(user["id"], prefix)}
+
+
 def _build_and_save_session(payload_dict: dict) -> Session:
     """Pure pipeline: canonical payload → NormalizedInput → Session → store.
 
