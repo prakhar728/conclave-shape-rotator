@@ -171,10 +171,12 @@ def stop_bot(
     native_meeting_id: str,
     timeout_s: float = 30.0,
 ) -> dict:
-    """DELETE the bot for a meeting. Recato/Vexa keys this by (platform,
-    native_meeting_id) — not by the bot's internal id. Triggers Recato's
-    own meeting-completed flow, so the webhook fires the same way it would
-    if the user kicked the bot from Meet directly.
+    """Stop the bot for a meeting via the capture runtime-api: DELETE
+    /containers/{name}, where launch_bot named the container `bot-{native_meeting_id}`.
+
+    (The old Recato contract was DELETE /bots/{platform}/{id}, keyed by platform +
+    native id. runtime-api keys by container name.) `platform` is kept for signature
+    compatibility but is unused now — the container name carries the meeting identity.
 
     Returns the JSON body (typically `{"status": "deleted"}` or similar).
     """
@@ -182,11 +184,12 @@ def stop_bot(
     token = os.environ.get("RECATO_API_TOKEN") or ""
     if not base or not token:
         raise RecatoLaunchError(
-            "Recato is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
+            "capture runtime-api is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
         )
+    name = f"bot-{native_meeting_id}"
     try:
         resp = httpx.delete(
-            f"{base}/bots/{platform}/{native_meeting_id}",
+            f"{base}/containers/{name}",
             headers={
                 "X-API-Key": token,
                 "Authorization": f"Bearer {token}",
@@ -195,10 +198,10 @@ def stop_bot(
             timeout=timeout_s,
         )
     except httpx.HTTPError as e:
-        raise RecatoLaunchError(f"Recato unreachable: {e}") from e
+        raise RecatoLaunchError(f"capture runtime-api unreachable: {e}") from e
     if resp.status_code >= 400:
         raise RecatoLaunchError(
-            f"Recato {resp.status_code}: {resp.text[:300]}"
+            f"capture runtime-api {resp.status_code}: {resp.text[:300]}"
         )
     try:
         return resp.json() if resp.content else {"status": "deleted"}
