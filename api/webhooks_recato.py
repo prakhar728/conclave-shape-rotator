@@ -92,7 +92,7 @@ async def on_meeting_completed(
     payload: _MeetingCompletedEvent,
     x_signature: Optional[str] = Header(default=None, alias="X-Signature"),
 ) -> dict:
-    """Drive: Recato → fetch → translate → bind to workspace → enrich."""
+    """Finalize: live buffer → translate → bind to workspace → enrich (P1; no fetch)."""
     # 1. Auth.
     secret = os.environ.get("RECATO_WEBHOOK_SECRET")
     if secret:
@@ -121,32 +121,38 @@ async def on_meeting_completed(
             detail="meeting.platform and meeting.native_meeting_id are required",
         )
 
-    # 3. Fetch transcript from Recato.
-    recato = _fetch_recato_transcript(platform, native_id)
-    if not (recato.get("segments") or []):
-        # Empty transcripts happen (silence-only meetings). Still mark complete.
-        inv = bot_invitations.find_by_meeting(platform, native_id)
-        if inv:
-            bot_invitations.update_status(inv["id"], "completed", completed=True)
-        return {"status": "empty_transcript", "session_id": native_id}
-
-    # 4. Translate to canonical → Session.
-    source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
-    canonical = to_canonical(recato, source=source)
-
-    # Reuse the canonical→Session build path.
+    # 3-5. Finalize from the live buffer. Segments streamed in during the meeting
+    # via the capture consumer (P1), so this webhook is FINALIZE-ONLY — no post-hoc
+    # fetch from Recato. `raw_diarization` is materialized from `live_segments`
+    # exactly once here (preserving its write-once invariant), then the buffer is
+    # cleared. (`_fetch_recato_transcript` is now unused — kept for the legacy/
+    # external-producer path.)
     from api.transcripts_routes import _build_and_save_session
     from transcripts import store as transcripts_store
 
-    # 5. Idempotency: same external_id ⇒ same session_id ⇒ load returns it.
-    existing = transcripts_store.load_session(canonical["meeting"]["external_id"])
+    existing = transcripts_store.load_session(native_id)
     if existing is not None:
+        # Idempotent: this meeting was already materialized.
         session_id = existing.session_id
         status_label = "duplicate"
+        transcripts_store.clear_live_segments(native_id)
     else:
+        buffered = transcripts_store.live_segments(native_id)
+        if not buffered:
+            # Silence-only / nothing streamed. Still mark the invitation complete.
+            inv = bot_invitations.find_by_meeting(platform, native_id)
+            if inv:
+                bot_invitations.update_status(inv["id"], "completed", completed=True)
+            return {"status": "empty_transcript", "session_id": native_id}
+        source = os.environ.get("CONCLAVE_INGEST_SOURCE", "capture")
+        canonical = to_canonical(
+            {"native_meeting_id": native_id, "platform": platform, "segments": buffered},
+            source=source,
+        )
         session = _build_and_save_session(canonical)
         session_id = session.session_id
         status_label = "accepted"
+        transcripts_store.clear_live_segments(native_id)
 
     # 6. Bind to workspace/owner via the bot_invitation we created in 2.1.
     inv = bot_invitations.find_by_meeting(platform, native_id)

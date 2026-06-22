@@ -142,6 +142,10 @@ app.include_router(record_router)
 from api.bot_routes import router as bot_router
 app.include_router(bot_router)
 
+# P1: capture microservice audio-chunk ingest (audio → Conclave TEE).
+from api.capture_routes import router as capture_router
+app.include_router(capture_router)
+
 # Transcript Saving (Phase 2): account settings — transcript retention default.
 from api.users_routes import router as users_router
 app.include_router(users_router)
