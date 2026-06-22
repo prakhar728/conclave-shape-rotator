@@ -56,3 +56,17 @@ def test_candidate_when_in_dict_not_vocab():  # CD-7
     out = assign_states(tokens, spans, "u_cd7")
     rm = next((s for s in out if "roadmap" in s.surface), None)
     assert rm is not None and rm.state == "candidate"
+
+
+def test_classify_correction_promotes_noun_propn_oov():  # CD-10
+    from transcripts.candidate import classify_correction
+    assert classify_correction("protocol") == "promote"  # NOUN
+    assert classify_correction("DStack") == "promote"     # OOV/PROPN
+    assert classify_correction("Recato") == "promote"     # OOV
+
+
+def test_classify_correction_grammar_is_text_only():  # CD-11/12
+    from transcripts.candidate import classify_correction
+    assert classify_correction("there") == "text"
+    assert classify_correction("the") == "text"
+    assert classify_correction("and") == "text"

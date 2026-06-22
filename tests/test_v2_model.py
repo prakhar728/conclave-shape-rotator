@@ -101,8 +101,10 @@ def test_span_annotation_roundtrips():  # V2-6
         ),
     )
     v2 = store.load_v2("v2-6")
-    assert len(v2.annotations) == 1
-    a = v2.annotations[0]
+    # drafts are pre-annotated by candidate detection → isolate the user's tag
+    user_anns = [a for a in v2.annotations if a.source == "user"]
+    assert len(user_anns) == 1
+    a = user_anns[0]
     assert (a.surface, a.state, a.type, a.source) == (
         "DStack protocol", "candidate", "project", "user",
     )
@@ -136,7 +138,8 @@ def test_reload_after_approve_preserves():  # V2-8
     assert v2.status == "approved"
     assert v2.segments[1].tokens[0] == "Great"
     assert v2.segments[0].speaker_name == "Alice"
-    assert len(v2.annotations) == 1
+    # the user-added "DStack" annotation survives (alongside any nlp ones)
+    assert any(a.surface == "DStack" and a.span.token_start == 3 for a in v2.annotations)
 
 
 def test_span_anchors_survive_length_change():  # V2-9
@@ -154,7 +157,7 @@ def test_span_anchors_survive_length_change():  # V2-9
     # token COUNT does not) → downstream span must still anchor correctly
     store.edit_token("v2-9", 0, 2, "the-entire-massively-longer-word")
     v2 = store.load_v2("v2-9")
-    a = v2.annotations[0]
+    a = next(x for x in v2.annotations if x.surface == "protocol")
     assert a.span.token_start == 4
     assert v2.segments[0].tokens[a.span.token_start] == "protocol"
 

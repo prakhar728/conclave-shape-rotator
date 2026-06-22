@@ -101,3 +101,27 @@ def assign_states(
         state = "oov" if any(_is_oov_token(t) for t in span_tokens) else "candidate"
         out.append(sp.model_copy(update={"state": state}))
     return out
+
+
+def detect(text: str, user_id: str) -> tuple[list[str], list[CandidateSpan]]:
+    """The draft-time pass: tokenize + candidate spans + states, in one call so
+    tokens and span anchors come from the SAME tokenization.
+
+    Graceful: if spaCy/the model isn't available (prod image keeps the deps out),
+    fall back to whitespace tokens and no candidates — the editor still works,
+    just without smart detection.
+    """
+    try:
+        tokens, spans = spacy_pass(text)
+    except Exception:  # noqa: BLE001 — spaCy/model absent → degrade, don't block
+        return text.split(), []
+    return tokens, assign_states(tokens, spans, user_id)
+
+
+def classify_correction(token_text: str) -> str:
+    """A corrected token: 'promote' (NOUN/PROPN/OOV → likely a graph-worthy
+    entity; vocab write happens in the ground-truth step) vs 'text' (a function/
+    grammar fix — do NOT add to vocab/graph). §15 correction filter."""
+    if _is_oov_token(token_text):
+        return "promote"
+    return "promote" if reparse_token(token_text) in ("NOUN", "PROPN") else "text"

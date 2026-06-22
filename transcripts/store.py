@@ -271,26 +271,53 @@ def _save_v2(v2: TranscriptV2) -> None:
     )
 
 
-def create_v2_draft(session_id: str) -> TranscriptV2:
-    """Initialize the v2 draft from a session's immutable raw segments.
+def _owner_of(session_id: str) -> str:
+    """The session's owner user_id (for per-user vocab lookup during detection),
+    or '' for legacy/un-owned sessions (no vocab hits)."""
+    try:
+        row = sqlite.get_transcript_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001
+        row = None
+    return (row or {}).get("owner_user_id") or ""
 
-    Each raw segment becomes a `V2Segment` (same order/index), tokens =
-    whitespace split of the raw text (candidate detection annotates later).
-    The raw diarizer label is copied as the immutable join key; the confirmed
-    `speaker_name` starts empty.
+
+def create_v2_draft(session_id: str) -> TranscriptV2:
+    """Initialize the v2 draft from a session's immutable raw segments, running
+    the candidate-detection pass ONCE per segment.
+
+    Each raw segment → a `V2Segment` (same index) whose tokens come from the
+    detector (spaCy tokens when available, else whitespace) so candidate-span
+    anchors align with the editable token list. Candidate spans (state
+    known/candidate/oov via the owner's vocab + dictionary) land as
+    `source="nlp"` annotations. The raw diarizer label is copied as the immutable
+    join key; `speaker_name` starts empty. Raw is never touched.
     """
+    from transcripts import candidate
+    from transcripts.models import TokenSpan
+
     session = load_session(session_id)
     if session is None:
         raise KeyError(session_id)
-    segments = [
-        V2Segment(
-            segment_id=i,
-            speaker_label=seg.speaker,
-            tokens=seg.text.split(),
+    owner = _owner_of(session_id)
+    segments: list[V2Segment] = []
+    annotations: list[CandidateAnnotation] = []
+    for i, seg in enumerate(session.raw_diarization):
+        tokens, spans = candidate.detect(seg.text, owner)
+        segments.append(
+            V2Segment(segment_id=i, speaker_label=seg.speaker, tokens=tokens)
         )
-        for i, seg in enumerate(session.raw_diarization)
-    ]
-    v2 = TranscriptV2(session_id=session_id, status="draft", segments=segments)
+        for sp in spans:
+            annotations.append(
+                CandidateAnnotation(
+                    span=TokenSpan(
+                        segment_id=i, token_start=sp.token_start, token_end=sp.token_end
+                    ),
+                    surface=sp.surface, state=sp.state, type=sp.type, source=sp.source,
+                )
+            )
+    v2 = TranscriptV2(
+        session_id=session_id, status="draft", segments=segments, annotations=annotations
+    )
     _save_v2(v2)
     return v2
 
