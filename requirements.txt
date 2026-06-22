@@ -34,3 +34,4 @@ sqlite-vec>=0.1.0  # vector ext loaded by storage/vec.py; required by migrations
 SQLAlchemy>=2.0
 email-validator>=2.0
 resend>=2.4
+redis>=5.0  # capture-segment stream consumer (P1 streaming ingest)

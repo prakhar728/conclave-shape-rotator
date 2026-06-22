@@ -24,6 +24,24 @@ def save_session(session: Session) -> None:
     )
 
 
+def append_segment(
+    native_meeting_id: str,
+    seq: int,
+    segment: dict,
+    segment_id: Optional[str] = None,
+) -> None:
+    """Buffer one live capture segment for a meeting (P1 streaming ingest).
+
+    Accumulates in `live_segments` (NOT `raw_diarization`, which is write-once);
+    the finalize path materializes the buffer into a `Session` exactly once."""
+    sqlite.append_live_segment(native_meeting_id, seq, segment, segment_id)
+
+
+def live_segments(native_meeting_id: str) -> list[dict]:
+    """Ordered live buffer for a meeting (live read + finalize)."""
+    return sqlite.get_live_segments(native_meeting_id)
+
+
 def load_session(session_id: str) -> Optional[Session]:
     row = sqlite.get_transcript_session(session_id)
     return _row_to_session(row) if row else None

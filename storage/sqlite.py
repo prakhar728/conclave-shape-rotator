@@ -531,6 +531,45 @@ def save_transcript_session(
     )
 
 
+def append_live_segment(
+    native_meeting_id: str,
+    seq: int,
+    segment: dict,
+    segment_id: str | None = None,
+) -> None:
+    """Append one streamed segment to the live buffer (capture → Conclave, P1).
+
+    Idempotent on (native_meeting_id, segment_id): a consumer replay after a
+    reconnect re-inserts the same segment_id, which the partial unique index
+    drops via INSERT OR IGNORE. Segments without a segment_id are always added.
+    The buffer is materialized into `transcript_sessions.raw_diarization` once,
+    at meeting-finalize — preserving raw_diarization's write-once invariant.
+    """
+    _get_conn().execute(
+        "INSERT OR IGNORE INTO live_segments "
+        "(native_meeting_id, segment_id, seq, segment, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (native_meeting_id, segment_id, seq, json.dumps(_to_jsonable(segment)), _now()),
+    )
+
+
+def get_live_segments(native_meeting_id: str) -> list[dict]:
+    """All buffered segments for a meeting, ordered (live read + finalize)."""
+    rows = _get_conn().execute(
+        "SELECT segment FROM live_segments WHERE native_meeting_id = ? ORDER BY seq ASC",
+        (native_meeting_id,),
+    ).fetchall()
+    return [json.loads(r["segment"]) for r in rows]
+
+
+def clear_live_segments(native_meeting_id: str) -> None:
+    """Drop a meeting's live buffer once it's been materialized into a session."""
+    _get_conn().execute(
+        "DELETE FROM live_segments WHERE native_meeting_id = ?",
+        (native_meeting_id,),
+    )
+
+
 def get_transcript_session(session_id: str) -> dict | None:
     row = _get_conn().execute(
         "SELECT session_id, source, session_date, raw_diarization, metadata, derived, "
