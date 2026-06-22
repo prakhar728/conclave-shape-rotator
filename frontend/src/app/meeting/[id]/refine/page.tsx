@@ -82,7 +82,7 @@ export default function RefinePage({
             Fix names and words, confirm entities, then approve.
           </p>
         </div>
-        <RefineEditor draft={draft} />
+        <RefineEditor draft={draft} sessionId={id} onDraftChange={setDraft} />
       </main>
     </AppShell>
   );

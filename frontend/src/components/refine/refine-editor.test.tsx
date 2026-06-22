@@ -1,50 +1,91 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { V2Draft } from "@/lib/api";
+import { refine, type V2Draft } from "@/lib/api";
 
 import { RefineEditor } from "./refine-editor";
 
-const draft: V2Draft = {
-  session_id: "s1",
-  status: "draft",
-  approved_at: null,
-  insights_stale: false,
-  segments: [
-    {
-      segment_id: 0,
-      speaker_label: "speaker_1",
-      speaker_name: "Alice",
-      tokens: ["we", "use", "the", "DStack", "protocol"],
-    },
-    {
-      segment_id: 1,
-      speaker_label: "speaker_2",
-      speaker_name: null,
-      tokens: ["sounds", "good"],
-    },
-  ],
-  annotations: [
-    { span: { segment_id: 0, token_start: 0, token_end: 1 }, surface: "we", state: "known", type: "person", source: "user", confidence: null },
-    { span: { segment_id: 0, token_start: 3, token_end: 4 }, surface: "DStack", state: "oov", type: null, source: "nlp", confidence: null },
-    { span: { segment_id: 0, token_start: 4, token_end: 5 }, surface: "protocol", state: "candidate", type: null, source: "nlp", confidence: null },
-  ],
-};
+function makeDraft(): V2Draft {
+  return {
+    session_id: "s1",
+    status: "draft",
+    approved_at: null,
+    insights_stale: false,
+    segments: [
+      { segment_id: 0, speaker_label: "speaker_1", speaker_name: "Alice", tokens: ["we", "use", "the", "DStack", "protocol"] },
+      { segment_id: 1, speaker_label: "speaker_2", speaker_name: null, tokens: ["sounds", "good"] },
+    ],
+    annotations: [
+      { span: { segment_id: 0, token_start: 0, token_end: 1 }, surface: "we", state: "known", type: "person", source: "user", confidence: null },
+      { span: { segment_id: 0, token_start: 3, token_end: 4 }, surface: "DStack", state: "oov", type: null, source: "nlp", confidence: null },
+      { span: { segment_id: 0, token_start: 4, token_end: 5 }, surface: "protocol", state: "candidate", type: null, source: "nlp", confidence: null },
+    ],
+  };
+}
+
+function renderEditor() {
+  const onChange = vi.fn();
+  const utils = render(<RefineEditor draft={makeDraft()} sessionId="s1" onDraftChange={onChange} />);
+  return { onChange, ...utils };
+}
 
 describe("RefineEditor", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(refine, "speakerSuggestions").mockResolvedValue({ speakers: ["Carol", "Dave"] });
+  });
+
   it("renders segments with the confirmed speaker name, falling back to the label (F1b)", () => {
-    render(<RefineEditor draft={draft} />);
+    renderEditor();
     expect(screen.getByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("speaker_2")).toBeInTheDocument(); // fallback when no name
+    expect(screen.getByText("speaker_2")).toBeInTheDocument();
     expect(screen.getByText("DStack")).toBeInTheDocument();
   });
 
   it("applies the right token-state tints (F1c)", () => {
-    const { container } = render(<RefineEditor draft={draft} />);
+    const { container } = renderEditor();
     expect(container.querySelector('[data-token="0"][data-segment="0"]')!.className).toContain("tok-known");
     expect(container.querySelector('[data-token="3"][data-segment="0"]')!.className).toContain("tok-oov");
     expect(container.querySelector('[data-token="4"][data-segment="0"]')!.className).toContain("tok-candidate");
-    // an un-annotated token has no state
     expect(container.querySelector('[data-token="1"][data-segment="0"]')!.getAttribute("data-state")).toBe("");
+  });
+
+  it("edits a token optimistically without awaiting the network (F2a/FE-2)", () => {
+    const editSpy = vi.spyOn(refine, "editToken").mockReturnValue(new Promise(() => {})); // never resolves
+    const { onChange } = renderEditor();
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Dstack" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // UI updated BEFORE the network resolved (the promise never does)
+    expect(onChange).toHaveBeenCalledTimes(1);
+    const next = onChange.mock.calls[0][0] as V2Draft;
+    expect(next.segments[0].tokens[3]).toBe("Dstack");
+    expect(next.insights_stale).toBe(true);
+    expect(editSpy).toHaveBeenCalledWith("s1", 0, 3, "Dstack");
+  });
+
+  it("tags a candidate/oov token via the type select (F2b/FE-5)", () => {
+    const tagSpy = vi.spyOn(refine, "tagEntity").mockResolvedValue({ v2: makeDraft() });
+    renderEditor();
+    const sel = document.querySelector('[data-tag="0-4"]') as HTMLSelectElement; // "protocol" (candidate)
+    fireEvent.change(sel, { target: { value: "project" } });
+    expect(tagSpy).toHaveBeenCalledWith("s1", {
+      segment_id: 0,
+      token_start: 4,
+      token_end: 5,
+      surface: "protocol",
+      type: "project",
+    });
+  });
+
+  it("shows speaker suggestions and assigns on chip click (F2c/FE-4)", async () => {
+    const assignSpy = vi.spyOn(refine, "assignSpeaker").mockResolvedValue({ v2: makeDraft() });
+    const { onChange } = renderEditor();
+    fireEvent.click(screen.getByText("speaker_2")); // open assign for segment 1
+    await waitFor(() => expect(document.querySelector('[data-speaker-chip="Carol"]')).toBeTruthy());
+    fireEvent.click(document.querySelector('[data-speaker-chip="Carol"]')!);
+    expect(assignSpy).toHaveBeenCalledWith("s1", 1, "Carol");
+    expect(onChange).toHaveBeenCalled();
   });
 });
