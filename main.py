@@ -19,6 +19,7 @@ from fastapi.responses import Response
 import storage
 from api.routes import router, register_skills
 from infra import pipeline_pool, scheduler
+from connectors.capture import consumer as capture_consumer
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +75,11 @@ async def lifespan(app: FastAPI):
     pipeline_pool.start()
     await _prewarm_models()
     await scheduler.start_all()
+    capture_consumer.start()   # P1: consume the capture segment stream (no-op if REDIS_URL unset)
     try:
         yield
     finally:
+        await capture_consumer.stop()
         await scheduler.stop_all()
         pipeline_pool.stop()
 
