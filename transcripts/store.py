@@ -265,6 +265,7 @@ def _save_v2(v2: TranscriptV2) -> None:
     doc = {
         "segments": [s.model_dump() for s in v2.segments],
         "annotations": [a.model_dump() for a in v2.annotations],
+        "insights_stale": v2.insights_stale,
     }
     sqlite.save_transcript_v2(
         v2.session_id, v2.status, v2.approved_at, json.dumps(doc)
@@ -333,6 +334,7 @@ def load_v2(session_id: str) -> Optional[TranscriptV2]:
         approved_at=row["approved_at"],
         segments=[V2Segment(**s) for s in doc.get("segments", [])],
         annotations=[CandidateAnnotation(**a) for a in doc.get("annotations", [])],
+        insights_stale=bool(doc.get("insights_stale", False)),
     )
 
 
@@ -352,6 +354,7 @@ def edit_token(
     all other span anchors, stay valid). Rejected once approved."""
     v2 = _require_draft(session_id)
     v2.segments[segment_id].tokens[token_idx] = new_text
+    v2.insights_stale = True
     _save_v2(v2)
     return v2
 
@@ -360,6 +363,7 @@ def add_annotation(session_id: str, annotation: CandidateAnnotation) -> Transcri
     """Append a candidate-span annotation (entity/type/new-vocab) to the draft."""
     v2 = _require_draft(session_id)
     v2.annotations.append(annotation)
+    v2.insights_stale = True
     _save_v2(v2)
     return v2
 
@@ -369,8 +373,17 @@ def assign_speaker(session_id: str, segment_id: int, name: Optional[str]) -> Tra
     (the immutable join key) is never touched."""
     v2 = _require_draft(session_id)
     v2.segments[segment_id].speaker_name = name
+    v2.insights_stale = True
     _save_v2(v2)
     return v2
+
+
+def clear_insights_stale(session_id: str) -> None:
+    """Clear the stale flag (called after insights are re-derived on approve)."""
+    v2 = load_v2(session_id)
+    if v2 is not None and v2.insights_stale:
+        v2.insights_stale = False
+        _save_v2(v2)
 
 
 def approve_v2(session_id: str) -> TranscriptV2:

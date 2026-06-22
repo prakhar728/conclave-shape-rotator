@@ -229,6 +229,9 @@ class TranscriptV2(BaseModel):
     segments: list[V2Segment] = Field(default_factory=list)
     annotations: list[CandidateAnnotation] = Field(default_factory=list)
     approved_at: Optional[str] = None
+    #: v1 insights go stale on any edit and are re-derived on approve (§7). The
+    #: flag is flipped by the edit seams WITHOUT recomputing (the latency guard).
+    insights_stale: bool = False
 
 
 class VocabEntry(BaseModel):

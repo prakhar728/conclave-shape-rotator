@@ -23,7 +23,7 @@ from transcripts.models import (
 )
 
 EXPECTED_FIELDS = {
-    TranscriptV2: {"session_id", "status", "segments", "annotations", "approved_at"},
+    TranscriptV2: {"session_id", "status", "segments", "annotations", "approved_at", "insights_stale"},
     V2Segment: {"segment_id", "speaker_label", "speaker_name", "tokens"},
     TokenSpan: {"segment_id", "token_start", "token_end"},
     CandidateAnnotation: {"span", "surface", "state", "type", "source", "confidence"},
