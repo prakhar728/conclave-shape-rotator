@@ -50,8 +50,16 @@ If any of these shapes must change, update Part 2 + the C9 drift-guard together.
    the lever is the **Stage-1 graph** (the judge can't manufacture matches the
    graph never surfaced); run the **Stage-2 LLM judge as batch/nightly
    enrichment, NOT on the live query path** (operator-blind thesis).
-4. **Editable graph** (the ENTITY-CANON correction UI) + **workspace permissions**
-   — later sub-phases.
+4. **Editable graph + human-in-the-loop resolution** (the ENTITY-CANON correction
+   UI) + **workspace permissions** — later sub-phases. Includes:
+   - **"Are these two the same?"** merge prompts — the user confirms/denies entity
+     merges; their answer is ground truth that seeds resolution.
+   - **Action-item linking** — connect/relate obligations across meetings.
+   **Principle (locked):** the LLM still *makes* the connections (resolution,
+   merges, action-item links) — this is NOT a deterministic rule engine. User
+   corrections are **high-precision priors** that raise the LLM's accuracy, not a
+   replacement for it. (Mirrors the existing LLM-tiebreak in `entity_resolution`
+   + the connections judge.)
 
 ## 4. What to reuse (existing code on this branch)
 - `transcripts/kb_extract.py` — `extract_session` / `_run`: extract → merge →
