@@ -347,9 +347,24 @@ Remaining, in order:
   `GET /sessions/{id}/v2`). G-9 + 401/403.
 - **5 — candidate detection** (deps dev-only): 5a marker+`candidate.py` seam ·
   5b noun_chunks/OOV/state · 5c POS correction-filter + wire into draft. CD-*.
-- **6 — ground-truth writes** (`ground_truth.py` → `vocab.put`; type override;
-  grammar-fix filtered). GT-1..7.
-- **7 — suggestion engine + cold-start** (`suggest.py`). SP-*, CS-*.
-- **8 — insights stale-on-edit + re-derive-on-approve** (incl. G-11). IN-1..6.
+- **6 — ground-truth writes** (the flywheel; new `transcripts/ground_truth.py`):
+  - **6a** `tag_entity(...)` → user annotation (source=user) + `vocab.put`
+    (human type wins over nlp). GT-1/3/6/7, CD-26.
+  - **6b** `correct_word(...)` → `edit_token` + `classify_correction`: promote
+    (NOUN/PROPN/OOV) → vocab; grammar fix → text-only. GT-2/5.
+- **6c — editor WRITE API** (gap surfaced 2026-06-22; was never listed): POST
+  edit-token / tag-annotation / assign-speaker over 6a/6b + store seams; auth like
+  the v2/approve routes. Needed for the frontend. API tests (owner-only, 401/403).
+- **7 — suggestion engine + cold-start** (new `transcripts/suggest.py`):
+  - **7a** `speaker_suggestions(session)` → cold (invitees/mentions) ∪ warm
+    (workspace voiceprints), warm-first. SP-1/2/3/4/7/8.
+  - **7b** `vocab_suggestions(user, prefix)` + cold-start seed = calendar
+    `raw_intent`; + GET suggestions endpoint. CS-1/2/3/4.
+- **8 — insights stale + re-derive**:
+  - **8a** `insights_stale` on the v2 row; edit seams set it; assert NO LLM per
+    edit (latency guard). IN-2/3/6.
+  - **8b** `approve_and_build` re-derives enrich over the corrected v2 + clears
+    stale; Part-2 detailed NOT run. IN-1/4/5, G-11.
+- Order: 6a→6b→6c→7a→7b→8a→8b, each test-gated before the next.
 - **9 — trust state** — BLOCKED on §12 #3/#7.
 - **F0–F3 — frontend** (test-runner is net-new) — BLOCKED on §12 #4/#5.
