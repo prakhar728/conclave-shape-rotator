@@ -24,6 +24,7 @@ import { use, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
+import { RefineLink } from "@/components/refine/refine-link";
 import { RetentionControl } from "@/components/retention-control";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import {
@@ -135,6 +136,11 @@ export default function MeetingPage({
           <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
           </p>
+          {meeting.is_owner ? (
+            <div className="mt-5">
+              <RefineLink sessionId={meeting.session_id} />
+            </div>
+          ) : null}
         </div>
 
         {processing ? (
