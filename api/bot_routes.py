@@ -505,3 +505,71 @@ def set_meeting_retention(
         )
     _store.set_retention_override(session_id, override)
     return {"ok": True, "retention_override": override}
+
+
+class TagSpeakerBody(BaseModel):
+    speaker_label: str = Field(min_length=1)
+    name: str = Field(min_length=1)
+    email: Optional[EmailStr] = None
+
+
+@router.post("/{session_id}/tag-speaker")
+async def tag_speaker(
+    session_id: str,
+    body: TagSpeakerBody,
+    user: dict = Depends(require_current_user),
+):
+    """Name a speaker in a meeting (P4 manual tag — the two locked propagations).
+
+    (a) Update THIS transcript's display overlay instantly
+        (`resolved_speakers[label].name`; `raw_diarization` is never mutated), and
+    (b) if the speaker carries an FPM voiceprint, push the name to FPM so FUTURE
+        meetings auto-recognize them (`/v1/knowledge` → `store.set_name`). The FPM
+        push is best-effort — the local overlay always applies.
+
+    ASSUMPTION (verify at runtime): the voiceprint_id lands on
+    `resolved_speakers[label]` once the live/post diarize-identify wiring populates
+    it. Until then (no voiceprint_id) only the display overlay applies — which is
+    the correct degenerate behavior for diarization-only labels.
+    """
+    from transcripts import store as _store
+    from infra import fpm_consent
+
+    session = _store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    wf = _store.get_workspace_fields(session_id) or {}
+    owner = wf.get("owner_user_id")
+    if owner and owner != user["id"]:
+        raise HTTPException(status_code=403, detail="only the meeting owner can tag speakers")
+
+    # (a) display overlay — instant; raw_diarization untouched.
+    resolved = dict(session.metadata.resolved_speakers or {})
+    entry = dict(resolved.get(body.speaker_label) or {})
+    entry["name"] = body.name
+    if body.email:
+        entry["email"] = str(body.email)
+    resolved[body.speaker_label] = entry
+    md = session.metadata.model_copy(update={"resolved_speakers": resolved})
+    _store.set_metadata(session_id, md)
+
+    # (b) cross-meeting persistence — only when the label carries an FPM voiceprint.
+    voiceprint_id = entry.get("voiceprint_id")
+    workspace_id = wf.get("workspace_id")
+    fpm_result = None
+    if voiceprint_id and workspace_id:
+        binding = {"voiceprint_id": voiceprint_id, "name": body.name}
+        if body.email:
+            binding["email"] = str(body.email)
+        try:
+            fpm_result = await fpm_consent.push_knowledge(workspace_id, [binding])
+        except HTTPException as e:  # best-effort — overlay already applied
+            logger.warning("tag-speaker: FPM push failed for %s: %s", session_id, e.detail)
+
+    return {
+        "status": "tagged",
+        "speaker_label": body.speaker_label,
+        "name": body.name,
+        "voiceprint_pushed": bool(voiceprint_id and workspace_id),
+        "fpm": fpm_result,
+    }
