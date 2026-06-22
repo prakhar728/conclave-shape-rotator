@@ -170,22 +170,28 @@ Part 2 reads these; it does not reach back into Part 1's editor.
 - **Engine = spaCy `en_core_web_sm`** (~15 MB, CPU, TEE-friendly), run once at
   draft time.
 
-### STILL OPEN (resolve before/early in build)
-1. `v2` representation: char-range spans vs token model; new table/column vs
-   sibling store. Bias to simplest that supports span tags + fast editing.
-2. Vocab store schema (per-user) + how suggestions query it.
-3. Graduation rule specifics (count threshold? confidence metric? which signal?).
+### LOCKED — data-foundation decisions (2026-06-19)
+- **#1 v2 encoding:** v2 = structured **segments mirroring raw**; each span anchor
+  is `(segment_id, token_start, token_end)` — **token/segment-relative, NOT flat
+  char-ranges** (survives length-changing edits → passes V2-9). v2 persisted in a
+  **new table keyed by `session_id`**; `raw_diarization` stays write-once.
+- **#2 vocab schema:** per-user table
+  `vocab(user_id, surface_norm, is_entity, type, canonical_id, provenance,
+  created_at)` with `UNIQUE(user_id, surface_norm)`; accessed ONLY via a
+  `vocab.get(user, surface) / vocab.put(...)` seam.
+- **#6 personal memory:** for Part 1, personal memory **== per-user vocab +
+  confirmed-speaker roster** (NO separate store). Richer per-user profile/recall
+  is deferred to Part 2. (Collapses the ghost; GT-4/IS-2 assert vs vocab+roster.)
+
+### STILL OPEN (resolve before that slice)
+3. Graduation rule specifics (count threshold? confidence metric? which signal?)
+   — needed for the trust-state slice.
 4. Editor tech: which frontend editor primitive gives span-level tags at low
-   latency (and the Next version constraint noted in `frontend/AGENTS.md`).
+   latency (Next version constraint in `frontend/AGENTS.md`) — frontend slice.
 5. How "stale insights" is surfaced in the UI and what exactly re-derives on
-   approve.
-6. **Personal memory — what is it?** It's named as a store ground-truth
-   populates (§6) but undefined. Define its schema and how it differs from vocab
-   (vocab = surface→entity dictionary; personal memory = ? user-level facts /
-   profile / cross-meeting recall seed). Blocks GT-4, IS-2.
-7. **Graduated/"auto" user behavior:** does an auto (graduated) user still get
-   the editable draft (builds *and* stays correctable) or skip correction
-   entirely? Different data + UX. Pin before building the trust-state branch.
+   approve — frontend slice (backend `stale` boolean is settled).
+7. **Graduated/"auto" user behavior:** editable draft that also builds, or skip
+   correction entirely? — trust-state slice.
 
 ## 13. Build order within Part 1 (proposed)
 
