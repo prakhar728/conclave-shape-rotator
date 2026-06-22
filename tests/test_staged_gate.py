@@ -108,3 +108,9 @@ def test_all_ingest_paths_route_through_choke_point():  # G-10 / N1
         assert "_enrich_in_background" in text, (
             f"{fname} must funnel through the gated choke point"
         )
+        # ...and must NOT call the gated build stages directly (would bypass the
+        # gate while keeping the choke-point call). Audit-strengthened G-10.
+        for bypass in ("_build_kb", "extract_session"):
+            assert bypass not in text, (
+                f"{fname} calls {bypass} directly — bypasses the refinement gate"
+            )

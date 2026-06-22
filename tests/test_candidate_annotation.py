@@ -96,3 +96,15 @@ def test_draft_annotation_shape_and_raw_untouched(monkeypatch):  # CD-24/25
     assert a.source == "nlp" and a.state == "oov"
     assert (a.span.segment_id, a.span.token_start, a.span.token_end) == (0, 1, 3)
     assert store.load_session("cd24").raw_diarization[0].text == "the DStack protocol"  # raw untouched
+
+
+def test_classify_correction_deterministic(monkeypatch):  # CD-11 default-gate (audit fix)
+    # Patch the POS + OOV seams so the correction filter is guarded WITHOUT spaCy
+    # (the requires_spacy tier is deselected in the prod/default gate).
+    monkeypatch.setattr(cand, "reparse_token",
+                        lambda t: {"protocol": "NOUN", "DStack": "PROPN", "there": "ADV"}.get(t, "X"))
+    monkeypatch.setattr(cand, "_is_oov_token", lambda t: t == "Zzqqxv")
+    assert cand.classify_correction("protocol") == "promote"  # NOUN
+    assert cand.classify_correction("DStack") == "promote"     # PROPN
+    assert cand.classify_correction("Zzqqxv") == "promote"     # OOV
+    assert cand.classify_correction("there") == "text"         # ADV, not OOV → not promoted
