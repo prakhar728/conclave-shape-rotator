@@ -740,6 +740,52 @@ def _build_and_save_session(payload_dict: dict) -> Session:
     return session
 
 
+def _refine_gate_enabled() -> bool:
+    """Whether the Part-1 refinement gate is on: pause the KB build until the
+    user approves the v2 draft. Default OFF — today's behavior is unchanged
+    until trust-state (the ramp-up slice) drives this. See docs/plans §8/§10."""
+    return os.environ.get("CONCLAVE_REFINE_GATE", "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def _build_kb(session_id: str) -> None:
+    """The gated half of the pipeline: KB index + extract. Runs immediately when
+    the gate is off, or on approval when it's on. Each stage is isolated and
+    failure-swallowing (the C11 backfill / extract re-run can redo either)."""
+    try:
+        from transcripts.kb_pipeline import index_session
+        index_session(session_id)
+    except Exception:
+        logger.exception("kb indexing failed for session %s", session_id)
+
+    # Phase 3.5b — KB extraction is itself behind ENABLE_KB_PIPELINE (default
+    # off): extract_session() is a no-op unless the flag is set.
+    try:
+        from transcripts.kb_extract import extract_session
+        extract_session(session_id)
+    except Exception:
+        logger.exception("kb extraction failed for session %s", session_id)
+
+
+def approve_and_build(session_id: str) -> None:
+    """Approve the v2 draft and run the (previously gated) KB build over it.
+
+    Idempotent: re-approving an already-approved session does NOT rebuild the
+    KB (so the graph isn't doubled). The approval flip itself is idempotent in
+    `store.approve_v2`.
+    """
+    try:
+        v2 = store.load_v2(session_id)
+        already_approved = v2 is not None and v2.status == "approved"
+        store.approve_v2(session_id)
+    except Exception:
+        logger.exception("approve failed for session %s", session_id)
+        return
+    if not already_approved:
+        _build_kb(session_id)
+
+
 def _enrich_in_background(session_id: str) -> None:
     """Run enrichment on a stored session; log and swallow exceptions.
 
@@ -768,6 +814,13 @@ def _enrich_in_background(session_id: str) -> None:
         logger.exception("background enrich failed for session %s", session_id)
         return
 
+    # Part 1 — create the editable v2 draft from the now-enriched session.
+    # Isolated: a v2 failure must not block magic-links or the (ungated) KB build.
+    try:
+        store.create_v2_draft(session_id)
+    except Exception:
+        logger.exception("v2 draft creation failed for session %s", session_id)
+
     # Phase 2.8 — post-enrichment magic-link blast. Wrapped in its own
     # try/except so an email-send failure never poisons the enrichment
     # result (the card is already visible to the owner regardless).
@@ -776,24 +829,16 @@ def _enrich_in_background(session_id: str) -> None:
     except Exception:
         logger.exception("post-enrich email blast failed for session %s", session_id)
 
-    # Phase 3.5a — KB indexing: chunk → context-header → embed → FTS/vec.
-    # Same isolation contract as the email blast: never poisons enrichment,
-    # and the C11 backfill can redo it any time (save_chunks is idempotent,
-    # embeddings upsert).
-    try:
-        from transcripts.kb_pipeline import index_session
-        index_session(session_id)
-    except Exception:
-        logger.exception("kb indexing failed for session %s", session_id)
+    # Part 1 GATE — when on, pause here; the KB build (index + extract) runs on
+    # approval via approve_and_build(). Default off → build now, so existing
+    # behavior is unchanged until trust-state flips the gate on per user.
+    if _refine_gate_enabled():
+        logger.info(
+            "refine gate ON — KB build deferred until approval for %s", session_id
+        )
+        return
 
-    # Phase 3.5b — KB extraction: extract → importance → ER → upsert.
-    # Behind ENABLE_KB_PIPELINE (default off): extract_session() is a no-op
-    # unless the flag is set, so rollback is one env-var flip, not a revert.
-    try:
-        from transcripts.kb_extract import extract_session
-        extract_session(session_id)
-    except Exception:
-        logger.exception("kb extraction failed for session %s", session_id)
+    _build_kb(session_id)
 
 
 def _send_attendee_magic_links(session_id: str) -> None:
