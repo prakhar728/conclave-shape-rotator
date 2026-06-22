@@ -605,3 +605,74 @@ export const calendar = {
       },
     ),
 };
+
+// --- Transcript refinement (the v2 editor) ----------------------------------
+
+export type V2Span = {
+  segment_id: number;
+  token_start: number;
+  token_end: number;
+};
+
+export type V2Annotation = {
+  span: V2Span;
+  surface: string;
+  state: "known" | "candidate" | "oov";
+  type: string | null;
+  source: "nlp" | "correction" | "user";
+  confidence: number | null;
+};
+
+export type V2Segment = {
+  segment_id: number;
+  speaker_label: string;
+  speaker_name: string | null;
+  tokens: string[];
+};
+
+export type V2Draft = {
+  session_id: string;
+  status: "draft" | "approved";
+  approved_at: string | null;
+  insights_stale: boolean;
+  segments: V2Segment[];
+  annotations: V2Annotation[];
+};
+
+const sess = (id: string) => `/api/transcripts/sessions/${encodeURIComponent(id)}`;
+
+export const refine = {
+  getDraft: (sessionId: string) => apiFetch<V2Draft>(`${sess(sessionId)}/v2`),
+
+  editToken: (sessionId: string, segmentId: number, tokenIdx: number, newText: string) =>
+    apiFetch<{ decision: "promote" | "text"; v2: V2Draft }>(`${sess(sessionId)}/v2/edit-token`, {
+      method: "POST",
+      body: JSON.stringify({ segment_id: segmentId, token_idx: tokenIdx, new_text: newText }),
+    }),
+
+  tagEntity: (
+    sessionId: string,
+    body: { segment_id: number; token_start: number; token_end: number; surface: string; type: string | null },
+  ) =>
+    apiFetch<{ v2: V2Draft }>(`${sess(sessionId)}/v2/tag-entity`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  assignSpeaker: (sessionId: string, segmentId: number, name: string | null) =>
+    apiFetch<{ v2: V2Draft }>(`${sess(sessionId)}/v2/assign-speaker`, {
+      method: "POST",
+      body: JSON.stringify({ segment_id: segmentId, name }),
+    }),
+
+  approve: (sessionId: string) =>
+    apiFetch<{ session_id: string; status: string }>(`${sess(sessionId)}/approve`, {
+      method: "POST",
+    }),
+
+  speakerSuggestions: (sessionId: string) =>
+    apiFetch<{ speakers: string[] }>(`${sess(sessionId)}/suggestions/speakers`),
+
+  vocabSuggestions: (prefix: string) =>
+    apiFetch<{ vocab: string[] }>(`/api/transcripts/suggestions/vocab?prefix=${encodeURIComponent(prefix)}`),
+};
