@@ -8,12 +8,13 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { RefineActions } from "@/components/refine/refine-actions";
+import { RefineDebugPanel } from "@/components/refine/refine-debug-panel";
 import { RefineEditor } from "@/components/refine/refine-editor";
 import { ApiError, auth, refine, type MeResponse, type V2Draft } from "@/lib/api";
 
@@ -24,9 +25,12 @@ export default function RefinePage({
 }) {
   const { id } = use(params);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const debug = searchParams.get("debug") === "1";
   const [me, setMe] = useState<MeResponse | null>(null);
   const [draft, setDraft] = useState<V2Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,12 +87,20 @@ export default function RefinePage({
             Fix names and words, confirm entities, then approve.
           </p>
         </div>
-        <RefineEditor draft={draft} sessionId={id} onDraftChange={setDraft} />
+        <RefineEditor
+          draft={draft}
+          sessionId={id}
+          onDraftChange={(d) => {
+            setDraft(d);
+            setRefreshKey((k) => k + 1); // nudge the debug panel to re-read the server
+          }}
+        />
         <RefineActions
           draft={draft}
           sessionId={id}
           onApproved={() => router.push(`/meeting/${id}`)}
         />
+        {debug ? <RefineDebugPanel sessionId={id} refreshKey={refreshKey} /> : null}
       </main>
     </AppShell>
   );

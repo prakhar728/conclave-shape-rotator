@@ -639,6 +639,18 @@ export type V2Draft = {
   annotations: V2Annotation[];
 };
 
+export type V2Debug = {
+  status: string;
+  insights_stale: boolean;
+  segments: { speaker: string; text: string }[];
+  annotations: { surface: string; state: string; type: string | null; source: string }[];
+  vocab: { surface: string; type: string | null; provenance: string | null }[];
+  recent_corrections: { count: number; approved_at: string | null }[];
+  trust_state: string;
+  entity_count: number | null;
+  fact_count: number | null;
+};
+
 const sess = (id: string) => `/api/transcripts/sessions/${encodeURIComponent(id)}`;
 
 export const refine = {
@@ -675,4 +687,6 @@ export const refine = {
 
   vocabSuggestions: (prefix: string) =>
     apiFetch<{ vocab: string[] }>(`/api/transcripts/suggestions/vocab?prefix=${encodeURIComponent(prefix)}`),
+
+  debug: (sessionId: string) => apiFetch<V2Debug>(`${sess(sessionId)}/debug`),
 };
