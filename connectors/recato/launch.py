@@ -9,6 +9,8 @@ can return a clean 502.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 from typing import Optional
@@ -62,12 +64,15 @@ def launch_bot(
     webhook_url: Optional[str] = None,
     api_token: Optional[str] = None,
     base_url: Optional[str] = None,
+    user_id: Optional[str] = None,
     timeout_s: float = 30.0,
 ) -> dict:
-    """POST /bots on the capture service. Returns the JSON body (typically `{id, status, ...}`).
+    """POST /containers on the capture runtime-api. Returns the JSON body (a
+    ContainerResponse: `{name, container_id, status, ...}` — note: no `id`).
 
     `api_token`/`base_url` (the per-workspace capture credentials) are preferred over the
-    legacy shared `RECATO_API_*` env vars when supplied by the dispatcher (P1)."""
+    legacy shared `RECATO_API_*` env vars when supplied by the dispatcher (P1). `user_id`
+    is the tenant/account the dispatcher assigned (runtime-api requires it)."""
     base = (base_url or os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
     token = api_token or os.environ.get("RECATO_API_TOKEN") or ""
     if not base or not token:
@@ -75,91 +80,84 @@ def launch_bot(
             "Recato is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
         )
 
-    payload: dict = {
-        "platform": platform,
-        "native_meeting_id": native_meeting_id,
+    # The bot reads its ENTIRE meeting config from one env var, BOT_CONFIG, which the
+    # capture runtime-api injects into the spawned container via config.env (capture
+    # recato-bot core/src/docker.ts:71 parses process.env.BOT_CONFIG).
+    meeting_url = (
+        f"https://meet.google.com/{native_meeting_id}"
+        if platform == "google_meet"
+        else None
+    )
+    # `meeting_id` is a REQUIRED int the old Recato meeting-api supplied from its DB
+    # PK. There is no meeting-api DB in the capture rebuild → synthesize a stable
+    # 32-bit int from the meet code (the bot only needs uniqueness). ⚠️ run-pass unverified.
+    synth_meeting_id = int(hashlib.sha256(native_meeting_id.encode()).hexdigest()[:8], 16)
+    bot_config: dict = {
+        "platform": platform,                       # google_meet | zoom | teams
+        "meetingUrl": meeting_url,
+        "botName": bot_name,
+        "nativeMeetingId": native_meeting_id,
+        "connectionId": native_meeting_id,
+        "meeting_id": synth_meeting_id,
+        "token": token,                             # was an HS256 MeetingToken from meeting-api; reuse the API token (⚠️ bot may not need it)
         "language": language,
-        "bot_name": bot_name,
+        "redisUrl": os.environ.get("REDIS_URL", "redis://redis:6379/0"),
+        "automaticLeave": {
+            "waitingRoomTimeout": 300000,
+            "noOneJoinedTimeout": 600000,
+            "everyoneLeftTimeout": 120000,
+        },
     }
-
-    # P1 audio→Conclave: point the bot's recording sink at Conclave's audio-chunk
-    # endpoint (api/capture_routes.py) so the stored audio is available for
-    # post-meeting diarize+identify (connectors/capture/identify.py). Without
-    # CONCLAVE_AUDIO_INGEST_URL set, the bot records nowhere and post-identity has
-    # no audio. captureModes=["audio"] keeps it audio-only (no video master).
+    # Audio sink → Conclave's /api/capture/audio-chunk (post-meeting diarize+identify).
     audio_url = os.environ.get("CONCLAVE_AUDIO_INGEST_URL")
     if audio_url:
-        payload["recordingEnabled"] = True
-        payload["recordingUploadUrl"] = audio_url
-        payload["captureModes"] = ["audio"]
+        bot_config["recordingUploadUrl"] = audio_url
+    # Bot status-change callback (joining/active/left) → Conclave.
+    status_cb = os.environ.get("CONCLAVE_CALLBACK_URL")
+    if status_cb:
+        bot_config["meetingApiCallbackUrl"] = status_cb
 
-    # If a signed-in Google profile is mounted into the Recato container at
-    # /tmp/browser-data, Vexa launches the bot via launchPersistentContext
-    # using that profile — bypasses Meet's anti-bot fingerprinting because
-    # the bot now looks like a real signed-in user with cookies + history.
-    # Without this, anonymous Chromium gets flagged ~100% of the time on
-    # recent Google Meet anti-bot updates (verified empirically 2026-06-02).
-    #
-    # `authenticated: true` triggers Vexa's persistent-context code path.
-    # `userdataS3Path` is required by Vexa even in local-only mode (it gates
-    # the persistent-context branch); the value is unused when MINIO_ENDPOINT
-    # is empty — s3Sync returns early.
-    if os.environ.get("CONCLAVE_BOT_AUTHENTICATED", "").lower() in ("1", "true", "yes"):
-        payload["authenticated"] = True
-        payload["userdataS3Path"] = "conclave/bot-profile"
-        # Pre-flight: nuke any leftover Chrome SingletonLock files in the
-        # bind-mounted profile. Chrome creates these on launch and removes
-        # them on clean exit — but on crash/kill they're left behind and
-        # the NEXT bot launch fails with "Failed to create SingletonLock:
-        # File exists". Recato's own cleanStaleLocks doesn't catch them in
-        # all cases. Cheap to be defensive here. Container name is the
-        # local-dev convention (`recato-lite`); for prod deploy this becomes
-        # a Recato-side concern, not Conclave's.
-        try:
-            import subprocess
-            subprocess.run(
-                ["docker", "exec", "recato-lite", "bash", "-c",
-                 "find /tmp/browser-data -maxdepth 2 -name 'Singleton*' -delete 2>/dev/null; "
-                 "find /tmp/browser-data -maxdepth 3 -name 'lockfile' -delete 2>/dev/null; true"],
-                check=False, timeout=5, capture_output=True,
-            )
-        except Exception:
-            # Best-effort. If docker isn't on PATH or recato-lite isn't named
-            # that, we'll learn from the bot's failure mode same as before.
-            pass
+    # runtime-api CreateContainerRequest (capture services/runtime-api/.../api.py:39).
+    # The bot config rides inside config.env.BOT_CONFIG; `user_id` is REQUIRED (the
+    # tenant/account the dispatcher assigned). `callback_url` receives runtime-api's
+    # container-lifecycle events (container exit ≈ meeting end → finalize webhook).
+    payload: dict = {
+        "profile": "meeting",
+        "user_id": user_id or native_meeting_id,
+        "name": f"bot-{native_meeting_id}",
+        "config": {"env": {"BOT_CONFIG": json.dumps(bot_config)}},
+    }
+    if webhook_url:
+        payload["callback_url"] = webhook_url
+
+    # NOTE (capture rebuild): the OLD contract was `POST /bots` with a FLAT body
+    # ({platform, native_meeting_id, language, bot_name, authenticated, userdataS3Path,
+    # recordingEnabled, ...}) + a per-meeting webhook via the `X-User-Webhook-URL`
+    # HEADER. That is replaced by the runtime-api `/containers` contract above. Warmed-
+    # account auth is no longer a body flag + an in-container SingletonLock `docker exec`
+    # against `recato-lite`; it now comes from the BOT_PROFILE_DIR bind mount the
+    # `meeting` profile declares (capture .../profiles.yaml). ⚠️ the persistent-context
+    # trigger for that mounted profile is UNVERIFIED — confirm at the run pass.
 
     headers = {
         "X-API-Key": token,
         "Authorization": f"Bearer {token}",
         "Accept": "application/json",
     }
-    if webhook_url:
-        # Recato reads per-meeting webhook config from request HEADERS,
-        # not the body — see meeting-api/meeting_api/meetings.py around
-        # `X-User-Webhook-URL`. Passing it on the body is silently ignored.
-        # Verified via the Vexa source after a Phase 2.5 misfire where no
-        # webhook ever fired despite the field being set.
-        headers["X-User-Webhook-URL"] = webhook_url
-        # Webhook secret (HMAC for the inbound side) can ride along too —
-        # we use RECATO_WEBHOOK_SECRET on the receiver, so if we want HMAC
-        # in dev we need to forward the same secret here.
-        webhook_secret = os.environ.get("RECATO_WEBHOOK_SECRET")
-        if webhook_secret:
-            headers["X-User-Webhook-Secret"] = webhook_secret
 
     try:
         resp = httpx.post(
-            f"{base}/bots",
+            f"{base}/containers",
             json=payload,
             headers=headers,
             timeout=timeout_s,
         )
     except httpx.HTTPError as e:
-        raise RecatoLaunchError(f"Recato unreachable: {e}") from e
+        raise RecatoLaunchError(f"capture runtime-api unreachable: {e}") from e
 
     if resp.status_code >= 400:
         raise RecatoLaunchError(
-            f"Recato {resp.status_code}: {resp.text[:300]}"
+            f"capture runtime-api {resp.status_code}: {resp.text[:300]}"
         )
     try:
         return resp.json()

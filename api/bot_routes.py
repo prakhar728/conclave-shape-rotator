@@ -100,6 +100,7 @@ def invite_bot(
             native_meeting_id=meet_code,
             bot_name=DEFAULT_BOT_NAME,
             webhook_url=webhook_url,
+            user_id=account_id,
         )
     except RecatoLaunchError as e:
         bot_invitations.update_status(invitation["id"], "failed", completed=True)
