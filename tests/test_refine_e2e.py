@@ -121,3 +121,37 @@ def test_full_refine_roundtrip_over_http(client):
     # case 6: raw transcript was never mutated
     raw = store.load_session(sid).raw_diarization[0].text
     assert raw == "we use the DStack protocol"
+
+
+def _login_draft(client, email, sid):
+    client.post("/auth/v1/verify-otp", json={"email": email, "token": "000000"})
+    user = identity.upsert_user_by_supabase(f"sb-{email}", email)
+    wsid = client.get("/api/workspaces").json()["workspaces"][0]["id"]
+    store.save_session(Session(
+        session_id=sid,
+        raw_diarization=[RawSegment(speaker="speaker_1", text="we use Dstack")],
+        metadata=SessionMetadata(date="2026-06-22", source="test"),
+    ))
+    store.set_workspace(sid, workspace_id=wsid, owner_user_id=user["id"], visibility="owner-only")
+    store.create_v2_draft(sid)
+    return user
+
+
+def test_debug_endpoint_shows_the_trail(client, monkeypatch):
+    monkeypatch.setenv("CONCLAVE_REFINE_DEBUG", "1")
+    _login_draft(client, "bob@example.com", "dbg-1")
+    client.post("/transcripts/sessions/dbg-1/v2/tag-entity",
+                json={"segment_id": 0, "token_start": 2, "token_end": 3, "surface": "Dstack", "type": "project"})
+    d = client.get("/transcripts/sessions/dbg-1/debug")
+    assert d.status_code == 200, d.text
+    body = d.json()
+    assert body["status"] == "draft"
+    assert any(a["surface"] == "Dstack" and a["type"] == "project" for a in body["annotations"])
+    assert any(v["surface"] == "dstack" for v in body["vocab"])  # vocab is normalized
+    assert body["trust_state"] in ("gated", "auto")
+
+
+def test_debug_endpoint_404_when_disabled(client, monkeypatch):
+    monkeypatch.delenv("CONCLAVE_REFINE_DEBUG", raising=False)
+    _login_draft(client, "carol@example.com", "dbg-2")
+    assert client.get("/transcripts/sessions/dbg-2/debug").status_code == 404

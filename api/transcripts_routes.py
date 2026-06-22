@@ -747,6 +747,67 @@ def get_session_v2(session_id: str, request: Request) -> dict:
     return v2.model_dump()
 
 
+def _refine_debug_enabled() -> bool:
+    return os.environ.get("CONCLAVE_REFINE_DEBUG", "").lower() in ("1", "true", "yes")
+
+
+@router.get("/sessions/{session_id}/debug")
+def get_session_v2_debug(session_id: str, request: Request) -> dict:
+    """Dev-only persistence trail for the refine editor — the v2 state + per-user
+    vocab + graduation stats + entity/fact counts, re-read from the DB. Gated behind
+    CONCLAVE_REFINE_DEBUG and owner-only. Powers a live 'backend state' panel so a
+    front-end edit can be verified to persist where Part 2 will read it."""
+    if not _refine_debug_enabled():
+        raise HTTPException(status_code=404, detail="debug disabled")
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if store.load_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    row = _ws_row(session_id)
+    if row is not None and row.get("owner_user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="owner only")
+    v2 = store.load_v2(session_id)
+    if v2 is None:
+        raise HTTPException(status_code=404, detail="no v2 draft")
+
+    from storage import sqlite as _sql
+    from transcripts import trust
+    owner = user["id"]
+    vocab_rows = _sql.list_vocab(owner)
+    try:
+        conn = _sql._get_conn()
+        n_ent = conn.execute("SELECT COUNT(*) AS n FROM entities").fetchone()["n"]
+        n_fact = conn.execute("SELECT COUNT(*) AS n FROM facts").fetchone()["n"]
+        rows = conn.execute(
+            "SELECT correction_count, approved_at FROM meeting_corrections "
+            "WHERE user_id=? ORDER BY approved_at DESC LIMIT 10",
+            (owner,),
+        ).fetchall()
+        corr = [{"count": c["correction_count"], "approved_at": c["approved_at"]} for c in rows]
+    except Exception:  # noqa: BLE001
+        n_ent = n_fact = None
+        corr = []
+    return {
+        "status": v2.status,
+        "insights_stale": v2.insights_stale,
+        "segments": [{"speaker": s.speaker_name or s.speaker_label, "text": s.text} for s in v2.segments],
+        "annotations": [
+            {"surface": a.surface, "state": a.state, "type": a.type, "source": a.source}
+            for a in v2.annotations
+        ],
+        "vocab": [
+            {"surface": v["surface_norm"], "type": v.get("type"), "provenance": v.get("provenance")}
+            for v in vocab_rows
+        ],
+        "recent_corrections": corr,
+        "trust_state": trust.state_for(owner),
+        "entity_count": n_ent,
+        "fact_count": n_fact,
+    }
+
+
 @router.post("/sessions/{session_id}/approve")
 def approve_session_v2(session_id: str, request: Request) -> dict:
     """Approve the v2 draft and run the (gated) KB build over the corrected
