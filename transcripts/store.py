@@ -357,3 +357,23 @@ def approve_v2(session_id: str) -> TranscriptV2:
         v2.approved_at = sqlite._now()
         _save_v2(v2)
     return v2
+
+
+def v2_segments_or_raw(session_id: str) -> list[dict]:
+    """Segment source for the KB build: the **approved** v2 (corrected tokens +
+    confirmed speaker) when present, else the immutable raw.
+
+    Draft (un-approved) v2 is deliberately NOT used — the KB only ever builds
+    from human-approved corrections. Returns `[{speaker, text}]`, the shape
+    `kb_pipeline.index_session` already consumes.
+    """
+    v2 = load_v2(session_id)
+    if v2 is not None and v2.status == "approved":
+        return [
+            {"speaker": (seg.speaker_name or seg.speaker_label), "text": seg.text}
+            for seg in v2.segments
+        ]
+    session = load_session(session_id)
+    if session is None:
+        return []
+    return [{"speaker": s.speaker, "text": s.text} for s in session.raw_diarization]

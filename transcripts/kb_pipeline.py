@@ -46,10 +46,10 @@ def index_session(
         logger.error("kb index: session %s not found", session_id)
         return None
 
-    segments = [
-        {"speaker": s.speaker, "text": s.text}
-        for s in (session.raw_diarization or [])
-    ]
+    # Part 1: source from the approved v2 (corrected text + confirmed speaker)
+    # when present; otherwise the immutable raw. So a user's approved
+    # corrections are what gets chunked/embedded/extracted into the KB.
+    segments = store.v2_segments_or_raw(session_id)
     if not segments:
         logger.info("kb index: session %s has no segments, skipping", session_id)
         return None
