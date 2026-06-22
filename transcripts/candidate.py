@@ -66,3 +66,38 @@ def reparse_token(token_text: str) -> str:
     NOUN/PROPN → promote to candidate/vocab; function/grammar → text-only."""
     doc = _nlp()(token_text)
     return doc[0].pos_ if len(doc) else "X"
+
+
+def _is_oov_token(tok: str) -> bool:
+    """An alphabetic token unknown to the English frequency list → out-of-vocab
+    (a novel term or an ASR garble). Punctuation/numbers are not OOV signals."""
+    t = tok.strip()
+    if not t or not any(c.isalpha() for c in t):
+        return False
+    import wordfreq
+    return wordfreq.zipf_frequency(t.lower(), "en") == 0.0
+
+
+def assign_states(
+    tokens: list[str], spans: list["CandidateSpan"], user_id: str
+) -> list[CandidateSpan]:
+    """Assign each candidate a state (§15), per-user:
+
+    - **known** — the surface is in the user's vocab → carry its type (wins even
+      if the surface contains an OOV token, e.g. a confirmed "DStack protocol").
+    - **oov** — contains a token unknown to English AND not vocab (novel entity
+      or ASR error → highlight for review).
+    - **candidate** — a recognized-English noun phrase, not yet in vocab.
+    """
+    from transcripts import vocab as vocab_mod
+
+    out: list[CandidateSpan] = []
+    for sp in spans:
+        entry = vocab_mod.get(user_id, sp.surface)
+        if entry is not None:
+            out.append(sp.model_copy(update={"state": "known", "type": entry.type}))
+            continue
+        span_tokens = tokens[sp.token_start : sp.token_end]
+        state = "oov" if any(_is_oov_token(t) for t in span_tokens) else "candidate"
+        out.append(sp.model_copy(update={"state": state}))
+    return out

@@ -30,3 +30,29 @@ def test_reparse_token_pos():
     from transcripts.candidate import reparse_token
     assert reparse_token("protocol") in ("NOUN", "PROPN")
     assert reparse_token("the") in ("DET", "PRON", "ADP")
+
+
+def test_oov_proper_noun_flagged():  # CD-5
+    from transcripts.candidate import assign_states, spacy_pass
+    tokens, spans = spacy_pass("we use Recato today")
+    out = assign_states(tokens, spans, "u_cd5")
+    recato = next((s for s in out if "Recato" in s.surface), None)
+    assert recato is not None and recato.state == "oov"
+
+
+def test_known_from_vocab():  # CD-6
+    from transcripts import vocab
+    from transcripts.candidate import assign_states, spacy_pass
+    tokens, spans = spacy_pass("we use the DStack protocol")
+    vocab.put("u_cd6", "the DStack protocol", type="project")
+    out = assign_states(tokens, spans, "u_cd6")
+    dp = next((s for s in out if "DStack" in s.surface), None)
+    assert dp is not None and dp.state == "known" and dp.type == "project"
+
+
+def test_candidate_when_in_dict_not_vocab():  # CD-7
+    from transcripts.candidate import assign_states, spacy_pass
+    tokens, spans = spacy_pass("we discussed the roadmap")
+    out = assign_states(tokens, spans, "u_cd7")
+    rm = next((s for s in out if "roadmap" in s.surface), None)
+    assert rm is not None and rm.state == "candidate"
