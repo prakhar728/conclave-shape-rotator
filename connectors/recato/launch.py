@@ -82,6 +82,17 @@ def launch_bot(
         "bot_name": bot_name,
     }
 
+    # P1 audio→Conclave: point the bot's recording sink at Conclave's audio-chunk
+    # endpoint (api/capture_routes.py) so the stored audio is available for
+    # post-meeting diarize+identify (connectors/capture/identify.py). Without
+    # CONCLAVE_AUDIO_INGEST_URL set, the bot records nowhere and post-identity has
+    # no audio. captureModes=["audio"] keeps it audio-only (no video master).
+    audio_url = os.environ.get("CONCLAVE_AUDIO_INGEST_URL")
+    if audio_url:
+        payload["recordingEnabled"] = True
+        payload["recordingUploadUrl"] = audio_url
+        payload["captureModes"] = ["audio"]
+
     # If a signed-in Google profile is mounted into the Recato container at
     # /tmp/browser-data, Vexa launches the bot via launchPersistentContext
     # using that profile — bypasses Meet's anti-bot fingerprinting because
