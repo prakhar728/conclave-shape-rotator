@@ -323,6 +323,11 @@ def create_v2_draft(session_id: str) -> TranscriptV2:
     return v2
 
 
+def list_draft_v2_sessions() -> list[dict]:
+    """Sessions whose v2 is still a draft — the timeout sweep's worklist."""
+    return sqlite.list_draft_v2_sessions()
+
+
 def load_v2(session_id: str) -> Optional[TranscriptV2]:
     row = sqlite.get_transcript_v2(session_id)
     if row is None:

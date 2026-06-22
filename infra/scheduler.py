@@ -64,19 +64,65 @@ def start_calendar_poll() -> None:
     _calendar_task = loop.create_task(_calendar_poll_loop())
 
 
+# --- Transcript-refine auto-approval timeout sweep ----------------------
+_refine_sweep_task: "asyncio.Task | None" = None
+
+
+async def _refine_sweep_loop() -> None:
+    """Tick every CONCLAVE_REFINE_SWEEP_SECONDS (default 300). Each tick auto-
+    approves graduated (auto) users' draft transcripts older than their timeout
+    window; gated users are untouched. No-op when nothing is due."""
+    interval = float(os.environ.get("CONCLAVE_REFINE_SWEEP_SECONDS", "300"))
+    while True:
+        try:
+            await asyncio.sleep(interval)
+        except asyncio.CancelledError:
+            logger.info("scheduler: refine sweep loop cancelled")
+            return
+        try:
+            from api.transcripts_routes import run_timeout_sweep
+            done = await asyncio.to_thread(run_timeout_sweep)
+            if done:
+                logger.info("refine sweep: auto-approved %d draft(s)", len(done))
+        except Exception:  # noqa: BLE001 — keep the loop alive across failures
+            logger.exception("refine sweep: tick failed")
+
+
+def start_refine_sweep() -> None:
+    """Start the refine timeout sweep loop. No-op when disabled / no loop yet."""
+    global _refine_sweep_task
+    if disabled():
+        return
+    if _refine_sweep_task is not None and not _refine_sweep_task.done():
+        return
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    _refine_sweep_task = loop.create_task(_refine_sweep_loop())
+
+
 async def start_all() -> None:
     """Start background tasks on startup."""
     if disabled():
         logger.info("scheduler: disabled via CONCLAVE_DISABLE_SCHEDULER")
         return
     start_calendar_poll()
-    logger.info("scheduler: started calendar poll loop")
+    start_refine_sweep()
+    logger.info("scheduler: started calendar poll + refine sweep loops")
 
 
 async def stop_all() -> None:
     """Cancel running tasks. Used on app shutdown."""
-    global _calendar_task
+    global _calendar_task, _refine_sweep_task
+    tasks = []
     if _calendar_task is not None:
-        _calendar_task.cancel()
-        await asyncio.gather(_calendar_task, return_exceptions=True)
+        tasks.append(_calendar_task)
+    if _refine_sweep_task is not None:
+        tasks.append(_refine_sweep_task)
+    for task in tasks:
+        task.cancel()
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
     _calendar_task = None
+    _refine_sweep_task = None

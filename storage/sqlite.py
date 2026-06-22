@@ -817,6 +817,15 @@ def save_transcript_v2(
     )
 
 
+def list_draft_v2_sessions() -> list[dict]:
+    """Sessions whose v2 is still a draft (for the auto-approval timeout sweep).
+    Returns `[{session_id, created_at}]`."""
+    rows = _get_conn().execute(
+        "SELECT session_id, created_at FROM transcript_v2 WHERE status = 'draft'"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_transcript_v2(session_id: str) -> dict | None:
     row = _get_conn().execute(
         "SELECT session_id, status, doc_json, approved_at, created_at, updated_at "

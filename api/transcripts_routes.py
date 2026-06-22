@@ -972,6 +972,47 @@ def approve_and_build(session_id: str) -> None:
         _build_kb(session_id)
 
 
+def _refine_timeout_hours() -> float:
+    try:
+        return float(os.environ.get("CONCLAVE_REFINE_TIMEOUT_HOURS", "8"))
+    except ValueError:
+        return 8.0
+
+
+def _parse_v2_ts(s: Optional[str]):
+    if not s:
+        return None
+    from datetime import datetime, timezone
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", ""))
+        return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+    except ValueError:
+        return None
+
+
+def run_timeout_sweep(now=None) -> list[str]:
+    """Auto-approve **auto-graduated** users' draft v2s older than the timeout
+    window (default 8h, `CONCLAVE_REFINE_TIMEOUT_HOURS`). Gated users are never
+    auto-approved — their drafts wait for explicit approval. Returns the
+    session_ids approved this tick. Safe to run repeatedly (idempotent approve)."""
+    from datetime import datetime, timedelta, timezone
+    from transcripts import trust
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=_refine_timeout_hours())
+    approved: list[str] = []
+    for row in store.list_draft_v2_sessions():
+        sid = row["session_id"]
+        created = _parse_v2_ts(row.get("created_at"))
+        if created is None or created > cutoff:
+            continue  # not old enough
+        owner = (_ws_row(sid) or {}).get("owner_user_id")
+        if not owner or trust.state_for(owner) != "auto":
+            continue  # gated / no owner → waits for manual approval
+        approve_and_build(sid)
+        approved.append(sid)
+    return approved
+
+
 def _enrich_in_background(session_id: str) -> None:
     """Run enrichment on a stored session; log and swallow exceptions.
 
