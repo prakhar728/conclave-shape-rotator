@@ -229,3 +229,18 @@ class TranscriptV2(BaseModel):
     segments: list[V2Segment] = Field(default_factory=list)
     annotations: list[CandidateAnnotation] = Field(default_factory=list)
     approved_at: Optional[str] = None
+
+
+class VocabEntry(BaseModel):
+    """One per-user vocab entry — the dictionary value (docs/plans §12 #2).
+
+    `surface_norm` is the normalized lookup key (casefold + collapsed
+    whitespace). Per-user by construction; never shared across users.
+    """
+
+    user_id: str
+    surface_norm: str
+    is_entity: bool = True
+    type: Optional[str] = None
+    canonical_id: Optional[str] = None
+    provenance: Literal["nlp", "correction", "user"] = "user"

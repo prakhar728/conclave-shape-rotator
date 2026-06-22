@@ -832,3 +832,51 @@ def get_transcript_v2(session_id: str) -> dict | None:
         "created_at": row["created_at"],
         "updated_at": row["updated_at"],
     }
+
+
+# --- Per-user vocab (Part 1 dictionary) ---
+
+def upsert_vocab(
+    user_id: str,
+    surface_norm: str,
+    is_entity: bool,
+    type_: str | None,
+    canonical_id: str | None,
+    provenance: str,
+) -> None:
+    """Insert or update one vocab entry, keyed by (user_id, surface_norm).
+    Upsert = the O(1) put half of the dictionary contract."""
+    now = _now()
+    _get_conn().execute(
+        """
+        INSERT INTO vocab
+            (user_id, surface_norm, is_entity, type, canonical_id, provenance,
+             created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, surface_norm) DO UPDATE SET
+            is_entity = excluded.is_entity,
+            type = excluded.type,
+            canonical_id = excluded.canonical_id,
+            provenance = excluded.provenance,
+            updated_at = excluded.updated_at
+        """,
+        (user_id, surface_norm, int(is_entity), type_, canonical_id, provenance, now, now),
+    )
+
+
+def get_vocab(user_id: str, surface_norm: str) -> dict | None:
+    row = _get_conn().execute(
+        "SELECT user_id, surface_norm, is_entity, type, canonical_id, provenance "
+        "FROM vocab WHERE user_id = ? AND surface_norm = ?",
+        (user_id, surface_norm),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_vocab(user_id: str) -> list[dict]:
+    rows = _get_conn().execute(
+        "SELECT user_id, surface_norm, is_entity, type, canonical_id, provenance "
+        "FROM vocab WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
