@@ -98,7 +98,11 @@ export default function RefinePage({
         <RefineActions
           draft={draft}
           sessionId={id}
-          onApproved={() => router.push(`/meeting/${id}`)}
+          onApproved={() => {
+            // Stay here and show the APPROVED, corrected transcript. (The meeting
+            // view still renders raw_diarization — see transcript-refine-issues.md #2.)
+            refine.getDraft(id).then(setDraft).catch(() => {});
+          }}
         />
         {debug ? <RefineDebugPanel sessionId={id} refreshKey={refreshKey} /> : null}
       </main>
