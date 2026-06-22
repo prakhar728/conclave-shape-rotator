@@ -55,6 +55,32 @@ async def propose_binding(
     return resp.json()
 
 
+async def push_knowledge(
+    workspace: str,
+    bindings: list[dict],
+    *,
+    vocab_terms: list[str] | None = None,
+) -> dict:
+    """POST /v1/knowledge — the manual-tag feedback loop (P4).
+
+    When a user names a speaker in a Conclave transcript, we push that name to the
+    voiceprint so FUTURE meetings auto-recognize them (FPM `store.set_name`, or an
+    email-binding when `email` is present). `bindings`: `[{voiceprint_id, name,
+    email?}]`. Returns `{bound, not_found, vocab_terms}`. Token needs `knowledge` scope.
+    """
+    if not bindings and not vocab_terms:
+        return {"bound": [], "not_found": [], "vocab_terms": 0}
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{_base()}/v1/knowledge", headers=_headers(),
+            json={"workspace": workspace, "bindings": bindings,
+                  "vocab_terms": vocab_terms or []},
+        )
+    if resp.status_code != 200:
+        raise HTTPException(502, f"FPM knowledge failed ({resp.status_code}): {resp.text[:200]}")
+    return resp.json()
+
+
 async def consent_resolve_batch(workspace: str, voiceprint_ids: list[str]) -> dict:
     """POST /v1/consent/resolve/{workspace} — read-side name/visibility for a set of
     voiceprints. Returns the `resolved` map `{vid: {name, owner_email, visibility}}`."""
