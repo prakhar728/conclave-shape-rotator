@@ -716,6 +716,57 @@ class CanonicalIngestPayload(BaseModel):
     segments: list[_CanonicalSegment]
 
 
+def _ws_row(session_id: str) -> Optional[dict]:
+    """The session's workspace row when it has a workspace binding, else None
+    (legacy cohort session). Defensive against schema drift in test DBs."""
+    try:
+        row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001
+        row = None
+    return {"session_id": session_id, **row} if (row and row.get("workspace_id")) else None
+
+
+@router.get("/sessions/{session_id}/v2")
+def get_session_v2(session_id: str, request: Request) -> dict:
+    """The editable v2 draft (corrected segments + annotations + status) for the
+    refinement editor. Authenticated-only, and gated like the transcript surface
+    (it carries verbatim text): workspace members/owner per `can_user_see`;
+    legacy cohort sessions are visible to any authed user."""
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if store.load_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    row = _ws_row(session_id)
+    if row is not None and not can_user_see(user, row):
+        raise HTTPException(status_code=403, detail="not allowed")
+    v2 = store.load_v2(session_id)
+    if v2 is None:
+        raise HTTPException(status_code=404, detail="no v2 draft for this session")
+    return v2.model_dump()
+
+
+@router.post("/sessions/{session_id}/approve")
+def approve_session_v2(session_id: str, request: Request) -> dict:
+    """Approve the v2 draft and run the (gated) KB build over the corrected
+    transcript. Owner-only on workspace sessions; any authed user on legacy
+    cohort sessions."""
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if store.load_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    row = _ws_row(session_id)
+    if row is not None and row.get("owner_user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="only the owner can approve")
+    if store.load_v2(session_id) is None:
+        raise HTTPException(status_code=404, detail="no v2 draft to approve")
+    approve_and_build(session_id)
+    return {"session_id": session_id, "status": "approved"}
+
+
 def _build_and_save_session(payload_dict: dict) -> Session:
     """Pure pipeline: canonical payload → NormalizedInput → Session → store.
 
