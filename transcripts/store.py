@@ -7,10 +7,19 @@ moves `derived`/`metadata` forward.
 """
 from __future__ import annotations
 
+import json
 from typing import Optional
 
 from storage import sqlite
-from transcripts.models import Derived, RawSegment, Session, SessionMetadata
+from transcripts.models import (
+    CandidateAnnotation,
+    Derived,
+    RawSegment,
+    Session,
+    SessionMetadata,
+    TranscriptV2,
+    V2Segment,
+)
 
 
 def save_session(session: Session) -> None:
@@ -244,3 +253,107 @@ def save_session_with_workspace(
     """
     save_session(session)
     set_workspace(session.session_id, workspace_id, owner_user_id, visibility)
+
+
+# ---------------------------------------------------------------------------
+# Part 1 — transcript v2 (editable correction layer). Raw stays immutable;
+# every seam here reads/writes only the `transcript_v2` row. See
+# docs/plans/transcript-refine.md §4/§10.
+# ---------------------------------------------------------------------------
+
+def _save_v2(v2: TranscriptV2) -> None:
+    doc = {
+        "segments": [s.model_dump() for s in v2.segments],
+        "annotations": [a.model_dump() for a in v2.annotations],
+    }
+    sqlite.save_transcript_v2(
+        v2.session_id, v2.status, v2.approved_at, json.dumps(doc)
+    )
+
+
+def create_v2_draft(session_id: str) -> TranscriptV2:
+    """Initialize the v2 draft from a session's immutable raw segments.
+
+    Each raw segment becomes a `V2Segment` (same order/index), tokens =
+    whitespace split of the raw text (candidate detection annotates later).
+    The raw diarizer label is copied as the immutable join key; the confirmed
+    `speaker_name` starts empty.
+    """
+    session = load_session(session_id)
+    if session is None:
+        raise KeyError(session_id)
+    segments = [
+        V2Segment(
+            segment_id=i,
+            speaker_label=seg.speaker,
+            tokens=seg.text.split(),
+        )
+        for i, seg in enumerate(session.raw_diarization)
+    ]
+    v2 = TranscriptV2(session_id=session_id, status="draft", segments=segments)
+    _save_v2(v2)
+    return v2
+
+
+def load_v2(session_id: str) -> Optional[TranscriptV2]:
+    row = sqlite.get_transcript_v2(session_id)
+    if row is None:
+        return None
+    doc = row["doc"] or {}
+    return TranscriptV2(
+        session_id=row["session_id"],
+        status=row["status"],
+        approved_at=row["approved_at"],
+        segments=[V2Segment(**s) for s in doc.get("segments", [])],
+        annotations=[CandidateAnnotation(**a) for a in doc.get("annotations", [])],
+    )
+
+
+def _require_draft(session_id: str) -> TranscriptV2:
+    v2 = load_v2(session_id)
+    if v2 is None:
+        raise KeyError(session_id)
+    if v2.status == "approved":
+        raise ValueError(f"v2 for {session_id} is approved; edits are not allowed")
+    return v2
+
+
+def edit_token(
+    session_id: str, segment_id: int, token_idx: int, new_text: str
+) -> TranscriptV2:
+    """Replace a single token's text (count unchanged → token indices, and thus
+    all other span anchors, stay valid). Rejected once approved."""
+    v2 = _require_draft(session_id)
+    v2.segments[segment_id].tokens[token_idx] = new_text
+    _save_v2(v2)
+    return v2
+
+
+def add_annotation(session_id: str, annotation: CandidateAnnotation) -> TranscriptV2:
+    """Append a candidate-span annotation (entity/type/new-vocab) to the draft."""
+    v2 = _require_draft(session_id)
+    v2.annotations.append(annotation)
+    _save_v2(v2)
+    return v2
+
+
+def assign_speaker(session_id: str, segment_id: int, name: Optional[str]) -> TranscriptV2:
+    """Set the confirmed speaker name on a v2 segment. The raw diarizer label
+    (the immutable join key) is never touched."""
+    v2 = _require_draft(session_id)
+    v2.segments[segment_id].speaker_name = name
+    _save_v2(v2)
+    return v2
+
+
+def approve_v2(session_id: str) -> TranscriptV2:
+    """Flip the draft to approved (one-way; idempotent — re-approving keeps the
+    original `approved_at`). This is the gate the KB build waits on."""
+    v2 = load_v2(session_id)
+    if v2 is None:
+        raise KeyError(session_id)
+    if v2.status != "approved":
+        v2.status = "approved"
+        v2.approved_at = sqlite._now()
+        _save_v2(v2)
+    return v2

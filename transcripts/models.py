@@ -163,3 +163,69 @@ class Session(BaseModel):
     raw_diarization: list[RawSegment]  # IMMUTABLE after storage
     metadata: SessionMetadata
     derived: Derived = Field(default_factory=Derived)
+
+
+# ---------------------------------------------------------------------------
+# Part 1 — transcript refinement (the editable `v2` correction layer).
+# Raw stays immutable; the user's edits + ground-truth tags live on `v2`.
+# See docs/plans/transcript-refine.md §4/§15.
+# ---------------------------------------------------------------------------
+
+
+class TokenSpan(BaseModel):
+    """A token/segment-relative anchor (NOT a flat char-range), §12 #1.
+
+    Anchored by token index within a segment, so a single-token edit that only
+    changes a word's *character* length leaves every other token's index — and
+    therefore every other span — valid (the V2-9 guarantee).
+    """
+
+    segment_id: int
+    token_start: int
+    token_end: int  # exclusive
+
+
+class CandidateAnnotation(BaseModel):
+    """A span the editor renders with state. Produced by the candidate-detection
+    pass (`source="nlp"`), a user correction (`"correction"`), or a manual tag
+    (`"user"`). Carries an optional entity `type` once known/typed."""
+
+    span: TokenSpan
+    surface: str
+    state: Literal["known", "candidate", "oov"]
+    type: Optional[str] = None
+    source: Literal["nlp", "correction", "user"] = "nlp"
+    confidence: Optional[float] = None
+
+
+class V2Segment(BaseModel):
+    """One segment of the corrected document, mirroring a raw segment by index.
+
+    `speaker_label` is the raw diarizer label copied verbatim (the immutable C3
+    join key — never edited here). `speaker_name` is the v2-only confirmed
+    assignment. `tokens` is the editable word list; `text` re-joins them.
+    """
+
+    segment_id: int
+    speaker_label: str
+    speaker_name: Optional[str] = None
+    tokens: list[str] = Field(default_factory=list)
+
+    @property
+    def text(self) -> str:
+        return " ".join(self.tokens)
+
+
+class TranscriptV2(BaseModel):
+    """The editable, span-annotated correction layer for a session.
+
+    Lives in the `transcript_v2` table alongside (never replacing) the immutable
+    `raw_diarization`. `status` goes draft → approved (one-way in Part 1); the
+    KB build (Part 2) only ever reads an `approved` v2.
+    """
+
+    session_id: str
+    status: Literal["draft", "approved"] = "draft"
+    segments: list[V2Segment] = Field(default_factory=list)
+    annotations: list[CandidateAnnotation] = Field(default_factory=list)
+    approved_at: Optional[str] = None

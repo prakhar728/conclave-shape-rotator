@@ -183,6 +183,8 @@ def reset_all() -> None:
         DELETE FROM evaluation_runs;
         DELETE FROM attestations;
         DELETE FROM transcript_sessions;
+        DELETE FROM transcript_v2;
+        DELETE FROM vocab;
         """
     )
 
@@ -788,3 +790,45 @@ def delete_transcript_session(session_id: str) -> None:
         "DELETE FROM transcript_sessions WHERE session_id = ?",
         (session_id,),
     )
+
+
+# --- Transcript v2 (Part 1 correction layer) ---
+
+def save_transcript_v2(
+    session_id: str, status: str, approved_at: str | None, doc_json: str
+) -> None:
+    """Upsert the v2 correction doc for a session. `doc_json` holds the segments
+    + annotations; `status`/`approved_at` are typed columns for querying. Never
+    touches `transcript_sessions` (raw stays immutable)."""
+    now = _now()
+    _get_conn().execute(
+        """
+        INSERT INTO transcript_v2
+            (session_id, status, doc_json, approved_at, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
+            status = excluded.status,
+            doc_json = excluded.doc_json,
+            approved_at = excluded.approved_at,
+            updated_at = excluded.updated_at
+        """,
+        (session_id, status, doc_json, approved_at, now, now),
+    )
+
+
+def get_transcript_v2(session_id: str) -> dict | None:
+    row = _get_conn().execute(
+        "SELECT session_id, status, doc_json, approved_at, created_at, updated_at "
+        "FROM transcript_v2 WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return {
+        "session_id": row["session_id"],
+        "status": row["status"],
+        "doc": json.loads(row["doc_json"]),
+        "approved_at": row["approved_at"],
+        "created_at": row["created_at"],
+        "updated_at": row["updated_at"],
+    }
