@@ -1013,6 +1013,55 @@ def run_timeout_sweep(now=None) -> list[str]:
     return approved
 
 
+def _reminder_hours() -> float:
+    try:
+        return float(os.environ.get("CONCLAVE_REFINE_REMINDER_HOURS", "1"))
+    except ValueError:
+        return 1.0
+
+
+def _send_review_reminder(session_id: str, owner_user_id: str) -> None:
+    """Best-effort: email the owner a magic-link to review their draft. Swallows
+    failures (the sweep marks reminded regardless, so it never spam-retries)."""
+    try:
+        from infra import email as email_mod
+        from infra import identity, magic_links
+        owner = identity.get_user(owner_user_id)
+        if not owner or not owner.get("email"):
+            return
+        token = magic_links.issue(user_email=owner["email"], meeting_session_id=session_id)
+        email_mod.send_magic_link(
+            recipient_email=owner["email"],
+            magic_link_url=magic_links.url_for(token),
+            meeting_title="Review your meeting transcript",
+            inviter_email=None,
+        )
+    except Exception:
+        logger.exception("review reminder send failed for %s", session_id)
+
+
+def run_reminder_sweep(now=None) -> list[str]:
+    """Send a ONE-TIME review reminder for draft transcripts whose meeting ended
+    ~CONCLAVE_REFINE_REMINDER_HOURS ago (default 1h) — for BOTH gated and auto
+    users. Returns session_ids reminded this tick."""
+    from datetime import datetime, timedelta, timezone
+    now = now or datetime.now(timezone.utc)
+    cutoff = now - timedelta(hours=_reminder_hours())
+    reminded: list[str] = []
+    for row in store.list_unreminded_draft_v2():
+        sid = row["session_id"]
+        created = _parse_v2_ts(row.get("created_at"))
+        if created is None or created > cutoff:
+            continue  # too soon to remind
+        owner = (_ws_row(sid) or {}).get("owner_user_id")
+        if not owner:
+            continue
+        _send_review_reminder(sid, owner)
+        store.mark_v2_reminded(sid)  # fire exactly once
+        reminded.append(sid)
+    return reminded
+
+
 def _enrich_in_background(session_id: str) -> None:
     """Run enrichment on a stored session; log and swallow exceptions.
 

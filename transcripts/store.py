@@ -328,6 +328,15 @@ def list_draft_v2_sessions() -> list[dict]:
     return sqlite.list_draft_v2_sessions()
 
 
+def list_unreminded_draft_v2() -> list[dict]:
+    """Draft sessions that haven't had their review reminder sent yet."""
+    return sqlite.list_unreminded_draft_v2()
+
+
+def mark_v2_reminded(session_id: str) -> None:
+    sqlite.mark_v2_reminded(session_id)
+
+
 def load_v2(session_id: str) -> Optional[TranscriptV2]:
     row = sqlite.get_transcript_v2(session_id)
     if row is None:

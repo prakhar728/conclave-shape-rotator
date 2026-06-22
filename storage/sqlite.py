@@ -826,6 +826,24 @@ def list_draft_v2_sessions() -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def list_unreminded_draft_v2() -> list[dict]:
+    """Draft sessions that haven't had their review reminder sent yet."""
+    rows = _get_conn().execute(
+        "SELECT session_id, created_at FROM transcript_v2 "
+        "WHERE status = 'draft' AND reminded_at IS NULL"
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_v2_reminded(session_id: str) -> None:
+    """Stamp reminded_at so the review reminder fires exactly once."""
+    now = _now()
+    _get_conn().execute(
+        "UPDATE transcript_v2 SET reminded_at = ?, updated_at = ? WHERE session_id = ?",
+        (now, now, session_id),
+    )
+
+
 def get_transcript_v2(session_id: str) -> dict | None:
     row = _get_conn().execute(
         "SELECT session_id, status, doc_json, approved_at, created_at, updated_at "

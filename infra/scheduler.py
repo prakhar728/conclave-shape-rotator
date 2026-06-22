@@ -80,10 +80,13 @@ async def _refine_sweep_loop() -> None:
             logger.info("scheduler: refine sweep loop cancelled")
             return
         try:
-            from api.transcripts_routes import run_timeout_sweep
+            from api.transcripts_routes import run_reminder_sweep, run_timeout_sweep
             done = await asyncio.to_thread(run_timeout_sweep)
             if done:
                 logger.info("refine sweep: auto-approved %d draft(s)", len(done))
+            rem = await asyncio.to_thread(run_reminder_sweep)
+            if rem:
+                logger.info("refine sweep: sent %d review reminder(s)", len(rem))
         except Exception:  # noqa: BLE001 — keep the loop alive across failures
             logger.exception("refine sweep: tick failed")
 
