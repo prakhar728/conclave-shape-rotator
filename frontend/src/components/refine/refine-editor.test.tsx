@@ -88,4 +88,17 @@ describe("RefineEditor", () => {
     expect(assignSpy).toHaveBeenCalledWith("s1", 1, "Carol");
     expect(onChange).toHaveBeenCalled();
   });
+
+  it("surfaces a save error and re-syncs from the server when a write fails (A)", async () => {
+    vi.spyOn(refine, "editToken").mockRejectedValue(new Error("500"));
+    const getSpy = vi.spyOn(refine, "getDraft").mockResolvedValue(makeDraft());
+    renderEditor();
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Dstack" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    // the failure is shown (not swallowed) AND the view is re-synced from the server
+    await waitFor(() => expect(screen.getByTestId("save-error")).toBeInTheDocument());
+    expect(getSpy).toHaveBeenCalledWith("s1");
+  });
 });

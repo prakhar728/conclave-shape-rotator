@@ -31,6 +31,7 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
   const [editing, setEditing] = useState<{ seg: number; tok: number } | null>(null);
   const [assigning, setAssigning] = useState<number | null>(null);
   const [speakerNames, setSpeakerNames] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,8 +44,21 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
     };
   }, [sessionId]);
 
+  // Reconcile with the server's returned v2 on success; on FAILURE surface it and
+  // re-sync from the server (so the UI never shows an edit that didn't persist).
+  const _ok = (v2: V2Draft) => {
+    setSaveError(null);
+    onDraftChange(v2);
+  };
+  const _onWriteError = () => {
+    setSaveError(
+      "Couldn't save your last change — it may not have persisted. Refreshed from the server.",
+    );
+    refine.getDraft(sessionId).then(onDraftChange).catch(() => {});
+  };
+
   // All writes are LOCAL-FIRST: update the rendered draft immediately, fire the
-  // server write in the background, reconcile with the returned v2 on success.
+  // server write in the background, reconcile (or surface the error) when it lands.
   function applyTokenEdit(seg: number, tok: number, text: string) {
     onDraftChange({
       ...draft,
@@ -56,14 +70,14 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
       ),
     });
     setEditing(null);
-    refine.editToken(sessionId, seg, tok, text).then((r) => onDraftChange(r.v2)).catch(() => {});
+    refine.editToken(sessionId, seg, tok, text).then((r) => _ok(r.v2)).catch(_onWriteError);
   }
 
   function tagToken(seg: number, tok: number, surface: string, type: string) {
     refine
       .tagEntity(sessionId, { segment_id: seg, token_start: tok, token_end: tok + 1, surface, type })
-      .then((r) => onDraftChange(r.v2))
-      .catch(() => {});
+      .then((r) => _ok(r.v2))
+      .catch(_onWriteError);
   }
 
   function assignSpeaker(seg: number, name: string) {
@@ -75,11 +89,22 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
       ),
     });
     setAssigning(null);
-    refine.assignSpeaker(sessionId, seg, name).then((r) => onDraftChange(r.v2)).catch(() => {});
+    refine.assignSpeaker(sessionId, seg, name).then((r) => _ok(r.v2)).catch(_onWriteError);
   }
 
   return (
     <div data-testid="refine-editor" className="space-y-5">
+      {saveError ? (
+        <div
+          data-testid="save-error"
+          className="flex items-center justify-between rounded border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive"
+        >
+          <span>{saveError}</span>
+          <button onClick={() => setSaveError(null)} className="ml-2 underline">
+            dismiss
+          </button>
+        </div>
+      ) : null}
       {draft.segments.map((seg) => {
         const states = statesForSegment(draft.annotations, seg.segment_id);
         return (
