@@ -921,12 +921,35 @@ def _build_kb(session_id: str) -> None:
         logger.exception("kb extraction failed for session %s", session_id)
 
 
-def approve_and_build(session_id: str) -> None:
-    """Approve the v2 draft and run the (previously gated) KB build over it.
+def _rederive_insights_from_v2(session_id: str) -> None:
+    """Re-run v1 enrichment over the APPROVED corrected v2 text (not raw), then
+    clear the stale flag. This is the only insight generation Part 1 does on
+    approve; the richer/detailed pass is Part 2's. Isolated + failure-swallowing.
+    """
+    try:
+        from transcripts.enrich import enrich_session
+        from transcripts.models import RawSegment
+        session = store.load_session(session_id)
+        if session is None:
+            return
+        segs = store.v2_segments_or_raw(session_id)  # corrected when approved
+        corrected = session.model_copy(update={
+            "raw_diarization": [RawSegment(speaker=s["speaker"], text=s["text"]) for s in segs],
+        })
+        enrich_session(corrected)
+        store.set_derived(session_id, corrected.derived)
+        store.clear_insights_stale(session_id)
+    except Exception:
+        logger.exception("insight re-derive failed for session %s", session_id)
 
-    Idempotent: re-approving an already-approved session does NOT rebuild the
-    KB (so the graph isn't doubled). The approval flip itself is idempotent in
-    `store.approve_v2`.
+
+def approve_and_build(session_id: str) -> None:
+    """Approve the v2 draft, re-derive v1 insights over the corrected text, and
+    run the (previously gated) KB build over it.
+
+    Idempotent: re-approving an already-approved session does NOT re-derive or
+    rebuild (so insights/graph aren't doubled). The approval flip itself is
+    idempotent in `store.approve_v2`.
     """
     try:
         v2 = store.load_v2(session_id)
@@ -936,6 +959,7 @@ def approve_and_build(session_id: str) -> None:
         logger.exception("approve failed for session %s", session_id)
         return
     if not already_approved:
+        _rederive_insights_from_v2(session_id)
         _build_kb(session_id)
 
 

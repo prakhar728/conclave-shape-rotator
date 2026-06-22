@@ -63,3 +63,35 @@ def test_multiple_edits_single_stale_no_llm(llm_spies):  # IN-6
         store.edit_token("in6", 0, 3, f"X{i}")
     assert store.load_v2("in6").insights_stale is True
     assert llm_spies["enrich"] == 0 and llm_spies["extract"] == 0 and llm_spies["embed"] == 0
+
+
+def test_approve_rederives_over_corrected_v2(monkeypatch):  # IN-1/IN-4/IN-5/G-11
+    import api.transcripts_routes as routes
+    cap = {"n": 0, "text": None}
+
+    def fake_enrich(session):
+        cap["n"] += 1
+        cap["text"] = session.raw_diarization[0].text
+        session.derived.summary = "re-derived"
+
+    monkeypatch.setattr(enrich_mod, "enrich_session", fake_enrich)
+    monkeypatch.setattr(routes, "_build_kb", lambda sid: None)  # isolate from the KB build
+    _draft("in4")
+    store.edit_token("in4", 0, 3, "Dstack")  # corrected text + stale
+    routes.approve_and_build("in4")
+    assert cap["n"] == 1  # re-derived exactly once (IN-4/IN-5)
+    assert cap["text"] == "we use the Dstack protocol"  # corrected v2, NOT raw (G-11)
+    assert store.load_v2("in4").insights_stale is False  # cleared
+    assert store.load_session("in4").derived.summary == "re-derived"  # IN-1
+
+
+def test_reapprove_does_not_rederive(monkeypatch):  # IN-4 idempotency
+    import api.transcripts_routes as routes
+    cap = {"n": 0}
+    monkeypatch.setattr(enrich_mod, "enrich_session",
+                        lambda s: cap.__setitem__("n", cap["n"] + 1))
+    monkeypatch.setattr(routes, "_build_kb", lambda sid: None)
+    _draft("in4b")
+    routes.approve_and_build("in4b")
+    routes.approve_and_build("in4b")  # second approve
+    assert cap["n"] == 1  # re-derived once only
