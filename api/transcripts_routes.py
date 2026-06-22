@@ -767,6 +767,80 @@ def approve_session_v2(session_id: str, request: Request) -> dict:
     return {"session_id": session_id, "status": "approved"}
 
 
+# --- Editor write API (Part 1, 6c) — the POSTs the refinement editor calls ---
+
+class _EditTokenBody(BaseModel):
+    segment_id: int
+    token_idx: int
+    new_text: str
+
+
+class _TagEntityBody(BaseModel):
+    segment_id: int
+    token_start: int
+    token_end: int
+    surface: str
+    type: Optional[str] = None
+
+
+class _AssignSpeakerBody(BaseModel):
+    segment_id: int
+    name: Optional[str] = None
+
+
+def _require_editor(request: Request, session_id: str) -> dict:
+    """Auth + owner gate shared by the editor-write endpoints. Returns the user.
+    401 unauth · 404 no session · 403 not owner (workspace sessions)."""
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    if store.load_session(session_id) is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    row = _ws_row(session_id)
+    if row is not None and row.get("owner_user_id") != user["id"]:
+        raise HTTPException(status_code=403, detail="only the owner can edit")
+    return user
+
+
+def _v2_write(session_id: str, fn):
+    """Run a v2-mutating op, mapping store errors to HTTP. Returns the fn result."""
+    try:
+        return fn()
+    except KeyError:
+        raise HTTPException(status_code=404, detail="no v2 draft for this session")
+    except ValueError:
+        raise HTTPException(status_code=409, detail="v2 already approved; edits not allowed")
+    except IndexError:
+        raise HTTPException(status_code=400, detail="segment/token index out of range")
+
+
+@router.post("/sessions/{session_id}/v2/edit-token")
+def v2_edit_token(session_id: str, body: _EditTokenBody, request: Request) -> dict:
+    user = _require_editor(request, session_id)
+    from transcripts import ground_truth
+    decision = _v2_write(session_id, lambda: ground_truth.correct_word(
+        session_id, body.segment_id, body.token_idx, body.new_text, user["id"]))
+    return {"decision": decision, "v2": store.load_v2(session_id).model_dump()}
+
+
+@router.post("/sessions/{session_id}/v2/tag-entity")
+def v2_tag_entity(session_id: str, body: _TagEntityBody, request: Request) -> dict:
+    user = _require_editor(request, session_id)
+    from transcripts import ground_truth
+    _v2_write(session_id, lambda: ground_truth.tag_entity(
+        session_id, body.segment_id, body.token_start, body.token_end,
+        body.surface, body.type, user["id"]))
+    return {"v2": store.load_v2(session_id).model_dump()}
+
+
+@router.post("/sessions/{session_id}/v2/assign-speaker")
+def v2_assign_speaker(session_id: str, body: _AssignSpeakerBody, request: Request) -> dict:
+    _require_editor(request, session_id)
+    _v2_write(session_id, lambda: store.assign_speaker(session_id, body.segment_id, body.name))
+    return {"v2": store.load_v2(session_id).model_dump()}
+
+
 def _build_and_save_session(payload_dict: dict) -> Session:
     """Pure pipeline: canonical payload → NormalizedInput → Session → store.
 
