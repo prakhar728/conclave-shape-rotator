@@ -97,3 +97,10 @@ as Part 1.
 - **Never merge to `main`** until the full gate passes AND the user approves.
 - Run the C9 drift-guard (`tests/test_part2_contract.py`) as a standing check —
   if it goes red, Part 1's contract moved; reconcile before continuing.
+- **Independent test-gate audit (separate agent, NOT the implementer).** The
+  implementer writes + runs the per-commit tests; but at each milestone
+  (after P2.1, P2.2, …) spawn a SEPARATE agent in an **isolated worktree** to
+  **mutation-test** the load-bearing behaviors — break each behavior in the impl,
+  confirm a test goes RED; a surviving mutation = a hollow gate. This is the guard
+  against "I wrote tests that pass my own code." (Part 1 ran this once after
+  inc 1–5; all 10 load-bearing behaviors caught their mutation.)
