@@ -13,6 +13,7 @@ import { use, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
+import { RefineActions } from "@/components/refine/refine-actions";
 import { RefineEditor } from "@/components/refine/refine-editor";
 import { ApiError, auth, refine, type MeResponse, type V2Draft } from "@/lib/api";
 
@@ -83,6 +84,11 @@ export default function RefinePage({
           </p>
         </div>
         <RefineEditor draft={draft} sessionId={id} onDraftChange={setDraft} />
+        <RefineActions
+          draft={draft}
+          sessionId={id}
+          onApproved={() => router.push(`/meeting/${id}`)}
+        />
       </main>
     </AppShell>
   );
