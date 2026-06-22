@@ -179,6 +179,13 @@ Part 2 reads these; it does not reach back into Part 1's editor.
    latency (and the Next version constraint noted in `frontend/AGENTS.md`).
 5. How "stale insights" is surfaced in the UI and what exactly re-derives on
    approve.
+6. **Personal memory — what is it?** It's named as a store ground-truth
+   populates (§6) but undefined. Define its schema and how it differs from vocab
+   (vocab = surface→entity dictionary; personal memory = ? user-level facts /
+   profile / cross-meeting recall seed). Blocks GT-4, IS-2.
+7. **Graduated/"auto" user behavior:** does an auto (graduated) user still get
+   the editable draft (builds *and* stays correctable) or skip correction
+   entirely? Different data + UX. Pin before building the trust-state branch.
 
 ## 13. Build order within Part 1 (proposed)
 
@@ -284,3 +291,38 @@ Each candidate-span annotation:
 `{span, surface, state: known|candidate|oov, type?: <entity-type>,
 source: nlp|correction|user, confidence?}`.
 (Exact span encoding still tied to §12 #1.)
+
+## 16. Air-tightness notes — implementation must-dos (2026-06-19 review)
+
+Gaps found reviewing this plan; resolve during build (tracked here so they
+aren't lost). The two *decisions* live in §12 (#6 personal memory, #7 auto-user).
+
+- **N1 — all THREE ingest paths must route through the gate.** `_enrich_in_background`
+  is called from the ingest webhook, the Recato webhook, AND upload (per the
+  analysis). The staged-gate refactor must cover all three, or a path leaks to
+  the KB pre-approval. Test: G-10 (each entry point → draft, graph empty until
+  approve).
+- **N2 — span re-anchoring after length-changing edits.** A word edit that
+  changes text length shifts every downstream candidate offset. The v2 encoding
+  (§12 #1) MUST keep span anchors valid across edits. Test: V2-9. This is the
+  highest-risk correctness bug in the editor — decide the encoding with this in
+  mind (a token/segment-relative anchor survives edits better than a flat
+  char-range).
+- **N3 — frontend test infra is net-new.** No FE test runner exists in the repo.
+  Standing up Vitest/RTL (or Playwright) is a prerequisite for FE-* — an explicit
+  task, not just blocked on §12 #4.
+- **N4 — upstream dependency (sequencing).** "Gate opens on the post-meeting
+  authoritative transcript" (§8/§14) assumes the capture pipeline's P3/P4
+  (DiariZen re-cluster + VFT re-identify), which is NOT built yet
+  (`CONCLAVE-CAPTURE-ARCHITECTURE.md` P0–P6). **Near-term: the gate opens on the
+  current ingest output**; the post-authoritative alignment lands when upstream
+  does. Do not block Part 1 on it.
+- **N5 — re-derive on approve reads v2, not raw.** Insight re-derivation on
+  approve must run over the *corrected* v2 text, not `raw_diarization`. Tighten
+  test IN-4 to assert the input is the v2 corrected text.
+- **N6 — pin how Part 2 consumes vocab.** The §11 contract says Part 2 reads the
+  per-user vocab; specify *how* (extraction priors / seed known-entities) so the
+  seam can't drift. Part 2 implements it, but the contract names the shape.
+- **N7 — verify the calendar→insight-seed link.** Cold-start (§6, test CS-2)
+  assumes calendar event text lands in `metadata.raw_intent`. Confirm calendar
+  events actually populate that field before relying on it as the only seed.

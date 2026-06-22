@@ -55,8 +55,9 @@ conftest runs alembic to head at import, so the migration must exist before any 
 | V2-6 | span_annotation_roundtrips | store | same | add `{span,surface,state,type,source}` | reload yields same annotation set |
 | V2-7 | v2_speaker_assignment_independent_of_raw | store | same | assign confirmed speaker | raw `.speaker` label unchanged (C3); v2 carries name separately |
 | V2-8 | reload_after_approve_preserves | store | same | edit+approve, reload | annotations + speaker + corrected text survive |
+| V2-9 | **span_anchors_survive_length_change** | store | same | draft w/ ≥2 candidate spans; edit an early word to change text length | downstream candidate spans still anchor to their correct surfaces after the edit (no off-by-N drift) — the §16 N2 correctness guard |
 
-> §12 #1 OPEN: assert span round-trips to same surface; don't pin char-range vs token yet.
+> §12 #1 OPEN: assert span round-trips to same surface; don't pin char-range vs token yet. V2-9 is the decisive encoding test — a token/segment-relative anchor passes it more easily than a flat char-range.
 
 ---
 
@@ -74,6 +75,8 @@ Refactors atomic `_enrich_in_background` → `ingest → enrich(draft) → [GATE
 | G-7 | re_approve_idempotent | integration | same | approve twice; spies | extract count==1; entities stable |
 | G-8 | enrich_failure_recoverable | integration | same | enrich raises LLMUnavailable | no crash; stays draft; graph empty; re-run works |
 | G-9 | gate_e2e_via_api | API | same | client; ingest route; spies | ingest→draft; graph empty; approve→200, status flips, index/extract fire |
+| G-10 | **all_entry_points_route_through_gate** | API | same | spies; drive EACH ingest path — ingest webhook, Recato webhook, upload | every path produces a `draft` with graph empty pre-approval (no path bypasses the gate) — the §16 N1 leak guard |
+| G-11 | gate_reads_v2_corrected_for_rederive | integration | same | edit a word; approve; capture re-derive input | insight re-derive on approve runs over the corrected v2 text, NOT raw (§16 N5) |
 
 ---
 
@@ -238,7 +241,7 @@ Backend areas 1,2,3,5,6,7,8,9,10b are **fully assertable now** via stable seams;
 ## Prioritized tiers
 
 ### Tier 0 — Acceptance gate (must be green)
-M-1, M-3 · V2-4, V2-5 (raw immutability) · V2-1, V2-2, V2-8 · G-1, G-2, G-3, G-4, G-5 · IN-3, IN-6, CD-22, CD-23 (latency guard) · GT-1, GT-3, GT-5 · IS-1, IS-2 · CD-20, CD-24, CD-25, CD-26, C9-4 · C9-1, C9-3.
+M-1, M-3 · V2-4, V2-5 (raw immutability) · **V2-9 (span re-anchoring)** · V2-1, V2-2, V2-8 · G-1, G-2, G-3, G-4, G-5 · **G-10 (all entry points gated)** · IN-3, IN-6, CD-22, CD-23 (latency guard) · GT-1, GT-3, GT-5 · IS-1, IS-2 · CD-20, CD-24, CD-25, CD-26, C9-4 · C9-1, C9-3. (Tier 1: G-11.)
 
 ### Tier 1 — Ship-with
 M-2, V2-3, V2-6, V2-7 · G-6..G-9 · GT-2, GT-4, GT-6, GT-7 · SP-1, SP-5, SP-6, SP-2, SP-4 · IN-1, IN-2, IN-4, IN-5 · TS-1, TS-2, TS-3 · IS-3, IS-5 · CS-1, CS-2 · CD-1, CD-2, CD-3, CD-5, CD-10, CD-11 · C9-2, C9-5, CD-21, CD-27.
