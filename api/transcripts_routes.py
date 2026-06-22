@@ -818,26 +818,30 @@ def _v2_write(session_id: str, fn):
 @router.post("/sessions/{session_id}/v2/edit-token")
 def v2_edit_token(session_id: str, body: _EditTokenBody, request: Request) -> dict:
     user = _require_editor(request, session_id)
-    from transcripts import ground_truth
+    from transcripts import ground_truth, trust
     decision = _v2_write(session_id, lambda: ground_truth.correct_word(
         session_id, body.segment_id, body.token_idx, body.new_text, user["id"]))
+    trust.bump_correction(user["id"], session_id)  # graduation signal
     return {"decision": decision, "v2": store.load_v2(session_id).model_dump()}
 
 
 @router.post("/sessions/{session_id}/v2/tag-entity")
 def v2_tag_entity(session_id: str, body: _TagEntityBody, request: Request) -> dict:
     user = _require_editor(request, session_id)
-    from transcripts import ground_truth
+    from transcripts import ground_truth, trust
     _v2_write(session_id, lambda: ground_truth.tag_entity(
         session_id, body.segment_id, body.token_start, body.token_end,
         body.surface, body.type, user["id"]))
+    trust.bump_correction(user["id"], session_id)
     return {"v2": store.load_v2(session_id).model_dump()}
 
 
 @router.post("/sessions/{session_id}/v2/assign-speaker")
 def v2_assign_speaker(session_id: str, body: _AssignSpeakerBody, request: Request) -> dict:
-    _require_editor(request, session_id)
+    user = _require_editor(request, session_id)
+    from transcripts import trust
     _v2_write(session_id, lambda: store.assign_speaker(session_id, body.segment_id, body.name))
+    trust.bump_correction(user["id"], session_id)
     return {"v2": store.load_v2(session_id).model_dump()}
 
 
@@ -959,6 +963,11 @@ def approve_and_build(session_id: str) -> None:
         logger.exception("approve failed for session %s", session_id)
         return
     if not already_approved:
+        # Record this approved meeting toward the owner's graduation window.
+        owner = (_ws_row(session_id) or {}).get("owner_user_id")
+        if owner:
+            from transcripts import trust
+            trust.finalize(owner, session_id)
         _rederive_insights_from_v2(session_id)
         _build_kb(session_id)
 

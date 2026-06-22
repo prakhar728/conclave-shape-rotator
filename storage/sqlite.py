@@ -185,6 +185,7 @@ def reset_all() -> None:
         DELETE FROM transcript_sessions;
         DELETE FROM transcript_v2;
         DELETE FROM vocab;
+        DELETE FROM meeting_corrections;
         """
     )
 
@@ -880,3 +881,49 @@ def list_vocab(user_id: str) -> list[dict]:
         (user_id,),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+# --- Per-user correction stats (ramp-up trust graduation) ---
+
+def bump_meeting_correction(user_id: str, session_id: str, delta: int = 1) -> None:
+    """Increment the correction count for (user, session). Called per editor edit."""
+    now = _now()
+    _get_conn().execute(
+        """
+        INSERT INTO meeting_corrections
+            (user_id, session_id, correction_count, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, session_id) DO UPDATE SET
+            correction_count = correction_count + ?,
+            updated_at = ?
+        """,
+        (user_id, session_id, delta, now, now, delta, now),
+    )
+
+
+def finalize_meeting_correction(user_id: str, session_id: str) -> None:
+    """Mark the meeting approved (stamps approved_at); creates a 0-count row if the
+    user made no corrections (0 corrections is itself a strong graduate signal)."""
+    now = _now()
+    _get_conn().execute(
+        """
+        INSERT INTO meeting_corrections
+            (user_id, session_id, correction_count, approved_at, created_at, updated_at)
+        VALUES (?, ?, 0, ?, ?, ?)
+        ON CONFLICT(user_id, session_id) DO UPDATE SET
+            approved_at = excluded.approved_at,
+            updated_at = excluded.updated_at
+        """,
+        (user_id, session_id, now, now, now),
+    )
+
+
+def list_recent_finalized_corrections(user_id: str, limit: int) -> list[int]:
+    """The correction counts of the user's most-recent APPROVED meetings."""
+    rows = _get_conn().execute(
+        "SELECT correction_count FROM meeting_corrections "
+        "WHERE user_id = ? AND approved_at IS NOT NULL "
+        "ORDER BY approved_at DESC LIMIT ?",
+        (user_id, limit),
+    ).fetchall()
+    return [r["correction_count"] for r in rows]
