@@ -31,6 +31,10 @@ def _save(sid: str) -> None:
 
 @pytest.fixture()
 def spies(monkeypatch):
+    from config import Settings
+    # These tests exercise the enrich path → declare the LLM available (the keyless
+    # test env would otherwise skip enrichment via the new no-LLM guard).
+    monkeypatch.setattr(Settings, "llm_configured", lambda self: True)
     calls = {"enrich": 0, "index": 0, "extract": 0}
 
     def fake_enrich(session):
@@ -80,7 +84,8 @@ def test_reapprove_does_not_rebuild(spies, monkeypatch):  # G-7
     assert spies["index"] == 1 and spies["extract"] == 1  # built exactly once
 
 
-def test_enrich_failure_recoverable(spies, monkeypatch):  # G-8
+def test_enrich_failure_recoverable(spies, monkeypatch):  # G-8 (parallel: draft survives)
+    # spies fixture already declares the LLM available, so enrich runs (then fails).
     monkeypatch.setenv("CONCLAVE_REFINE_GATE", "1")
     monkeypatch.setattr(
         enrich_mod, "enrich_session",
@@ -88,9 +93,10 @@ def test_enrich_failure_recoverable(spies, monkeypatch):  # G-8
     )
     _save("g-fail")
     routes._enrich_in_background("g-fail")  # must not raise
-    assert spies["index"] == 0 and spies["extract"] == 0
-    assert store.load_v2("g-fail") is None  # no draft when enrich failed
-    # recover: enrich works on re-run → draft now exists
+    assert spies["index"] == 0 and spies["extract"] == 0  # gate ON → KB deferred
+    # the spaCy draft is built in PARALLEL — it survives the enrich failure now
+    assert store.load_v2("g-fail") is not None
+    # re-run with enrich working still leaves a draft (idempotent)
     monkeypatch.setattr(
         enrich_mod, "enrich_session",
         lambda session: setattr(session.derived, "summary", "ok"),

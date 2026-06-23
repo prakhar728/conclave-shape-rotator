@@ -58,6 +58,10 @@ class SessionMetadata(BaseModel):
     model_id: Optional[str] = None
     enrich_prompt_version: Optional[str] = None
     chunk_count: Optional[int] = None
+    #: Lifecycle of the v1 LLM enrichment, for the UI: "pending" (not run yet),
+    #: "ok" (insights generated), "skipped" (no LLM configured / force-disabled),
+    #: "failed" (LLM unreachable). Drives the meeting-page no-insights placeholder.
+    enrichment_status: str = "pending"
     # --- v1 ---
     #: SHA-256 prefix (first 8 chars) of the loaded team_context XML body
     #: at enrich time. Lets A/B-tests over the XML show up as a distinct

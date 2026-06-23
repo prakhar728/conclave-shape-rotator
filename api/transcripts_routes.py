@@ -281,6 +281,8 @@ def to_view(session: Session) -> dict:
         # Derived's `graph_nodes` field is Phase-2 territory but listing
         # it here keeps the response shape stable across phases.
         "graph_nodes": d.graph_nodes,
+        # Lets the meeting page explain empty insights (no LLM vs found-nothing).
+        "enrichment_status": session.metadata.enrichment_status,
     })
     return card
 
@@ -1138,25 +1140,38 @@ def _enrich_in_background(session_id: str) -> None:
     (`enrich_pending` will pick up any session whose derived is empty or
     whose prompt version is stale).
     """
-    try:
-        from transcripts.enrich import enrich_session
-        session = store.load_session(session_id)
-        if session is None:
-            logger.error("background enrich: session %s not found", session_id)
-            return
-        enrich_session(session)
-        store.set_derived(session.session_id, session.derived)
-        store.set_metadata(session.session_id, session.metadata)
-    except Exception:
-        logger.exception("background enrich failed for session %s", session_id)
+    session = store.load_session(session_id)
+    if session is None:
+        logger.error("background enrich: session %s not found", session_id)
         return
 
-    # Part 1 — create the editable v2 draft from the now-enriched session.
-    # Isolated: a v2 failure must not block magic-links or the (ungated) KB build.
+    # The editable v2 draft (spaCy candidate detection) needs NOTHING from the LLM, so
+    # build it FIRST — it's fast (~1-2s) and unblocks /refine immediately, independent
+    # of (and surviving) the slow LLM enrichment that follows. Isolated try/except.
     try:
         store.create_v2_draft(session_id)
     except Exception:
         logger.exception("v2 draft creation failed for session %s", session_id)
+
+    # LLM enrichment (the v1 meeting insights). Skipped (NO LLM call → no tokens) when
+    # none is configured or it's force-disabled; we record WHY so the UI can explain
+    # empty insights ("no LLM" vs "found nothing" vs "unreachable").
+    from config import settings
+    if os.environ.get("CONCLAVE_SKIP_ENRICH") == "1" or not settings.llm_configured():
+        session.metadata.enrichment_status = "skipped"
+        store.set_metadata(session_id, session.metadata)
+        logger.info("enrich skipped for %s (no LLM configured / CONCLAVE_SKIP_ENRICH)", session_id)
+    else:
+        try:
+            from transcripts.enrich import enrich_session
+            enrich_session(session)
+            session.metadata.enrichment_status = "ok"
+            store.set_derived(session_id, session.derived)
+            store.set_metadata(session_id, session.metadata)
+        except Exception:
+            logger.exception("background enrich failed for session %s", session_id)
+            session.metadata.enrichment_status = "failed"
+            store.set_metadata(session_id, session.metadata)
 
     # Phase 2.8 — post-enrichment magic-link blast. Wrapped in its own
     # try/except so an email-send failure never poisons the enrichment

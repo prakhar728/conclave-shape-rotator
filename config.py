@@ -126,6 +126,19 @@ class Settings(BaseSettings):
         return bool(self.google_client_id and self.google_client_secret
                     and self.google_redirect_uri)
 
+    def llm_configured(self) -> bool:
+        """True when the selected `llm_backend` can actually be reached (has a key).
+
+        Used to skip enrichment (and avoid burning tokens / a wasted round-trip) when
+        no LLM is set up. `ollama` is local and assumed available.
+        """
+        backend = self.llm_backend
+        if backend == "ollama":
+            return True
+        if backend == "nearai":
+            return bool(self.nearai_api_key)
+        return bool(self.redpill_api_key)  # default backend
+
 
 settings = Settings()
 
