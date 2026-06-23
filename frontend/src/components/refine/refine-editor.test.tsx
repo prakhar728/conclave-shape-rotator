@@ -65,18 +65,47 @@ describe("RefineEditor", () => {
     expect(editSpy).toHaveBeenCalledWith("s1", 0, 3, "Dstack");
   });
 
-  it("tags a candidate/oov token via the type select (F2b/FE-5)", () => {
+  it("shows no tag control until a word is selected, then tags ANY word (FE-5)", async () => {
     const tagSpy = vi.spyOn(refine, "tagEntity").mockResolvedValue({ v2: makeDraft() });
     renderEditor();
-    const sel = document.querySelector('[data-tag="0-4"]') as HTMLSelectElement; // "protocol" (candidate)
+    expect(document.querySelector("[data-tag]")).toBeNull(); // nothing persistent in the text
+    fireEvent.click(screen.getByText("good")); // a plain word — NO annotation
+    const sel = document.querySelector('[data-tag="1-1"]') as HTMLSelectElement;
+    expect(sel).toBeTruthy(); // the tag option appears only on selection
     fireEvent.change(sel, { target: { value: "project" } });
-    expect(tagSpy).toHaveBeenCalledWith("s1", {
-      segment_id: 0,
-      token_start: 4,
-      token_end: 5,
-      surface: "protocol",
-      type: "project",
-    });
+    await waitFor(() =>
+      expect(tagSpy).toHaveBeenCalledWith("s1", {
+        segment_id: 1,
+        token_start: 1,
+        token_end: 2,
+        surface: "good",
+        type: "project",
+      }),
+    );
+  });
+
+  it("lets you tag a word you just edited (not only pre-highlighted ones)", async () => {
+    const editSpy = vi
+      .spyOn(refine, "editToken")
+      .mockResolvedValue({ decision: "promote", v2: makeDraft() });
+    const tagSpy = vi.spyOn(refine, "tagEntity").mockResolvedValue({ v2: makeDraft() });
+    renderEditor();
+    fireEvent.click(screen.getByText("good")); // select a plain, unhighlighted word
+    const input = document.querySelector('[data-token-input="1"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Goodall" } });
+    const sel = document.querySelector('[data-tag="1-1"]') as HTMLSelectElement;
+    fireEvent.change(sel, { target: { value: "person" } });
+    // edit is committed AND the tag applied — both with the edited surface
+    await waitFor(() => expect(editSpy).toHaveBeenCalledWith("s1", 1, 1, "Goodall"));
+    await waitFor(() =>
+      expect(tagSpy).toHaveBeenCalledWith("s1", {
+        segment_id: 1,
+        token_start: 1,
+        token_end: 2,
+        surface: "Goodall",
+        type: "person",
+      }),
+    );
   });
 
   it("shows speaker suggestions and assigns on chip click (F2c/FE-4)", async () => {

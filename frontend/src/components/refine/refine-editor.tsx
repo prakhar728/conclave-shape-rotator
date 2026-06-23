@@ -28,7 +28,10 @@ type Props = {
 };
 
 export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
-  const [editing, setEditing] = useState<{ seg: number; tok: number } | null>(null);
+  // The single SELECTED token. Clicking ANY word selects it and opens an inline panel
+  // (edit + tag) — so tagging is available on every word (including ones you just
+  // edited), and nothing clutters the text until a word is actually selected.
+  const [selected, setSelected] = useState<{ seg: number; tok: number } | null>(null);
   const [assigning, setAssigning] = useState<number | null>(null);
   const [speakerNames, setSpeakerNames] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -57,27 +60,42 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
     refine.getDraft(sessionId).then(onDraftChange).catch(() => {});
   };
 
-  // All writes are LOCAL-FIRST: update the rendered draft immediately, fire the
-  // server write in the background, reconcile (or surface the error) when it lands.
-  function applyTokenEdit(seg: number, tok: number, text: string) {
-    onDraftChange({
-      ...draft,
-      insights_stale: true,
-      segments: draft.segments.map((s) =>
-        s.segment_id === seg
-          ? { ...s, tokens: s.tokens.map((t, i) => (i === tok ? text : t)) }
-          : s,
-      ),
-    });
-    setEditing(null);
-    refine.editToken(sessionId, seg, tok, text).then((r) => _ok(r.v2)).catch(_onWriteError);
-  }
+  const tokenText = (seg: number, tok: number): string =>
+    draft.segments.find((s) => s.segment_id === seg)?.tokens[tok] ?? "";
 
-  function tagToken(seg: number, tok: number, surface: string, type: string) {
-    refine
-      .tagEntity(sessionId, { segment_id: seg, token_start: tok, token_end: tok + 1, surface, type })
-      .then((r) => _ok(r.v2))
-      .catch(_onWriteError);
+  // Commit a (possibly edited) token and optionally tag it in ONE sequential write, so
+  // the tag sees the edited text and neither clobbers the other. Local-first: update
+  // the rendered draft immediately, fire the server write, reconcile when it lands.
+  function commitToken(seg: number, tok: number, text: string, tag?: string) {
+    setSelected(null);
+    const changed = text !== tokenText(seg, tok);
+    if (!changed && !tag) return;
+    if (changed) {
+      onDraftChange({
+        ...draft,
+        insights_stale: true,
+        segments: draft.segments.map((s) =>
+          s.segment_id === seg
+            ? { ...s, tokens: s.tokens.map((t, i) => (i === tok ? text : t)) }
+            : s,
+        ),
+      });
+    }
+    let p: Promise<{ v2: V2Draft } | null> = changed
+      ? refine.editToken(sessionId, seg, tok, text)
+      : Promise.resolve(null);
+    if (tag) {
+      p = p.then(() =>
+        refine.tagEntity(sessionId, {
+          segment_id: seg,
+          token_start: tok,
+          token_end: tok + 1,
+          surface: text,
+          type: tag,
+        }),
+      );
+    }
+    p.then((r) => r && _ok(r.v2)).catch(_onWriteError);
   }
 
   function assignSpeaker(seg: number, name: string) {
@@ -138,44 +156,46 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
 
             <p className="leading-7">
               {seg.tokens.map((tok, i) => {
-                if (editing?.seg === seg.segment_id && editing.tok === i) {
+                const isSelected = selected?.seg === seg.segment_id && selected.tok === i;
+                if (isSelected) {
+                  // Inline panel for the selected word: edit (input) + tag (any word).
                   return (
-                    <input
-                      key={i}
-                      autoFocus
-                      defaultValue={tok}
-                      data-token-input={i}
-                      className="rounded border border-foreground px-1 text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter")
-                          applyTokenEdit(seg.segment_id, i, (e.target as HTMLInputElement).value);
-                        if (e.key === "Escape") setEditing(null);
-                      }}
-                      onBlur={(e) => applyTokenEdit(seg.segment_id, i, e.target.value)}
-                    />
-                  );
-                }
-                const state = states.get(i);
-                const taggable = state === "candidate" || state === "oov";
-                return (
-                  <span key={i} className="inline-flex items-baseline">
                     <span
-                      data-token={i}
-                      data-segment={seg.segment_id}
-                      data-state={state ?? ""}
-                      onClick={() => setEditing({ seg: seg.segment_id, tok: i })}
-                      className={`tok cursor-text rounded px-0.5 ${tokenTint(state)}`}
+                      key={i}
+                      data-token-edit={i}
+                      className="mx-0.5 inline-flex items-baseline gap-1 rounded bg-accent/50 px-1 align-baseline ring-1 ring-foreground/30"
+                      onBlur={(e) => {
+                        // Only close/commit when focus leaves the WHOLE panel — moving
+                        // between the input and the tag menu must not dismiss it.
+                        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+                        commitToken(
+                          seg.segment_id,
+                          i,
+                          e.currentTarget.querySelector("input")?.value ?? tok,
+                        );
+                      }}
                     >
-                      {tok}
-                    </span>
-                    {taggable && (
+                      <input
+                        autoFocus
+                        defaultValue={tok}
+                        data-token-input={i}
+                        className="w-24 rounded border border-foreground px-1 text-sm"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter")
+                            commitToken(seg.segment_id, i, (e.target as HTMLInputElement).value);
+                          if (e.key === "Escape") setSelected(null);
+                        }}
+                      />
                       <select
                         data-tag={`${seg.segment_id}-${i}`}
                         defaultValue=""
                         onChange={(e) => {
-                          if (e.target.value) tagToken(seg.segment_id, i, tok, e.target.value);
+                          if (!e.target.value) return;
+                          const val =
+                            e.currentTarget.parentElement?.querySelector("input")?.value ?? tok;
+                          commitToken(seg.segment_id, i, val, e.target.value);
                         }}
-                        className="ml-0.5 rounded border border-dashed border-border text-[10px] text-muted-foreground"
+                        className="rounded border border-dashed border-border text-[10px] text-muted-foreground"
                       >
                         <option value="">tag…</option>
                         {ENTITY_TYPES.map((t) => (
@@ -184,8 +204,21 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
                           </option>
                         ))}
                       </select>
-                    )}
-                    {" "}
+                    </span>
+                  );
+                }
+                const state = states.get(i);
+                return (
+                  <span key={i} className="inline-flex items-baseline">
+                    <span
+                      data-token={i}
+                      data-segment={seg.segment_id}
+                      data-state={state ?? ""}
+                      onClick={() => setSelected({ seg: seg.segment_id, tok: i })}
+                      className={`tok cursor-pointer rounded px-0.5 ${tokenTint(state)}`}
+                    >
+                      {tok}
+                    </span>{" "}
                   </span>
                 );
               })}
