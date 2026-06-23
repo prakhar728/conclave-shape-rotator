@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import api.transcripts_routes as routes
 import transcripts.enrich as enrich_mod
-from config import Settings
 from transcripts import candidate, store
 from transcripts.models import RawSegment, Session, SessionMetadata
 
@@ -20,7 +19,7 @@ def _save(sid):
 
 def test_draft_created_even_when_enrich_fails(monkeypatch):
     monkeypatch.setattr(candidate, "detect", lambda t, u: (t.split(), []))
-    monkeypatch.setattr(Settings, "llm_configured", lambda self: True)  # enrich runs
+    monkeypatch.setattr(routes, "_should_skip_enrich", lambda: False)  # enrich runs
 
     def boom(_session):
         raise RuntimeError("LLM down")
@@ -38,7 +37,7 @@ def test_draft_created_even_when_enrich_fails(monkeypatch):
 
 def test_draft_created_on_happy_path(monkeypatch):
     monkeypatch.setattr(candidate, "detect", lambda t, u: (t.split(), []))
-    monkeypatch.setattr(Settings, "llm_configured", lambda self: True)  # enrich runs
+    monkeypatch.setattr(routes, "_should_skip_enrich", lambda: False)  # enrich runs
     monkeypatch.setattr(enrich_mod, "enrich_session", lambda s: None)
     monkeypatch.setattr(routes, "_build_kb", lambda sid: None)
     monkeypatch.setattr(routes, "_send_attendee_magic_links", lambda sid: None)

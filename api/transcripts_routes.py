@@ -1125,6 +1125,14 @@ def run_reminder_sweep(now=None) -> list[str]:
     return reminded
 
 
+def _should_skip_enrich() -> bool:
+    """Skip the LLM enrichment (no token spend) when force-disabled via
+    CONCLAVE_SKIP_ENRICH or no LLM is configured. A module-level seam so tests can
+    control it deterministically."""
+    from config import settings
+    return os.environ.get("CONCLAVE_SKIP_ENRICH") == "1" or not settings.llm_configured()
+
+
 def _enrich_in_background(session_id: str) -> None:
     """Run enrichment on a stored session; log and swallow exceptions.
 
@@ -1156,8 +1164,7 @@ def _enrich_in_background(session_id: str) -> None:
     # LLM enrichment (the v1 meeting insights). Skipped (NO LLM call → no tokens) when
     # none is configured or it's force-disabled; we record WHY so the UI can explain
     # empty insights ("no LLM" vs "found nothing" vs "unreachable").
-    from config import settings
-    if os.environ.get("CONCLAVE_SKIP_ENRICH") == "1" or not settings.llm_configured():
+    if _should_skip_enrich():
         session.metadata.enrichment_status = "skipped"
         store.set_metadata(session_id, session.metadata)
         logger.info("enrich skipped for %s (no LLM configured / CONCLAVE_SKIP_ENRICH)", session_id)

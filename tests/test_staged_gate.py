@@ -31,10 +31,9 @@ def _save(sid: str) -> None:
 
 @pytest.fixture()
 def spies(monkeypatch):
-    from config import Settings
-    # These tests exercise the enrich path → declare the LLM available (the keyless
-    # test env would otherwise skip enrichment via the new no-LLM guard).
-    monkeypatch.setattr(Settings, "llm_configured", lambda self: True)
+    # These tests exercise the enrich path → declare the LLM available (otherwise the
+    # keyless test env skips enrichment via the no-LLM guard).
+    monkeypatch.setattr(routes, "_should_skip_enrich", lambda: False)
     calls = {"enrich": 0, "index": 0, "extract": 0}
 
     def fake_enrich(session):
