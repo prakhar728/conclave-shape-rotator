@@ -21,6 +21,13 @@ from typing import Optional
 
 from pydantic import BaseModel
 
+#: A token with corpus frequency (wordfreq zipf) below this is out-of-vocabulary →
+#: flagged. `< 1.0` catches anything appearing under ~1 per 10M words (invented names
+#: + truly-rare terms) while staying well below common words (whose floor is ~3.0).
+#: Tune toward ~1.5 to also catch rare tech acronyms (TDX 1.22, Phala 1.39) — see the
+#: zipf sweep / `test_refine_full_smoke`.
+OOV_ZIPF_MAX = 1.0
+
 
 class CandidateSpan(BaseModel):
     """A candidate detected in one segment's text. Token-relative anchor."""
@@ -40,13 +47,14 @@ def _nlp():
 
 
 def _is_oov_token(tok: str) -> bool:
-    """An alphabetic token unknown to the English frequency list → out-of-vocab
-    (a novel term or an ASR garble). Punctuation/numbers are not OOV signals."""
+    """An alphabetic token rare in the English frequency list (zipf < OOV_ZIPF_MAX) →
+    out-of-vocab (a novel term or an ASR garble). Punctuation/numbers are not OOV
+    signals."""
     t = tok.strip()
     if not t or not any(c.isalpha() for c in t):
         return False
     import wordfreq
-    return wordfreq.zipf_frequency(t.lower(), "en") == 0.0
+    return wordfreq.zipf_frequency(t.lower(), "en") < OOV_ZIPF_MAX
 
 
 def _oov_spans(tokens: list[str]) -> list[CandidateSpan]:
