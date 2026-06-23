@@ -811,10 +811,10 @@ def get_session_v2_debug(session_id: str, request: Request) -> dict:
 
 
 @router.post("/sessions/{session_id}/approve")
-def approve_session_v2(session_id: str, request: Request) -> dict:
-    """Approve the v2 draft and run the (gated) KB build over the corrected
-    transcript. Owner-only on workspace sessions; any authed user on legacy
-    cohort sessions."""
+async def approve_session_v2(session_id: str, request: Request) -> dict:
+    """Approve the v2 draft, then run the (gated) KB build over the corrected
+    transcript in the BACKGROUND. Owner-only on workspace sessions; any authed user
+    on legacy cohort sessions."""
     from auth.session import try_current_user
     user = try_current_user(request)
     if user is None:
@@ -826,7 +826,13 @@ def approve_session_v2(session_id: str, request: Request) -> dict:
         raise HTTPException(status_code=403, detail="only the owner can approve")
     if store.load_v2(session_id) is None:
         raise HTTPException(status_code=404, detail="no v2 draft to approve")
-    approve_and_build(session_id)
+    # Flip approval synchronously so the response + DB are immediately consistent, then
+    # run the slow build (insight re-derive + KB) off the request thread — otherwise a
+    # large transcript / LLM call blocks the response and the editor shows a false
+    # "Couldn't approve" even though the approval already persisted.
+    if _approve_v2_now(session_id):
+        import asyncio
+        asyncio.create_task(asyncio.to_thread(_post_approve_build, session_id))
     return {"session_id": session_id, "status": "approved"}
 
 
@@ -993,6 +999,14 @@ def _rederive_insights_from_v2(session_id: str) -> None:
     clear the stale flag. This is the only insight generation Part 1 does on
     approve; the richer/detailed pass is Part 2's. Isolated + failure-swallowing.
     """
+    if _should_skip_enrich():
+        # LLM disabled (no key / CONCLAVE_SKIP_ENRICH) → don't burn tokens or block on
+        # the network. Just settle the stale flag; there are no insights to re-derive.
+        try:
+            store.clear_insights_stale(session_id)
+        except Exception:
+            logger.exception("clear stale failed for session %s", session_id)
+        return
     try:
         from transcripts.enrich import enrich_session
         from transcripts.models import RawSegment
@@ -1010,13 +1024,10 @@ def _rederive_insights_from_v2(session_id: str) -> None:
         logger.exception("insight re-derive failed for session %s", session_id)
 
 
-def approve_and_build(session_id: str) -> None:
-    """Approve the v2 draft, re-derive v1 insights over the corrected text, and
-    run the (previously gated) KB build over it.
-
-    Idempotent: re-approving an already-approved session does NOT re-derive or
-    rebuild (so insights/graph aren't doubled). The approval flip itself is
-    idempotent in `store.approve_v2`.
+def _approve_v2_now(session_id: str) -> bool:
+    """Flip the draft → approved and record graduation. FAST + synchronous (safe to run
+    inside the HTTP request). Returns True if NEWLY approved (caller should run the heavy
+    post-approve build), False if it was already approved or the flip failed.
     """
     try:
         v2 = store.load_v2(session_id)
@@ -1024,15 +1035,38 @@ def approve_and_build(session_id: str) -> None:
         store.approve_v2(session_id)
     except Exception:
         logger.exception("approve failed for session %s", session_id)
-        return
-    if not already_approved:
-        # Record this approved meeting toward the owner's graduation window.
-        owner = (_ws_row(session_id) or {}).get("owner_user_id")
-        if owner:
-            from transcripts import trust
+        return False
+    if already_approved:
+        return False
+    # Record this approved meeting toward the owner's graduation window.
+    owner = (_ws_row(session_id) or {}).get("owner_user_id")
+    if owner:
+        from transcripts import trust
+        try:
             trust.finalize(owner, session_id)
-        _rederive_insights_from_v2(session_id)
-        _build_kb(session_id)
+        except Exception:
+            logger.exception("trust.finalize failed for session %s", session_id)
+    return True
+
+
+def _post_approve_build(session_id: str) -> None:
+    """The HEAVY half of approval — re-derive insights + KB build. Slow (LLM / indexing),
+    so the HTTP endpoint runs this in the BACKGROUND; the auto-approve sweep runs it
+    inline. Each stage is isolated + failure-swallowing."""
+    _rederive_insights_from_v2(session_id)
+    _build_kb(session_id)
+
+
+def approve_and_build(session_id: str) -> None:
+    """Approve the v2 draft + run the post-approve build synchronously. Used by non-HTTP
+    callers (the auto-approve timeout sweep). The HTTP endpoint instead flips approval
+    fast and backgrounds the build so a big transcript / LLM call can't time out the
+    request (and produce a false "Couldn't approve" after the approval already persisted).
+
+    Idempotent: re-approving an already-approved session does NOT re-derive or rebuild.
+    """
+    if _approve_v2_now(session_id):
+        _post_approve_build(session_id)
 
 
 def _refine_timeout_hours() -> float:
