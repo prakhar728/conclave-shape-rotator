@@ -8,15 +8,16 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { use, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
 import { RefineActions } from "@/components/refine/refine-actions";
 import { RefineDebugPanel } from "@/components/refine/refine-debug-panel";
 import { RefineEditor } from "@/components/refine/refine-editor";
-import { ApiError, auth, refine, type MeResponse, type V2Draft } from "@/lib/api";
+import { useRefineDraft } from "@/components/refine/use-refine-draft";
+import { refine } from "@/lib/api";
 
 export default function RefinePage({
   params,
@@ -24,45 +25,10 @@ export default function RefinePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = use(params);
-  const router = useRouter();
   const searchParams = useSearchParams();
   const debug = searchParams.get("debug") === "1";
-  const [me, setMe] = useState<MeResponse | null>(null);
-  const [draft, setDraft] = useState<V2Draft | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const { me, draft, setDraft, error, preparing } = useRefineDraft(id);
   const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [meResp, d] = await Promise.all([auth.me(), refine.getDraft(id)]);
-        if (cancelled) return;
-        setMe(meResp);
-        setDraft(d);
-      } catch (err) {
-        if (cancelled) return;
-        if (err instanceof ApiError) {
-          if (err.status === 401) {
-            router.push("/login");
-            return;
-          }
-          if (err.status === 403) {
-            setError("You don't have access to this transcript.");
-            return;
-          }
-          if (err.status === 404) {
-            setError("No draft to review for this meeting yet.");
-            return;
-          }
-        }
-        setError(err instanceof Error ? err.message : "Failed to load the draft");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, router]);
 
   if (error) {
     return (
@@ -73,6 +39,7 @@ export default function RefinePage({
       </PageError>
     );
   }
+  if (preparing) return <PageLoading label="Preparing your transcript…" />;
   if (!me || !draft) return <PageLoading />;
 
   return (
