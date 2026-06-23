@@ -58,6 +58,11 @@ function UploadModal({
   const [dragOver, setDragOver] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [duplicate, setDuplicate] = useState<{
+    sessionId: string;
+    v2Status: string | null;
+    approvedAt: string | null;
+  } | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const readFile = useCallback((f: File) => {
@@ -85,6 +90,16 @@ function UploadModal({
         text,
         intent: intent.trim() || undefined,
       });
+      if (resp.status === "duplicate") {
+        // Already imported — surface it instead of dropping into a frozen editor.
+        setDuplicate({
+          sessionId: resp.session_id,
+          v2Status: resp.v2_status ?? null,
+          approvedAt: resp.approved_at ?? null,
+        });
+        setBusy(false);
+        return;
+      }
       router.push(`/meeting/${resp.session_id}`);
     } catch (err) {
       setError(
@@ -128,6 +143,44 @@ function UploadModal({
             <X className="size-4" />
           </button>
         </div>
+
+        {duplicate ? (
+          <div
+            data-testid="duplicate-notice"
+            className="mb-4 rounded-2xl border border-border bg-secondary/50 p-4"
+          >
+            <p className="text-sm font-semibold">Already imported</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {duplicate.v2Status === "approved"
+                ? `This transcript was already imported and approved${
+                    duplicate.approvedAt
+                      ? ` on ${new Date(duplicate.approvedAt).toLocaleDateString()}`
+                      : ""
+                  }.`
+                : "This transcript was already imported — you can keep reviewing it."}
+            </p>
+            <div className="mt-3 flex items-center gap-2">
+              <button
+                onClick={() =>
+                  router.push(
+                    duplicate.v2Status === "approved"
+                      ? `/meeting/${duplicate.sessionId}`
+                      : `/meeting/${duplicate.sessionId}/refine`,
+                  )
+                }
+                className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground"
+              >
+                {duplicate.v2Status === "approved" ? "View transcript →" : "Open editor →"}
+              </button>
+              <button
+                onClick={() => setDuplicate(null)}
+                className="rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+              >
+                Upload a different one
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         {/* Drop zone / file state */}
         <div

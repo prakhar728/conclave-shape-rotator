@@ -170,6 +170,10 @@ export const workspaces = {
       session_id: string;
       is_processing: boolean;
       status: "accepted" | "duplicate";
+      // present on a "duplicate" — the existing v2's state, so the UI can say
+      // "already imported (approved <date>)" vs "continue editing".
+      v2_status?: "draft" | "approved" | null;
+      approved_at?: string | null;
     }>(`/api/workspaces/${id}/transcripts`, {
       method: "POST",
       body: JSON.stringify(params),

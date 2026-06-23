@@ -115,15 +115,21 @@ async def upload_transcript(
     session_id = _scoped_session_id(workspace_id, ni, body.text)
 
     # Idempotency: same content, same workspace → the session already
-    # exists; hand it back rather than erroring (raw is write-once).
+    # exists; hand it back rather than erroring (raw is write-once). Surface the
+    # existing v2's state so the UI can say "already imported (approved <date>)"
+    # instead of silently dropping the user into a frozen editor.
     existing = store.load_session(session_id)
     if existing is not None:
         from fastapi.responses import JSONResponse
 
+        v2 = store.load_v2(session_id)
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content={"session_id": session_id, "is_processing": False,
-                     "status": "duplicate"},
+            content={
+                "session_id": session_id, "is_processing": False, "status": "duplicate",
+                "v2_status": v2.status if v2 else None,
+                "approved_at": v2.approved_at if v2 else None,
+            },
         )
 
     from transcripts.identity import resolve_speakers
