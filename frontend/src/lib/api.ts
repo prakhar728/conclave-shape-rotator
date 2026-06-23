@@ -247,6 +247,9 @@ export type MeetingView = {
     open_questions: Signal[];
     insights: Signal[];
   };
+  // Why insights may be empty: "ok" (ran), "skipped" (no LLM / disabled),
+  // "failed" (LLM unreachable), "pending" (still processing).
+  enrichment_status?: string;
   entities: Entity[];
   // Phase 2.12 — present only when the viewer is authenticated AND the
   // session has a workspace_id. Lets the frontend gate owner controls

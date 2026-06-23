@@ -40,6 +40,20 @@ npm run dev
 > **no word highlights, no `tag…` dropdowns, blank speaker suggestions** (detection
 > falls back to nothing). That's the #1 local gotcha — use the canonical venv.
 
+### Insights (LLM) vs the editor (spaCy)
+The `/refine` **editor is spaCy** (no LLM). The **meeting-page insights**
+(summary/action-items) come from an LLM via `enrich_session` — RedPill
+`google/gemma-3-27b-it` by default. The draft is built first, so the editor is ready
+in ~1-2s even while/if insights are slow or unavailable.
+
+- **Don't want to spend LLM tokens while testing the editor?** Add
+  **`CONCLAVE_SKIP_ENRICH=1`** to the backend command — enrichment is skipped (no LLM
+  call), and the meeting page shows *"Insights unavailable — no LLM configured."*
+- **No RedPill key?** Same result (skipped, no tokens). For **free local insights**,
+  run Ollama and set **`CONCLAVE_LLM_BACKEND=ollama`** (model `qwen2.5-conclave`).
+- The empty-insights placeholder text reflects the status: `skipped` (no LLM) /
+  `failed` (LLM unreachable) / `ok` (ran, found nothing) / `pending` (processing).
+
 ## Walk
 1. Sign in (browser): `http://localhost:3001/api/auth/v1/dev-login?email=you@example.com&next=/dashboard`
 2. **Upload a fresh Otter transcript** (`Speaker  M:SS` format) from the dashboard.

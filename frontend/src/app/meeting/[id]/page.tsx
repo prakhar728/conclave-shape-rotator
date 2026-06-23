@@ -24,6 +24,7 @@ import { use, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
+import { InsightsPlaceholder } from "@/components/refine/insights-placeholder";
 import { RefineLink } from "@/components/refine/refine-link";
 import { RetentionControl } from "@/components/retention-control";
 import { TranscriptPanel } from "@/components/transcript-panel";
@@ -168,6 +169,12 @@ export default function MeetingPage({
           signals={meeting.signals_by_kind.insights}
           accent="insight"
         />
+
+        {meeting.signals_by_kind.action_items.length === 0 &&
+        meeting.signals_by_kind.open_questions.length === 0 &&
+        meeting.signals_by_kind.insights.length === 0 ? (
+          <InsightsPlaceholder status={meeting.enrichment_status} />
+        ) : null}
 
         {meeting.is_owner ? (
           <div className="space-y-6 mt-12 border-t border-border pt-8">
