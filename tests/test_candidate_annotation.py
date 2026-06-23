@@ -11,7 +11,7 @@ import transcripts.candidate as cand
 
 def test_candidate_span_defaults():
     s = cand.CandidateSpan(token_start=3, token_end=5, surface="DStack protocol")
-    assert s.state == "candidate"
+    assert s.state == "oov"  # OOV-only: a detected span is oov until a vocab hit
     assert s.source == "nlp"
     assert s.type is None
 
@@ -28,19 +28,17 @@ def test_spacy_pass_is_monkeypatchable(monkeypatch):  # the deterministic seam
     assert (spans[0].token_start, spans[0].token_end) == (1, 3)
 
 
-def test_assign_states_known_candidate_oov():  # CD-20 (real wordfreq + vocab, no spaCy)
+def test_assign_states_known_override():  # CD-20 — vocab upgrades an OOV span to known
     from transcripts import vocab
-    tokens = ["the", "DStack", "protocol", "and", "the", "roadmap", "for", "Xyzzqq"]
-    spans = [
-        cand.CandidateSpan(token_start=1, token_end=3, surface="DStack protocol"),
-        cand.CandidateSpan(token_start=5, token_end=6, surface="roadmap"),
-        cand.CandidateSpan(token_start=7, token_end=8, surface="Xyzzqq"),
+    tokens = ["we", "use", "DStack", "and", "Xyzzqq"]
+    spans = [  # OOV-only: spans arrive as oov; assign_states only flips vocab hits
+        cand.CandidateSpan(token_start=2, token_end=3, surface="DStack", state="oov"),
+        cand.CandidateSpan(token_start=4, token_end=5, surface="Xyzzqq", state="oov"),
     ]
-    vocab.put("u_cd20", "DStack protocol", type="project")  # make it known
+    vocab.put("u_cd20", "DStack", type="project")  # previously tagged → known
     out = cand.assign_states(tokens, spans, "u_cd20")
     assert out[0].state == "known" and out[0].type == "project"  # vocab wins
-    assert out[1].state == "candidate"  # English, not vocab
-    assert out[2].state == "oov"  # not English, not vocab
+    assert out[1].state == "oov"  # not vocab → stays oov
 
 
 def test_oov_two_payoffs():  # CD-27

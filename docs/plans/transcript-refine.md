@@ -246,10 +246,16 @@ per keystroke** (the §5 latency rule).
 - **candidate**: a noun phrase the detector flagged. Carries state, interactive.
 - **confirmed**: a candidate the user (or a prior) tagged as a typed entity.
 
-### Candidate unit = noun phrases (LOCKED)
-Use spaCy `doc.noun_chunks` as candidate spans, so multi-word entities
-("DStack protocol", "the consent plane") stay **one** candidate. Drop chunks that
-are entirely function/pronoun ("it", "that thing") via POS.
+### Candidate unit = OUT-OF-VOCABULARY words (REVISED 2026-06-23)
+**Superseded the original "every noun phrase" rule** — that over-tagged badly
+(common nouns + well-known entities like "Google"/"the meeting" all lit up). Now:
+emit **one candidate per out-of-vocabulary token** (`wordfreq.zipf == 0` →
+novel terms / ASR garbles: Recato, DStack, TDX). Common words and well-known
+entities are NOT flagged — the signal is deliberately **rare + high-precision**
+("missing a few is fine; untagged words are still editable/taggable"). The user
+tags high-value entities manually; the LLM does authoritative entity extraction
+**post-approval on the corrected text**, not in the editor. `noun_chunks`/POS are
+no longer used for detection (only OOV + the per-user vocab override).
 
 ### Engine = spaCy `en_core_web_sm` (LOCKED)
 ~15 MB, CPU-only, TEE-friendly. Loaded once at draft time. **v0** uses

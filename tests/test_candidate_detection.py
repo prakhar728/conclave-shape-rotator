@@ -1,7 +1,7 @@
-"""Part 1 increment 5 — candidate detection with REAL spaCy (requires_spacy).
+"""Part 1 — OOV-only candidate detection with REAL spaCy (requires_spacy).
 
-Structural assertions only (never pin exact NER labels). Auto-skipped where the
-model isn't installed. 5a smoke; 5b/5c add OOV/state + correction-filter cases.
+Only out-of-vocabulary words are flagged (novel terms / ASR garbles); common words and
+well-known entities are left alone. Auto-skipped where the model isn't installed.
 """
 from __future__ import annotations
 
@@ -10,20 +10,28 @@ import pytest
 pytestmark = pytest.mark.requires_spacy
 
 
-def test_noun_chunk_becomes_candidate():  # CD-1
+def test_oov_token_becomes_candidate():  # CD-1
     from transcripts.candidate import spacy_pass
     tokens, spans = spacy_pass("we use the DStack protocol")
     surfaces = [s.surface for s in spans]
-    assert "the DStack protocol" in surfaces  # multi-word entity stays one span
-    assert "we" not in surfaces  # pronoun-only chunk dropped (CD-3)
+    assert "DStack" in surfaces  # the novel token is flagged
+    assert all(s.state == "oov" for s in spans)
+    for common in ("we", "use", "the", "protocol"):  # common words NOT flagged
+        assert common not in surfaces
 
 
-def test_span_anchors_align_with_tokens():
+def test_well_known_and_common_not_flagged():  # the over-tagging fix
+    from transcripts.candidate import spacy_pass
+    _, spans = spacy_pass("we discussed the roadmap with Google on Friday")
+    # roadmap / Google / Friday are all valid English → nothing is flagged
+    assert [s.surface for s in spans] == []
+
+
+def test_span_anchor_aligns_with_token():
     from transcripts.candidate import spacy_pass
     tokens, spans = spacy_pass("we use the DStack protocol")
-    sp = next(s for s in spans if s.surface == "the DStack protocol")
-    # the token-relative anchor points at the same surface within `tokens`
-    assert " ".join(tokens[sp.token_start:sp.token_end]) == "the DStack protocol"
+    sp = next(s for s in spans if s.surface == "DStack")
+    assert tokens[sp.token_start:sp.token_end] == ["DStack"]
 
 
 def test_reparse_token_pos():
@@ -33,29 +41,25 @@ def test_reparse_token_pos():
 
 
 def test_oov_proper_noun_flagged():  # CD-5
-    from transcripts.candidate import assign_states, spacy_pass
-    tokens, spans = spacy_pass("we use Recato today")
-    out = assign_states(tokens, spans, "u_cd5")
-    recato = next((s for s in out if "Recato" in s.surface), None)
+    from transcripts.candidate import detect
+    _, spans = detect("we use Recato today", "u_cd5")
+    recato = next((s for s in spans if s.surface == "Recato"), None)
     assert recato is not None and recato.state == "oov"
 
 
-def test_known_from_vocab():  # CD-6
+def test_known_from_vocab():  # CD-6 — a tagged token is re-recognized as known
     from transcripts import vocab
-    from transcripts.candidate import assign_states, spacy_pass
-    tokens, spans = spacy_pass("we use the DStack protocol")
-    vocab.put("u_cd6", "the DStack protocol", type="project")
-    out = assign_states(tokens, spans, "u_cd6")
-    dp = next((s for s in out if "DStack" in s.surface), None)
+    from transcripts.candidate import detect
+    vocab.put("u_cd6", "Dstack", type="project")
+    _, spans = detect("we use Dstack today", "u_cd6")
+    dp = next((s for s in spans if s.surface.lower() == "dstack"), None)
     assert dp is not None and dp.state == "known" and dp.type == "project"
 
 
-def test_candidate_when_in_dict_not_vocab():  # CD-7
-    from transcripts.candidate import assign_states, spacy_pass
-    tokens, spans = spacy_pass("we discussed the roadmap")
-    out = assign_states(tokens, spans, "u_cd7")
-    rm = next((s for s in out if "roadmap" in s.surface), None)
-    assert rm is not None and rm.state == "candidate"
+def test_common_noun_not_flagged():  # CD-7 (flipped) — "roadmap" is valid English
+    from transcripts.candidate import detect
+    _, spans = detect("we discussed the roadmap", "u_cd7")
+    assert all(s.surface != "roadmap" for s in spans)
 
 
 def test_classify_correction_promotes_noun_propn_oov():  # CD-10
