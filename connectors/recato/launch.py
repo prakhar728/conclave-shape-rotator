@@ -131,6 +131,12 @@ def launch_bot(
     # workspace → FPM scope via settings.fpm_workspace_for().
     if workspace:
         bot_config["workspace"] = workspace
+    # FPM enroll token: the bot calls FPM /v1/enroll to learn voiceprints during the
+    # meeting. It needs the M2M token (Conclave holds it as CONCLAVE_FPM_API_TOKEN), which
+    # must carry the 'enroll' scope (see envctl fpm_auth). Without it → 401, no voiceprints.
+    fpm_token = os.environ.get("CONCLAVE_FPM_API_TOKEN")
+    if fpm_token:
+        bot_config["fpmToken"] = fpm_token
 
     # runtime-api CreateContainerRequest (capture services/runtime-api/.../api.py:39).
     # The bot config rides inside config.env.BOT_CONFIG; `user_id` is REQUIRED (the
