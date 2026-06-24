@@ -221,65 +221,42 @@ def _ingest_from_recato_now(
     flushing its final segments. Without retries, we'd fetch an empty
     transcript and bail. Empirical: takes ~3-6 seconds post-stop for the
     transcript to be complete on Recato's side."""
-    import os, threading, time
-    import httpx
+    import os, time
 
     from connectors.recato.translator import to_canonical
     from transcripts import store as transcripts_store
 
-    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
-    token = os.environ.get("RECATO_API_TOKEN") or ""
-    if not base or not token:
-        logger.warning(
-            "post-stop ingest: RECATO env not configured (base=%r token_set=%s)",
-            base, bool(token),
-        )
-        return
-
-    url = f"{base}/transcripts/google_meet/{session_id}"
-    headers = {"X-API-Key": token, "Authorization": f"Bearer {token}",
-               "Accept": "application/json"}
-
-    # Poll up to 5 times over ~10 seconds while Recato finishes its flush.
-    recato = None
-    for attempt in range(5):
-        try:
-            resp = httpx.get(url, headers=headers, timeout=20.0)
-        except httpx.HTTPError as e:
-            logger.warning("post-stop ingest fetch error (attempt %d): %s", attempt, e)
-            time.sleep(2)
-            continue
-        if resp.status_code != 200:
-            logger.warning(
-                "post-stop ingest: Recato GET returned %d (attempt %d)",
-                resp.status_code, attempt,
-            )
-            time.sleep(2)
-            continue
-        body = resp.json()
-        segs = body.get("segments") or []
-        if segs:
-            recato = body
+    # Finalize from `live_segments` — the buffer the capture consumer streamed into
+    # during the meeting (P1). This MIRRORS the webhook finalize path; we no longer
+    # HTTP-fetch from Recato (that endpoint is gone in the capture rebuild). stop_bot
+    # returns before the bot flushes its final segments + the consumer ingests them,
+    # so retry a few times over ~12s.
+    buffered = []
+    for attempt in range(6):
+        buffered = transcripts_store.live_segments(session_id)
+        if buffered:
             logger.info(
-                "post-stop ingest: got %d segments for %s on attempt %d",
-                len(segs), session_id, attempt,
+                "post-stop ingest: %d live segments for %s (attempt %d)",
+                len(buffered), session_id, attempt,
             )
             break
         logger.info(
-            "post-stop ingest: 0 segments for %s, retrying (attempt %d)",
+            "post-stop ingest: 0 live segments for %s, retrying (attempt %d)",
             session_id, attempt,
         )
         time.sleep(2)
 
-    if recato is None:
+    if not buffered:
         logger.warning(
-            "post-stop ingest: gave up — no segments after retries for %s",
-            session_id,
+            "post-stop ingest: gave up — no live segments for %s", session_id,
         )
         return
 
-    source = os.environ.get("CONCLAVE_INGEST_SOURCE", "recato")
-    canonical = to_canonical(recato, source=source)
+    source = os.environ.get("CONCLAVE_INGEST_SOURCE", "capture")
+    canonical = to_canonical(
+        {"native_meeting_id": session_id, "platform": "google_meet", "segments": buffered},
+        source=source,
+    )
 
     existing = transcripts_store.load_session(canonical["meeting"]["external_id"])
     if existing is None:
