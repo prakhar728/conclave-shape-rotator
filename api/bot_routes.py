@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr, Field
 logger = logging.getLogger(__name__)
 
 from auth.session import require_current_user
+from config import settings
 from connectors.recato.launch import (
     DEFAULT_BOT_NAME,
     RecatoLaunchError,
@@ -101,6 +102,7 @@ def invite_bot(
             bot_name=DEFAULT_BOT_NAME,
             webhook_url=webhook_url,
             user_id=account_id,
+            workspace=settings.fpm_workspace_for(body.workspace_id),
         )
     except RecatoLaunchError as e:
         bot_invitations.update_status(invitation["id"], "failed", completed=True)

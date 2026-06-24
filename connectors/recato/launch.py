@@ -65,6 +65,7 @@ def launch_bot(
     api_token: Optional[str] = None,
     base_url: Optional[str] = None,
     user_id: Optional[str] = None,
+    workspace: Optional[str] = None,
     timeout_s: float = 30.0,
 ) -> dict:
     """POST /containers on the capture runtime-api. Returns the JSON body (a
@@ -125,6 +126,11 @@ def launch_bot(
     status_cb = os.environ.get("CONCLAVE_CALLBACK_URL")
     if status_cb:
         bot_config["meetingApiCallbackUrl"] = status_cb
+    # FPM identity scope: the bot enrolls voiceprints under this workspace. Without it
+    # the bot falls back to the synth meeting_id → wrong scope (#2). Conclave maps its
+    # workspace → FPM scope via settings.fpm_workspace_for().
+    if workspace:
+        bot_config["workspace"] = workspace
 
     # runtime-api CreateContainerRequest (capture services/runtime-api/.../api.py:39).
     # The bot config rides inside config.env.BOT_CONFIG; `user_id` is REQUIRED (the
