@@ -35,6 +35,40 @@ export async function apiFetch<T>(
     body = null;
   }
   if (!res.ok) {
+    // Stale-session self-heal. A 401 on a normal call means the httpOnly
+    // `conclave_session` cookie is present but invalid (expired, or the backend
+    // restarted). Middleware only checks the cookie EXISTS, so it lets us onto a
+    // protected page — and without this, `me()` 401s and the page spins forever.
+    // Clear the dead cookie server-side and bounce to /login. Skip the credential
+    // endpoints (their 401s are real auth failures, e.g. a wrong OTP) and SSR.
+    const credentialPaths = [
+      "/api/auth/v1/send-otp",
+      "/api/auth/v1/verify-otp",
+      "/api/auth/v1/exchange-token",
+      "/api/auth/v1/logout",
+    ];
+    const isCredentialCall = credentialPaths.some((p) => path.startsWith(p));
+    if (
+      res.status === 401 &&
+      !isCredentialCall &&
+      typeof window !== "undefined" &&
+      !["/login", "/signup"].includes(window.location.pathname)
+    ) {
+      try {
+        await fetch("/api/auth/v1/logout", {
+          method: "POST",
+          credentials: "same-origin",
+        });
+      } catch {
+        // best-effort — redirect regardless of whether logout succeeds
+      }
+      const next = encodeURIComponent(
+        window.location.pathname + window.location.search,
+      );
+      window.location.href = `/login?next=${next}`;
+      // Halt here so the caller doesn't flash a misleading error mid-redirect.
+      await new Promise<never>(() => {});
+    }
     const detail =
       typeof body === "object" && body !== null && "detail" in body
         ? (body as { detail: unknown }).detail
