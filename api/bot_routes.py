@@ -221,7 +221,7 @@ def _ingest_from_recato_now(
     flushing its final segments. Without retries, we'd fetch an empty
     transcript and bail. Empirical: takes ~3-6 seconds post-stop for the
     transcript to be complete on Recato's side."""
-    import os, time
+    import os, threading, time
 
     from connectors.recato.translator import to_canonical
     from transcripts import store as transcripts_store
