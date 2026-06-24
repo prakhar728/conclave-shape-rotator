@@ -107,6 +107,15 @@ def launch_bot(
             "noOneJoinedTimeout": 600000,
             "everyoneLeftTimeout": 120000,
         },
+        # Join as the warmed, signed-in account. The bot's authenticated branch
+        # (recato-bot index.ts: `if (authenticated && userdataS3Path)`) launches a
+        # persistent context on the mounted /tmp/browser-data and restores the Google
+        # login via importSessionCookies. WITHOUT these two flags the bot joins as an
+        # anonymous guest (hits the name-input field) and gets admission-rejected.
+        # `userdataS3Path` only unlocks the branch — with no S3 configured the S3 sync
+        # is a no-op, so the profile comes from the bound BOT_PROFILE_DIR volume.
+        "authenticated": True,
+        "userdataS3Path": "conclave/bot-profile",
     }
     # Audio sink → Conclave's /api/capture/audio-chunk (post-meeting diarize+identify).
     audio_url = os.environ.get("CONCLAVE_AUDIO_INGEST_URL")
