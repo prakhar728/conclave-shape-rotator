@@ -10,6 +10,7 @@ build/
 .pytest_cache/
 venv/
 .venv/
+.venv-build/
 .mcp.json
 /plan
 /plans/
@@ -73,3 +74,8 @@ datasets/*.db
 # local DB backups (never commit)
 data/*.bak
 *.db.bak
+
+# node / pnpm build + dependency artefacts (regenerable, never commit)
+.next/
+.pnpm-store/
+node_modules/
