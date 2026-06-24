@@ -38,26 +38,42 @@ def _ingest_message(fields: dict) -> None:
 
     raw = fields.get("payload")
     data = json.loads(raw) if raw else fields
-    meeting_id = data.get("meeting_id")
-    text = data.get("text")
-    # Skip control frames (session_start/heartbeat/etc.) — only real segments persist.
-    if not meeting_id or text is None:
+
+    # Key live_segments by the NATIVE meet code (`uid`, e.g. "azw-xwqq-bjk") — that's
+    # what the finalize webhook + post-stop ingest look up. The bot also sends a synth
+    # `meeting_id` int; do NOT key on that or finalize finds nothing.
+    meeting_key = data.get("uid") or data.get("native_meeting_id") or data.get("meeting_id")
+    if not meeting_key:
         return
+
+    # The bot publishes {"type":"transcription","segments":[{text,speaker,start,end,...}]}.
+    # Accept that, plus flat single-segment shapes. Control frames (session_start/end)
+    # have no segments and no text → skipped.
     msg_type = data.get("type")
-    if msg_type and msg_type not in ("segment", "transcript"):
+    if msg_type and msg_type not in ("segment", "transcript", "transcription"):
         return
-    try:
-        seq = int(round(float(data.get("start") or 0) * 1000))
-    except (TypeError, ValueError):
-        seq = 0
-    segment = {
-        "speaker": data.get("speaker"),
-        "text": text,
-        "start": data.get("start"),
-        "end": data.get("end"),
-        "language": data.get("language"),
-    }
-    store.append_segment(meeting_id, seq, segment, segment_id=data.get("segment_id"))
+    segments = data.get("segments")
+    if not isinstance(segments, list):
+        segments = [data] if data.get("text") is not None else []
+
+    for seg in segments:
+        text = seg.get("text")
+        if text is None:
+            continue
+        try:
+            seq = int(round(float(seg.get("start") or 0) * 1000))
+        except (TypeError, ValueError):
+            seq = 0
+        segment = {
+            "speaker": seg.get("speaker"),
+            "text": text,
+            "start": seg.get("start"),
+            "end": seg.get("end"),
+            "language": seg.get("language"),
+        }
+        store.append_segment(
+            meeting_key, seq, segment, segment_id=seg.get("segment_id")
+        )
 
 
 async def _consume() -> None:
