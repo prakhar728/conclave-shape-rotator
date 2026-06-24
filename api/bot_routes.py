@@ -145,14 +145,16 @@ def bot_status_change(payload: dict):
     data = payload or {}
     connection_id = data.get("connection_id")
     status = data.get("status")
+    # CRITICAL: the bot treats any response whose `status` is NOT one of
+    # {processed, ok, container_updated, ignored} as a REJECTION — and a rejected
+    # status callback makes it abort the join entirely (3 retries -> fatal
+    # "server rejected"). So EVERY path must return one of those values.
     if not connection_id or not status:
-        return {"ok": False, "reason": "missing connection_id/status"}
+        return {"status": "ignored"}
 
     inv = bot_invitations.find_by_meeting("google_meet", connection_id)
-    if inv is None:
-        return {"ok": False, "reason": "no invitation"}
-    if inv["status"] in ("completed", "failed"):
-        return {"ok": True, "note": "already terminal"}
+    if inv is None or inv["status"] in ("completed", "failed"):
+        return {"status": "ignored"}
 
     reason = (data.get("reason") or data.get("completion_reason") or "").lower()
     if status == "active":
@@ -166,14 +168,14 @@ def bot_status_change(payload: dict):
         bad = any(k in reason for k in ("reject", "timeout", "admission", "denied"))
         new, terminal = ("failed", True) if bad else ("completed", True)
     else:
-        return {"ok": True, "ignored": status}
+        return {"status": "ignored"}
 
     bot_invitations.update_status(inv["id"], new, completed=terminal)
     logger.info(
         "bot status_change: %s -> %s (bot status=%s reason=%r)",
         connection_id, new, status, reason,
     )
-    return {"ok": True, "status": new}
+    return {"status": "processed"}
 
 
 @router.get("/active")
