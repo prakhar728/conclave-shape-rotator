@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # `google/gemma-3-27b-it` is the cohort-transcripts default: cheap
     # ($0.04/M in), strong English instruction-following, ample 54K context.
     redpill_api_key: str = ""
-    redpill_base_url: str = "https://api.redpill.ai/v1"
+    redpill_base_url: str = "https://api.red-pill.ai/v1"
     redpill_model: str = "google/gemma-3-27b-it"
 
     # NearAI API — alternate TEE backend.
