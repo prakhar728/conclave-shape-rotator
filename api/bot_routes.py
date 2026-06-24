@@ -129,6 +129,53 @@ def invite_bot(
     }
 
 
+@router.post("/bot/status_change")
+def bot_status_change(payload: dict):
+    """Receiver for the capture bot's lifecycle callbacks (machine -> Conclave).
+
+    The bot POSTs {connection_id, status, reason, completion_reason, ...} on each
+    transition (requested -> joining -> awaiting_admission -> active -> completed/
+    failed). `connection_id` is the native meet code. We map the bot status onto the
+    bot_invitation so the dashboard reflects reality instead of sitting on "joining".
+
+    Unauthenticated machine callback (the bot holds no user token). The bot reaches
+    this via BOT_CONFIG.meetingApiCallbackUrl (= CONCLAVE_CALLBACK_URL). ⚠️ prod should
+    gate this with a shared secret; local is open.
+    """
+    data = payload or {}
+    connection_id = data.get("connection_id")
+    status = data.get("status")
+    if not connection_id or not status:
+        return {"ok": False, "reason": "missing connection_id/status"}
+
+    inv = bot_invitations.find_by_meeting("google_meet", connection_id)
+    if inv is None:
+        return {"ok": False, "reason": "no invitation"}
+    if inv["status"] in ("completed", "failed"):
+        return {"ok": True, "note": "already terminal"}
+
+    reason = (data.get("reason") or data.get("completion_reason") or "").lower()
+    if status == "active":
+        new, terminal = "active", False
+    elif status in ("joining", "awaiting_admission", "requested"):
+        new, terminal = "joining", False
+    elif status == "failed" or status.startswith("awaiting_admission_"):
+        new, terminal = "failed", True
+    elif status == "completed":
+        # Rejections/timeouts arrive as completed+reason; surface them as failed.
+        bad = any(k in reason for k in ("reject", "timeout", "admission", "denied"))
+        new, terminal = ("failed", True) if bad else ("completed", True)
+    else:
+        return {"ok": True, "ignored": status}
+
+    bot_invitations.update_status(inv["id"], new, completed=terminal)
+    logger.info(
+        "bot status_change: %s -> %s (bot status=%s reason=%r)",
+        connection_id, new, status, reason,
+    )
+    return {"ok": True, "status": new}
+
+
 @router.get("/active")
 def list_active_invitations(user: dict = Depends(require_current_user)):
     """List the current user's non-terminal bot invitations.
