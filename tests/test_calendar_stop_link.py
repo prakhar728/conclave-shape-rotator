@@ -20,13 +20,13 @@ class _FakeResp:
 
 @pytest.fixture
 def stubbed(monkeypatch):
-    monkeypatch.setenv("RECATO_API_BASE_URL", "http://recato.test")
-    monkeypatch.setenv("RECATO_API_TOKEN", "tok")
+    monkeypatch.setenv("CAPTURE_API_BASE_URL", "http://recato.test")
+    monkeypatch.setenv("CAPTURE_API_TOKEN", "tok")
 
     # Recato transcript fetch → non-empty segments on the first try.
     monkeypatch.setattr(httpx, "get", lambda *a, **k: _FakeResp())
 
-    import connectors.recato.translator as tr
+    import connectors.capture.translator as tr
     monkeypatch.setattr(
         tr, "to_canonical",
         lambda vexa, source: {"meeting": {"external_id": "abc-defg-hij"}},

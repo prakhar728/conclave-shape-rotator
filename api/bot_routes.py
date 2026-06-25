@@ -21,9 +21,9 @@ logger = logging.getLogger(__name__)
 
 from auth.session import require_current_user
 from config import settings
-from connectors.recato.launch import (
+from connectors.capture.launch import (
     DEFAULT_BOT_NAME,
-    RecatoLaunchError,
+    CaptureLaunchError,
     launch_bot,
     parse_meet_input,
     stop_bot,
@@ -93,10 +93,10 @@ def invite_bot(
     # its own callback (and so Recato doesn't have to be reconfigured
     # globally for every deploy environment).
     import os as _os
-    webhook_url = _os.environ.get("RECATO_MEETING_COMPLETED_URL")
+    webhook_url = _os.environ.get("CAPTURE_MEETING_COMPLETED_URL")
 
     try:
-        recato_resp = launch_bot(
+        capture_resp = launch_bot(
             platform="google_meet",
             native_meeting_id=meet_code,
             bot_name=DEFAULT_BOT_NAME,
@@ -104,17 +104,17 @@ def invite_bot(
             user_id=account_id,
             workspace=settings.fpm_workspace_for(body.workspace_id),
         )
-    except RecatoLaunchError as e:
+    except CaptureLaunchError as e:
         bot_invitations.update_status(invitation["id"], "failed", completed=True)
         raise HTTPException(status_code=502, detail=str(e))
 
-    recato_bot_id = (
-        recato_resp.get("id")
-        if isinstance(recato_resp, dict) and isinstance(recato_resp.get("id"), int)
+    capture_bot_id = (
+        capture_resp.get("id")
+        if isinstance(capture_resp, dict) and isinstance(capture_resp.get("id"), int)
         else None
     )
     bot_invitations.update_status(
-        invitation["id"], "joining", recato_bot_id=recato_bot_id
+        invitation["id"], "joining", capture_bot_id=capture_bot_id
     )
 
     # Persist attendee shares now so the post-enrichment email blast (2.8)
@@ -191,7 +191,7 @@ def list_active_invitations(user: dict = Depends(require_current_user)):
     from storage.sqlite import _get_conn
     rows = _get_conn().execute(
         "SELECT id, native_meeting_id, platform, status, bot_name, "
-        "recato_bot_id, created_at "
+        "capture_bot_id, created_at "
         "FROM bot_invitations "
         "WHERE user_id = ? AND status NOT IN ('completed', 'failed') "
         "ORDER BY created_at DESC",
@@ -205,7 +205,7 @@ def list_active_invitations(user: dict = Depends(require_current_user)):
                 "platform": r["platform"],
                 "status": r["status"],
                 "bot_name": r["bot_name"],
-                "recato_bot_id": r["recato_bot_id"],
+                "capture_bot_id": r["capture_bot_id"],
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -234,7 +234,7 @@ def stop_bot_route(
 
     try:
         stop_bot(platform="google_meet", native_meeting_id=session_id)
-    except RecatoLaunchError as e:
+    except CaptureLaunchError as e:
         # Even if Recato can't be reached, mark the invitation as failed
         # so the user isn't stuck looking at a forever-joining state.
         bot_invitations.update_status(inv["id"], "failed", completed=True)
@@ -274,7 +274,7 @@ def _ingest_from_recato_now(
     transcript to be complete on Recato's side."""
     import os, threading, time
 
-    from connectors.recato.translator import to_canonical
+    from connectors.capture.translator import to_canonical
     from transcripts import store as transcripts_store
 
     # Finalize from `live_segments` — the buffer the capture consumer streamed into
@@ -380,7 +380,7 @@ def bot_status(
     return {
         "invitation_id": inv["id"],
         "status": inv["status"],
-        "recato_bot_id": inv["recato_bot_id"],
+        "capture_bot_id": inv["capture_bot_id"],
         "created_at": inv["created_at"],
         "completed_at": inv["completed_at"],
     }

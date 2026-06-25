@@ -127,10 +127,10 @@ app.include_router(capture_router)
 from api.users_routes import router as users_router
 app.include_router(users_router)
 
-# Phase 2.4: Recato webhook receiver (replaces the standalone consumer.py
-# bridge for the hosted-product path).
-from api.webhooks_recato import router as recato_webhook_router
-app.include_router(recato_webhook_router)
+# Phase 2.4: capture webhook receiver — finalizes a meeting (live buffer →
+# translate → bind → enrich). The bot POSTs `meeting-completed` here.
+from api.webhooks_capture import router as capture_webhook_router
+app.include_router(capture_webhook_router)
 
 # Phase 2.10: magic-link lookup + consume (public; no auth required to
 # resolve the token, but the meeting itself is still permission-gated).

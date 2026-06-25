@@ -331,7 +331,7 @@ def extract_meet_code(event: dict) -> Optional[str]:
     Checks `hangoutLink` first, then `conferenceData.entryPoints[*].uri`.
     Reuses the recato Meet-URL parser so the code shape matches what the bot
     launcher expects (abc-defg-hij)."""
-    from connectors.recato.launch import parse_meet_input
+    from connectors.capture.launch import parse_meet_input
 
     candidates = []
     if event.get("hangoutLink"):

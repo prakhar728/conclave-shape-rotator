@@ -2,7 +2,7 @@
 
 Tracks each "Conclave user invited the bot to a Meet" event:
 - Provenance: which user fired the invite, in which workspace
-- Recato handle: `recato_bot_id` for status polling
+- Recato handle: `capture_bot_id` for status polling
 - Status machine: requested → joining → active → completed | failed
 
 The webhook receiver (Phase 2.4) advances `status` to 'completed' when
@@ -30,7 +30,7 @@ def create_invitation(
     platform: str,
     native_meeting_id: str,
     bot_name: str = "Conclave",
-    recato_bot_id: Optional[int] = None,
+    capture_bot_id: Optional[int] = None,
     status: str = "requested",
     intent: Optional[str] = None,
     assigned_account_id: Optional[str] = None,
@@ -46,11 +46,11 @@ def create_invitation(
     now = _now()
     _get_conn().execute(
         "INSERT INTO bot_invitations "
-        "(id, user_id, workspace_id, platform, native_meeting_id, recato_bot_id, "
+        "(id, user_id, workspace_id, platform, native_meeting_id, capture_bot_id, "
         " status, bot_name, intent, assigned_account_id, created_at, completed_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)",
         (inv_id, user_id, workspace_id, platform, native_meeting_id,
-         recato_bot_id, status, bot_name, intent, assigned_account_id, now),
+         capture_bot_id, status, bot_name, intent, assigned_account_id, now),
     )
     return {
         "id": inv_id,
@@ -58,7 +58,7 @@ def create_invitation(
         "workspace_id": workspace_id,
         "platform": platform,
         "native_meeting_id": native_meeting_id,
-        "recato_bot_id": recato_bot_id,
+        "capture_bot_id": capture_bot_id,
         "status": status,
         "bot_name": bot_name,
         "intent": intent,
@@ -71,7 +71,7 @@ def create_invitation(
 def get_invitation(invitation_id: str) -> Optional[dict]:
     row = _get_conn().execute(
         "SELECT id, user_id, workspace_id, platform, native_meeting_id, "
-        "recato_bot_id, status, bot_name, intent, created_at, completed_at "
+        "capture_bot_id, status, bot_name, intent, created_at, completed_at "
         "FROM bot_invitations WHERE id = ?",
         (invitation_id,),
     ).fetchone()
@@ -82,7 +82,7 @@ def find_by_meeting(platform: str, native_meeting_id: str) -> Optional[dict]:
     """Look up the most recent invitation for a given Meet code."""
     row = _get_conn().execute(
         "SELECT id, user_id, workspace_id, platform, native_meeting_id, "
-        "recato_bot_id, status, bot_name, intent, created_at, completed_at "
+        "capture_bot_id, status, bot_name, intent, created_at, completed_at "
         "FROM bot_invitations WHERE platform = ? AND native_meeting_id = ? "
         "ORDER BY created_at DESC LIMIT 1",
         (platform, native_meeting_id),
@@ -94,16 +94,16 @@ def update_status(
     invitation_id: str,
     status: str,
     *,
-    recato_bot_id: Optional[int] = None,
+    capture_bot_id: Optional[int] = None,
     completed: bool = False,
 ) -> None:
     if status not in VALID_STATUSES:
         raise ValueError(f"invalid status: {status}")
     fields: list[str] = ["status = ?"]
     params: list = [status]
-    if recato_bot_id is not None:
-        fields.append("recato_bot_id = ?")
-        params.append(recato_bot_id)
+    if capture_bot_id is not None:
+        fields.append("capture_bot_id = ?")
+        params.append(capture_bot_id)
     if completed:
         fields.append("completed_at = ?")
         params.append(_now())

@@ -126,7 +126,7 @@ def test_dispatch_launches_due_meeting(dispatch_setup):
     assert len(calls) == 1
     inv = bot_invitations.find_by_meeting("google_meet", "abc-defg-hij")
     assert inv["status"] == "joining"
-    assert inv["recato_bot_id"] == 7
+    assert inv["capture_bot_id"] == 7
 
 
 def test_dispatch_dedup_inflight(dispatch_setup):
@@ -168,14 +168,14 @@ def test_dispatch_failed_launch_marks_invitation(client, monkeypatch):
     me = _login_and_connect(client)
     user_id = me["user"]["id"]
     from infra import calendar_auto_record as car, google_calendar as gc, calendar_dispatch as cd, bot_invitations
-    from connectors.recato.launch import RecatoLaunchError
+    from connectors.capture.launch import CaptureLaunchError
     car.set_auto_record(user_id=user_id, google_event_id="ev1",
                         workspace_id=me["workspace"]["id"], meet_code="abc-defg-hij", enabled=True)
     monkeypatch.setattr(gc, "list_events", lambda uid, **kw: [{
         "id": "ev1", "meet_code": "abc-defg-hij", "title": "Sync"}])
 
     def _fail(**kw):
-        raise RecatoLaunchError("recato down")
+        raise CaptureLaunchError("recato down")
     monkeypatch.setattr(cd, "launch_bot", _fail)
 
     now = datetime.now(timezone.utc)

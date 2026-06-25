@@ -1,13 +1,13 @@
 """Recato `meeting.completed` webhook receiver.
 
-Mounted at POST /api/webhooks/recato/meeting-completed. Replaces the
-separate `connectors.recato.consumer` service for the v1 hosted product
+Mounted at POST /api/webhooks/capture/meeting-completed. Replaces the
+separate `connectors.capture.consumer` service for the v1 hosted product
 (BUILD_DOC §10.5). The standalone consumer.py stays for users running
 Recato as a third-party producer; ours is the in-process path.
 
 Flow:
   1. Verify Recato's HMAC signature (`X-Signature: sha256=<hex>`,
-     `RECATO_WEBHOOK_SECRET` env var). Optional for dev — when the secret
+     `CAPTURE_WEBHOOK_SECRET` env var). Optional for dev — when the secret
      is unset we accept unsigned hooks but log a warning.
   2. Ignore non-`meeting.completed` events.
   3. Fetch full transcript from Recato.
@@ -30,13 +30,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel
 
-from connectors.recato.cli import _env  # for the fetch URL parts
-from connectors.recato.translator import to_canonical
+from connectors.capture.translator import to_canonical
 from infra import bot_invitations
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/webhooks/recato", tags=["webhooks"])
+router = APIRouter(prefix="/api/webhooks/capture", tags=["webhooks"])
 
 
 class _MeetingCompletedEvent(BaseModel):
@@ -55,37 +54,6 @@ def _verify(body: bytes, header: Optional[str], secret: str) -> bool:
     return hmac.compare_digest(f"sha256={expected}", header)
 
 
-def _fetch_recato_transcript(platform: str, native_meeting_id: str) -> dict:
-    """GET the full transcript Recato exposed for this meeting."""
-    import httpx
-
-    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
-    token = os.environ.get("RECATO_API_TOKEN") or ""
-    if not base or not token:
-        raise HTTPException(
-            status_code=502, detail="Recato is not configured on this host"
-        )
-    url = f"{base}/transcripts/{platform}/{native_meeting_id}"
-    try:
-        resp = httpx.get(
-            url,
-            headers={
-                "X-API-Key": token,
-                "Authorization": f"Bearer {token}",
-                "Accept": "application/json",
-            },
-            timeout=30.0,
-        )
-    except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Recato unreachable: {e}") from e
-    if resp.status_code != 200:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Recato GET transcript {resp.status_code}: {resp.text[:200]}",
-        )
-    return resp.json()
-
-
 @router.post("/meeting-completed", status_code=status.HTTP_202_ACCEPTED)
 async def on_meeting_completed(
     request: Request,
@@ -94,14 +62,14 @@ async def on_meeting_completed(
 ) -> dict:
     """Finalize: live buffer → translate → bind to workspace → enrich (P1; no fetch)."""
     # 1. Auth.
-    secret = os.environ.get("RECATO_WEBHOOK_SECRET")
+    secret = os.environ.get("CAPTURE_WEBHOOK_SECRET")
     if secret:
         raw = await request.body()
         if not _verify(raw, x_signature, secret):
             raise HTTPException(status_code=401, detail="signature mismatch")
     else:
         logger.warning(
-            "RECATO_WEBHOOK_SECRET not set — accepting unsigned webhook (dev only)"
+            "CAPTURE_WEBHOOK_SECRET not set — accepting unsigned webhook (dev only)"
         )
 
     # 2. Filter.

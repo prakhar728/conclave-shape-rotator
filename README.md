@@ -1,337 +1,267 @@
-# Conclave
+# Conclave — Confidential Team Memory
 
-Confidential live-cohort evaluation for hackathons.
+Conclave is a **meeting-intelligence system where the operator provably cannot read your meetings.**
+Transcripts are captured, enriched, and turned into a searchable, graph-connected team memory —
+inside attestable confidential infrastructure (Intel TDX). Every LLM call happens **at ingest**; the
+read path (search, entities, obligations, graph) is pure SQL + local embeddings, so no third-party
+API ever sees your data. The one exception is the optional `/ask` RAG endpoint, which synthesizes an
+answer with the same TEE-served LLM used at ingest.
 
-Conclave is a TEE-backed product for the current **Solana Frontier Hackathon** branch of this repo. It helps hackathon organizers and participants answer a question that Colosseum Copilot does not directly answer:
+> **Read this first (mental model).** One FastAPI process + one SQLite file (relational + full-text +
+> vectors) + a Next.js frontend. Transcripts arrive from the **capture** microservice (Conclave's
+> meeting bot, extracted from Recato — see the `capture/` repo), in-person
+> **Record** capture, or **upload**. Ingest does all the AI (enrich → chunk → embed → extract →
+> store, bi-temporally). The frontend reads via fast, LLM-free queries. Speaker **identity** is
+> resolved against **VFTE/FPM** (voiceprints). The whole thing runs in a **Phala dstack TDX CVM** and
+> exposes a `/attestation` quote so a client can verify the enclave before trusting it.
 
-**How novel is this project relative to the teams building right now in the active cohort, without exposing the raw idea to organizers or other teams?**
+> **Heads-up for anyone reading old docs:** this repo used to also host a "hackathon-novelty / interview
+> skill runtime" (a LangGraph-based `/instances`+`/submit` product with its own `client/` frontend).
+> **That was removed** — Conclave is now purely the transcript-intelligence product. If you see
+> references to skills, `/instances`, langgraph, or `client/apps/web`, they are stale.
 
-This branch is intentionally narrower than the older Conclave framework. The broader confidential-protocol direction is preserved on backup branches. The current branch is focused on a single product:
+## Contents
+- [Architecture at a glance](#architecture-at-a-glance)
+- [Ingest pipeline (where the AI is)](#ingest-pipeline-where-the-ai-is)
+- [Query path (deliberately LLM-free)](#query-path-deliberately-llm-free)
+- [Ingest sources](#ingest-sources)
+- [HTTP API surface](#http-api-surface)
+- [Storage & migrations](#storage--migrations)
+- [Trust, privacy & attestation](#trust-privacy--attestation)
+- [Identity (speaker → person)](#identity-speaker--person)
+- [Frontend](#frontend)
+- [Configuration](#configuration)
+- [Run it locally](#run-it-locally)
+- [Deploy](#deploy)
+- [Tests & eval](#tests--eval)
+- [Repo map](#repo-map)
 
-- **Confidential Hackathon Novelty**
-
-## Why this exists
-
-[Colosseum Copilot](https://docs.colosseum.com/copilot/introduction) is a strong research tool for historical landscape analysis: prior hackathon submissions, archive documents, competitive context, and current web research.
-
-Conclave complements that by operating on the **live cohort inside the active hackathon**:
-
-- Copilot helps answer: "What has been built before?"
-- Conclave helps answer: "How do I compare to the teams building right now?"
-
-That matters because many teams do not want to reveal raw ideas, README content, or code summaries to organizers or peers just to get novelty feedback.
-
-## Research grounding
-
-Conclave is inspired by **NDAI Agreements** by Matthew Stephenson, Andrew Miller, Xyn Sun, Bhargav Annem, and Rohan Parikh:
-
-- [arXiv:2502.07924](https://arxiv.org/abs/2502.07924)
-
-The paper studies the disclosure paradox around information goods: to evaluate an idea, someone often needs disclosure; but disclosure itself creates expropriation risk. The paper argues that **trusted execution environments (TEEs) plus AI agents** can mitigate that problem and act like an "ironclad NDA."
-
-Conclave applies that logic to live hackathon evaluation.
-
-## Product in one paragraph
-
-An organizer creates a Conclave enclave for a hackathon, sets an end date and evaluation cadence, and defines track descriptions. Participants submit their idea through an agent skill that reads their repo locally and sends only the submission into the enclave. On each scheduled tick, the enclave evaluates the full accumulated cohort and returns bounded outputs such as novelty, best-fit track, cluster, and name-collision warnings. The organizer gets anonymized cohort-level visibility and attestation-backed reporting without seeing raw participant submissions.
-
-## Current branch scope
-
-This branch is optimized for the **Frontier / Public Goods** pitch, not for the older generic framework story.
-
-What is in scope here:
-
-- live-cohort hackathon novelty evaluation
-- periodic re-evaluation until the hackathon end date
-- participant-facing agent skill install flow
-- operator setup UI and dashboard
-- TDX attestation checks
-- optional final Solana devnet attestation of the cohort report hash
-
-What is not the main story on this branch:
-
-- generic multi-protocol marketplace positioning
-- confidential dataset procurement as the hero demo
-- multi-skill gallery UX
-- participant web submission flows
-
-## What Conclave evaluates
-
-The deterministic and agentic pipeline currently produces these participant-facing outputs:
-
-- `novelty_score`
-- `track_alignments`
-- `best_fit_track`
-- `cluster_label`
-- `cluster_size`
-- `confidence`
-- `name_collisions`
-
-Admin-facing results additionally include:
-
-- `aligned`
-- `criteria_scores`
-- `status`
-- `analysis_depth`
-- `duplicate_of`
-
-The operator dashboard also computes cohort-level summaries:
-
-- cohort size
-- last evaluation time
-- cluster distribution
-- track distribution
-- name-collision pair count
-- evaluation timeline
-- attestations
-
-## How the scoring works
-
-Conclave is not a thin chat wrapper over hackathon submissions. The backend mixes deterministic methods with agentic evaluation.
-
-### 1. Ingestion
-
-`skills/hackathon_novelty/ingest.py`
-
-- normalizes plain text, markdown, or docx submissions
-- summarizes long submissions before comparison
-- now degrades gracefully offline by falling back to raw `idea_text`
-
-### 2. Deterministic layer
-
-`skills/hackathon_novelty/deterministic.py`
-
-- sentence-transformer embeddings
-- offline hashed-embedding fallback when no local model weights are available
-- pairwise cosine similarity
-- novelty score = `1 - max(similarity to any other submission)`
-- percentile calculation
-- KMeans clustering
-- readable cluster labels based on representative submission titles
-- name-collision detection with `SequenceMatcher` plus substring checks
-- track alignment by similarity to organizer-defined track names
-
-### 3. Agent layer
-
-`skills/hackathon_novelty/agent.py`
-
-- triage step decides `score` vs `duplicate`
-- judges whether a submission is aligned with the hackathon/theme
-- score step evaluates criteria using raw submission content inside the enclave
-- if the online LLM path is unavailable, the pipeline now falls back to deterministic outputs plus neutral agent defaults
-
-### 4. Guardrails
-
-`skills/hackathon_novelty/guardrails.py`
-
-- allowed output-key whitelist
-- numeric clamping
-- raw-substring leakage detection before outputs leave the pipeline
-
-## Scheduler and lifecycle
-
-Conclave is periodic and stateful.
-
-`infra/scheduler.py`
-
-- one async task per instance
-- wakes up on `evaluation_frequency_seconds`
-- re-evaluates the full current cohort
-- runs a final evaluation at `end_date`
-- optionally publishes the final cohort report hash to Solana devnet
-
-Supported cadences include values like:
-
-- `30m`
-- `1h`
-- `6h`
-- `1d`
-- `3d`
-- `1w`
-- `2w`
-
-## User flow
-
-### Organizer
-
-1. Open `/setup`
-2. Verify the TDX seal
-3. Create an instance with:
-   - hackathon name
-   - end date
-   - evaluation cadence
-   - track descriptions
-4. Receive:
-   - `instance_id`
-   - `admin_token`
-   - `enclave_url`
-5. Share the participant install snippet
-
-### Participant
-
-Participants are meant to use the skill in `skills/conclave-novelty/` rather than the web UI.
-
-Install path:
-
-```bash
-npx skills add prakhar728/conclave
+## Architecture at a glance
 ```
-
-The skill then:
-
-1. verifies the enclave
-2. mints a participant token with `/generate-token`
-3. summarizes the local repo and idea
-4. submits to `/submit`
-5. fetches results from `/results/{submission_id}`
-
-## Trust boundary
-
-Conclave's intended privacy model is:
-
-- the participant's local agent sees their local repo and README
-- the enclave sees the submitted content inside Intel TDX
-- the organizer sees only bounded outputs and anonymized submission summaries
-- other participants see nothing about other teams
-
-This is why the product is useful for live hackathon evaluation. Teams can get current-cohort signals without broadcasting their raw work-in-progress ideas.
-
-## Attestation model
-
-There are two attestation surfaces in the current branch:
-
-### TDX quote
-
-`GET /attestation`
-
-- fetched from the dstack agent when running in TEE
-- surfaced in the frontend attestation widget
-- verified through Phala's attestation verification endpoint
-
-### Final cohort report hash
-
-`infra/solana.py`
-
-- deterministic SHA-256 hash of the final results set
-- published to Solana devnet via the Memo program when `CONCLAVE_SOLANA_KEYPAIR` is configured
-- falls back to `local_only` mode when Solana credentials are absent
-
-## UI and styling
-
-The frontend is not generic SaaS. The visual system is intentional and is part of the product identity.
-
-Theme:
-
-- Roman tribunal / arena / sealed deliberation
-
-Core design choices:
-
-- typography: `Cinzel` for display, `EB Garamond` for body, `IBM Plex Mono` for hashes and system text
-- palette: travertine cream, weathered stone, porphyry purple, arena ochre, basalt
-- motifs: laurel wreaths, SPQR-style seal, arch dividers, plaque surfaces
-- language: "Convene a Conclave," "Enter the lists," "The Imperial Seal," "The Conclave deliberates"
-
-Reference files:
-
-- `client/apps/web/app/page.tsx`
-- `client/apps/web/app/setup/page.tsx`
-- `client/apps/web/app/dashboard/[id]/page.tsx`
-- `client/apps/web/app/style/page.tsx`
-- `client/packages/ui/src/styles/globals.css`
-
-The `/style` page is effectively an in-repo visual spec for the current UI language.
-
-## Repo map
-
-```text
-main.py                              FastAPI entrypoint
-api/routes.py                        REST API and role-gated endpoints
-storage/sqlite.py                    Persistent SQLite state
-infra/scheduler.py                   Periodic evaluation loop
-infra/enclave.py                     TDX attestation integration
-infra/solana.py                      Final report hash publication
-skills/hackathon_novelty/            Live evaluation pipeline
-skills/conclave-novelty/             Participant agent skill
-client/apps/web/                     Operator-facing Next.js app
-plans/                               Product and implementation planning docs
+ capture bot ┐
+ in-person   ┤ transcript ──► INGEST PIPELINE (all LLM work, in the TEE)
+ upload     ┘                  parse → enrich → chunk → embed → extract → store
+                                          │
+                                          ▼
+                          ONE SQLite file: relational + FTS5 + sqlite-vec
+                                          │
+                                          ▼
+                        QUERY PATH (no LLM*): search · entities · obligations · graph
+                                          │
+                                          ▼
+                          Next.js UI (frontend/) · per-meeting visibility enforced
 ```
+- **One process, one DB.** FastAPI app (`main.py`) + a single SQLite file holding relational data, the
+  BM25 index (FTS5), and the vector ANN index (`sqlite-vec`). No Postgres / Pinecone / Elastic — every
+  external service is a hole in the attestation story.
+- **LLM backends** (`config.py`, `transcripts/llm.py`): **RedPill** (Phala TEE-served `gemma-3-27b-it`,
+  default) · **NEAR AI** (`DeepSeek-V3.1`) · **Ollama** (local `qwen2.5-conclave`). Flip with
+  `python -m transcripts.cli llm use <backend>`.
+- **Embeddings** (`transcripts/embed.py`): `nomic-embed-text v1.5` via Ollama — 768-dim stored in
+  `embeddings`, 256-dim Matryoshka-truncated copies in the `chunks_vec` ANN index. Local, in-process.
+- `*` the only LLM on the read path is the optional `/ask` RAG answer.
 
-## Local development
+## Ingest pipeline (where the AI is)
+Triggered async after a transcript lands (`api/transcripts_routes.py::_enrich_in_background`):
 
-### Backend
+1. **Parse → store** (`transcripts/parse.py`, `store.py`): raw turns persist immutably in
+   `transcript_sessions.raw_diarization`; all derived data lands in `derived` (JSON). This split is
+   what makes "delete raw, keep summary" clean.
+2. **v1 enrichment** (`transcripts/enrich.py`): map-reduce summary + signals via the TEE LLM.
+3. **3.5a retrieval indexing — always on** (`transcripts/kb_pipeline.py`): turn-aware chunking
+   (`kb_chunk.py`, never splits mid-turn) → 1–2 sentence context header per chunk (`context_header.py`)
+   → embed → FTS5 (trigger-synced) + `sqlite-vec` ANN. Best-effort & idempotent (re-runnable).
+4. **3.5b knowledge extraction — flag `ENABLE_KB_PIPELINE`** (`transcripts/kb_extract.py`,
+   `extract.py`, `entity_resolution.py`, `importance.py`, `upsert.py`): typed entity + obligation
+   extraction (1 call/chunk) → **lexical-first** entity resolution over definition embeddings (the
+   OI-7 over-merge fix — no bare-name cosine auto-merge) → importance scoring (batched) → Mem0-style
+   ADD/UPDATE/DELETE/NOOP upsert → **bi-temporal write** (`valid_to`/`superseded_by`, never hard-deletes).
 
+Per-stage cost is queryable live at `GET /api/workspaces/{id}/ingest-metrics`.
+
+## Query path (deliberately LLM-free)
+`POST /api/workspaces/{id}/search` (`api/kb_routes.py`, `infra/rrf.py`):
+- embed query locally (nomic, `search_query:` prefix) ‖ FTS5 BM25 (sanitized — no operator injection)
+- **Reciprocal Rank Fusion** (k=60, ~20 lines, no model) merges the two legs
+- per-meeting **visibility filter** (`can_user_see`) applied server-side on every route
+
+`entities` / `obligations` / `graph` are pure SQL projections. `POST /api/workspaces/{id}/ask` is the
+one read endpoint that calls the LLM (RAG answer synthesis over retrieved chunks).
+
+## Ingest sources
+| Source | Endpoint | Notes |
+|---|---|---|
+| **Capture bot** (online meetings) | bot streams to Redis `transcription_segments` live; `POST /api/webhooks/capture/meeting-completed` finalizes | HMAC-signed, idempotent; finalize = live buffer → canonical envelope → bind workspace → identity → enrich |
+| **In-person Record** | `POST /api/workspaces/{id}/record` | capture audio → FPM diarize/identify + ASR → merge → ingest (consent plane) |
+| **Upload** | `POST /api/workspaces/{id}/transcripts` | paste/file; same enrich chain as the webhook |
+| **Capture stream** | `POST /api/capture/audio-chunk` + Redis `transcription_segments` consumer (`connectors/capture`) | audio → Conclave TEE; segment stream consumed as a consumer group |
+| **Calendar auto-dispatch** | `infra/scheduler.py` poll → `infra/calendar_dispatch.py` | sends the bot to soon-starting connected-calendar meetings |
+
+Producers translate to a **canonical transcript envelope** before Conclave core sees them
+(`connectors/capture/`), so Conclave stays source-agnostic.
+
+### Ingest contract — what shapes each endpoint accepts
+Everything normalizes into one **canonical transcript envelope** (`connectors/capture/translator.py`)
+before enrichment. That target shape is:
+```jsonc
+{
+  "meeting": {
+    "external_id": "abc-defg-hij",      // native meeting id (e.g. a Meet code)
+    "platform": "google_meet",          // lowercased; optional
+    "url": "https://meet.google.com/…", // optional
+    "title": "…",                       // optional
+    "participants": ["Alice", "Bob"]    // optional
+  },
+  "segments": [
+    { "speaker": "Alice", "text": "…",
+      "start": 0.0, "end": 1.8,         // relative seconds (floats)
+      "language": "en",                  // optional
+      "absolute_start": "2026-06-25T12:00:03Z", "absolute_end": "…" }  // optional UTC
+  ]
+}
+```
+What each ingest path expects on the wire:
+
+| Endpoint | Content type | Shape it accepts |
+|---|---|---|
+| `POST /api/webhooks/capture/meeting-completed` | JSON, **HMAC-signed** (`X-Signature: sha256=…`, `CAPTURE_WEBHOOK_SECRET`) | `{event_id, event_type:"meeting.completed", api_version, created_at, data:{meeting:{platform, native_meeting_id, status}}}`. **Finalize signal** — the bot has already streamed segments into the live buffer (`transcription_segments`); this materializes `raw_diarization` from that buffer (write-once), then translates → binds → enriches. **No fetch.** (`CAPTURE_API_BASE_URL`/`CAPTURE_API_TOKEN` point at the capture runtime-api, used by `connectors/capture/launch.py` to *launch* bots.) |
+| `POST /api/workspaces/{id}/transcripts` (upload) | JSON `{ "text": "<≤2 MB>" }` | `text` is auto-detected: a **JSON** transcript (VoxTerm/generic segment shapes) **or** **Otter-style plaintext** (`Speaker  M:SS` lines). 422 if zero segments parse — junk is never stored. |
+| `POST /api/workspaces/{id}/record` (in-person) | JSON (capture handle) | kicks the capture→FPM diarize/identify + ASR→merge chain, which emits envelope segments. |
+| `POST /api/capture/audio-chunk` | `multipart/form-data` | `metadata` (JSON: `{meeting_id, session_uid, format, chunk_seq, is_final}`), `chunk_seq` (int), `is_final`, `file` (audio bytes). Raw audio is **stored, not parsed** here (staged for diarization/VFTE); transcript text arrives via the segment stream below. |
+| Redis stream `transcription_segments` (consumed by `connectors/capture`) | Redis `XADD` | live bot segments: `{type:"transcription", token, uid, segments:[{start, end, text, speaker, completed, absolute_start_time, absolute_end_time}]}` (`completed:false` draft → `true` confirmed). |
+
+Speaker labels and timestamps are preserved verbatim through translation; identity resolution
+(speaker → person) happens later in the pipeline, not at the ingest boundary.
+
+## HTTP API surface
+Mounted in `main.py`. Prefix → file:
+
+| Prefix | File | Key endpoints |
+|---|---|---|
+| _(none)_ | `api/routes.py` | `/health`, `/attestation` (TDX quote), legacy token/OTP auth (`/register`, `/generate-token`, `/auth/*`, `/me`) |
+| `/auth/v1` | `auth/routes.py` | cookie-backed v1 auth: `send-otp`, `verify-otp`, `exchange-token`, `dev-login`, `logout`, `me` |
+| `/transcripts` | `api/transcripts_routes.py` | `sessions`, `sessions/{id}`, `sessions/{id}/transcript` (raw, gated), `…/visibility`, `me/action-items`, ingest |
+| `/api/workspaces` | `workspaces_routes.py` | list/create, `{id}`, `{id}/meetings`, `{id}/open-questions`, members (501 stub) |
+| `/api/workspaces` | `kb_routes.py` | `{id}/entities`, `{id}/entities/{name}`, `{id}/obligations`, `{id}/ingest-metrics`, `{id}/graph`, `{id}/search`, `{id}/ask` |
+| `/api/workspaces` | `upload_routes.py` / `record_routes.py` | `{id}/transcripts` (upload), `{id}/record`, `{id}/meetings/{sid}/tag-speaker` |
+| `/api/meetings` | `bot_routes.py` | `invite-bot`, `bot/status_change`, `active`, bot delete/status, `{sid}/visibility`, `{sid}/shares` (GET/POST), `{sid}/retention`, `{sid}/tag-speaker` |
+| `/api/users` | `users_routes.py` | `me/settings` (GET/POST) — account retention default |
+| `/api/calendar` | `calendar_routes.py` | Google OAuth `connect`/`callback`/`status`/`disconnect`, `events` (GET/POST), `events/{id}/auto-record`, `auto-record-all` |
+| `/api/capture` | `capture_routes.py` | `audio-chunk` |
+| `/api/webhooks/capture` | `webhooks_capture.py` | `meeting-completed` |
+| `/api/magic-links` | `magic_link_routes.py` | `{token}`, `{token}/consume` (public token resolve; meeting still permission-gated) |
+
+A static dashboard is also mounted at `/dashboard` (serves `web/`, reads `/transcripts/sessions`).
+
+## Storage & migrations
+- `storage/sqlite.py` — relational tables + app state; `storage/vec.py` — `sqlite-vec` (vec0) ANN;
+  `storage/kb.py` + `storage/kb_graph.py` — KB read/write.
+- On import, `main.py` runs `storage.init_db()` then **Alembic `upgrade head`** (migrations
+  `alembic/versions/0001`–`0016`). Notable: `0006` embeddings/chunks, `0007` entities/facts/obligations,
+  `0008` ingest_metrics, `0011` google_calendar, `0012` meeting_share_scope, `0013` retention,
+  `0015` capture_state, `0016` live_segments.
+- Core tables: `transcript_sessions` (`raw_diarization` immutable + `derived` JSON), `workspaces`,
+  `users`, `meeting_shares` (`scope`: `summary_and_transcript` | `summary_only`), `chunks`/`embeddings`/
+  `chunks_vec`, `entities`/`mentions`/`obligations`/`facts`, `ingest_metrics`, `google_oauth_tokens`.
+
+## Trust, privacy & attestation
+- **Operator-blind by construction:** all LLM work is at ingest inside the TEE; the read path is local.
+- **Raw transcript is gated:** `transcript_sessions.raw_diarization` is served only to the owner /
+  workspace members / `summary_and_transcript` shares. `summary_only` recipients are stripped of raw
+  (`api/transcripts_routes.py`). Visibility (`can_user_see`) is enforced server-side on every route.
+- **Retention / auto-delete** (`transcripts/retention.py`): account default (`/api/users/me/settings`)
+  + per-meeting override (`/api/meetings/{sid}/retention`). The sweep purges **only the raw transcript**
+  (`raw_transcript_deleted_at`); summary + derived KB are kept.
+- **TDX attestation:** `GET /attestation?nonce=` → dstack TDX quote (`infra/enclave.py`), verifiable via
+  Phala's endpoint. Stub outside a TEE (`IN_TEE != "true"`). This is how a client verifies the CVM before
+  routing meetings/secrets to it.
+
+## Identity (speaker → person)
+Post-meeting voice identity (P4): after ingest, diarized segments are re-embedded and matched against
+**VFTE/FPM** voiceprints (`infra/fpm_consent.py`, `infra/identity.py`, `transcripts/identity.py`).
+Confident matches name the speaker; borderline → "Is this you?"; no match → anonymous. Manual fixes via
+`tag-speaker`. Resolved speakers carry `voiceprint_id`s into the read path. Conclave consumes identity —
+it does **not** own diarization (capture) or voiceprint policy (VFTE).
+
+## Frontend
+Next.js app in **`frontend/`** (this is the product UI; the old skills `client/` app was removed).
+Routes under `frontend/src/app/`: `dashboard`, `search`, `entities` / `entity`, `graph`, `obligations`,
+`questions`, `meeting`, `workspace`, `calendar`, `settings`, `login` / `signup` / `auth`, `invite`,
+`m` (magic-link recipient view).
+
+## Configuration
+All env vars use the `CONCLAVE_` prefix (`config.py`, `.env.example`):
+
+| Group | Vars |
+|---|---|
+| **LLM** | `LLM_BACKEND` (`redpill`\|`nearai`\|`ollama`), `REDPILL_API_KEY`/`REDPILL_MODEL`, `NEARAI_API_KEY`, `DEFAULT_MODEL` |
+| **Auth** | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TOKEN_ENC_KEY` |
+| **Calendar** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
+| **Capture** | `CAPTURE_API_BASE_URL`, `CAPTURE_API_TOKEN` (capture runtime-api, for bot launch), `CAPTURE_MEETING_COMPLETED_URL`, `CAPTURE_WEBHOOK_SECRET` |
+| **Identity (VFTE/FPM)** | `FPM_BASE_URL`, `FPM_API_TOKEN`, `FPM_WORKSPACE` |
+| **ASR** | `TRANSCRIPTION_SERVICE_URL` (NEAR Whisper), `TRANSCRIPTION_SERVICE_TOKEN`, `TRANSCRIPTION_MODEL` |
+| **TEE / tracing** | `IN_TEE`, `DSTACK_AGENT_URL`, `LANGCHAIN_TRACING_V2`/`LANGCHAIN_API_KEY`/`LANGCHAIN_PROJECT` |
+
+## Run it locally
+**Backend**
 ```bash
 cp .env.example .env
 pip install -r requirements.txt
-uvicorn main:app --reload
+uvicorn main:app --reload          # → http://localhost:8000
+# or: python -m transcripts.cli serve   (FastAPI + static /dashboard)
 ```
-
-Backend default:
-
-- `http://localhost:8000`
-
-### Frontend
-
-From the monorepo frontend root:
-
+**LLM**: defaults to RedPill (cloud TEE). For fully local, use Ollama:
 ```bash
-cd client
-pnpm install
-pnpm --filter web dev
+make ollama-prereqs && make ollama-models     # pull nomic-embed-text + the chat model
+python -m transcripts.cli llm use ollama
+python -m transcripts.cli llm smoke            # prove wiring
 ```
-
-Frontend default:
-
-- `http://localhost:3000`
-
-Set `NEXT_PUBLIC_TEE_URL` in the frontend environment if your API is not on the default local backend URL.
-
-### Docker / enclave-style deployment
-
+**Frontend**
 ```bash
-docker-compose up
+cd frontend && npm install && npm run dev      # → http://localhost:3000
 ```
+**CLI** (`python -m transcripts.cli …`): `ingest` (batch parse, no LLM) · `enrich` (LLM map-reduce) ·
+`serve` · `eval` (score vs golden YAML) · `link` (identity linkage) · `llm status|use|smoke` · `run`.
 
-Notable environment variables:
+## Deploy
+- **Docker:** `Dockerfile` + `docker-compose.yml`. Set `IN_TEE=true` for the enclave path.
+- **Production:** runs as a **Phala dstack TDX CVM** (`conclave`). Updates are typically env-only via the
+  Phala CLI (`phala deploy --cvm-id <id>`). The `/attestation` endpoint proves the deployed image.
 
-- `CONCLAVE_NEARAI_API_KEY`
-- `CONCLAVE_DEFAULT_MODEL`
-- `CONCLAVE_SUPABASE_URL`
-- `CONCLAVE_SUPABASE_ANON_KEY`
-- `CONCLAVE_SOLANA_KEYPAIR`
-- `CONCLAVE_SOLANA_RPC_URL`
-- `CONCLAVE_PUBLIC_URL`
-- `IN_TEE`
-
-See:
-
-- `.env.example`
-- `docker-compose.yml`
-
-## Testing
-
-Run:
-
+## Tests & eval
 ```bash
 pytest tests -q
 ```
+~548 tests pass. A handful of pre-existing failures exist in `test_webhooks_capture`, `test_calendar_stop_link`,
+and `test_record_routes` (env/idempotency — unrelated to core read/ingest). The KB design rationale lives
+in `METHODOLOGY_SURVEY.md`; eval harness + policy registry + gold queries live in `transcripts/eval.py`,
+`transcripts/EVAL.md`, and `scripts/eval/`.
 
-Current status on this branch after the latest fixes:
-
-- `74 passed`
-
-The latest fixes make the pipeline degrade more gracefully when the online LLM path is unavailable, which matters for offline CI and local development.
-
-## Known limitations
-
-- track alignment currently embeds **track names**, not full markdown track descriptions
-- the typed `/instances` flow currently hardcodes criteria weights internally to originality + feasibility
-- participant-facing submission is skill-first; the web UI is intentionally operator-first
-- Solana publication is optional and falls back to local-only when unconfigured
-- organizer-defined tracks for Frontier are a Conclave overlay, not official Colosseum tracks
-
-## Relevant external references
-
-- [Solana Frontier Hackathon](https://colosseum.com/frontier)
-- [Colosseum Copilot docs](https://docs.colosseum.com/copilot/introduction)
-- [NDAI Agreements](https://arxiv.org/abs/2502.07924)
+## Repo map
+```text
+main.py                     FastAPI entrypoint — mounts all routers, init_db + alembic upgrade
+api/                        HTTP routers (transcripts, kb, workspaces, bot, calendar, capture, …)
+auth/routes.py              cookie-backed v1 auth (/auth/v1)
+transcripts/                the intelligence pipeline + CLI
+  parse · enrich            raw parse, map-reduce summary/signals
+  kb_pipeline · kb_chunk    chunk → context header → embed → index (3.5a)
+  kb_extract · extract      typed entity/obligation extraction (3.5b, ENABLE_KB_PIPELINE)
+  entity_resolution         lexical-first resolution over definition embeddings (OI-7 fix)
+  importance · upsert       importance scoring + Mem0-style bi-temporal upsert
+  embed                     nomic-embed-text v1.5 via Ollama (768 stored / 256 indexed)
+  answer · compile_intent   /ask RAG synthesis + query intent
+  retention · store         retention sweep + session read/write
+  identity · team_context   speaker identity + cohort context
+  llm · config · prompts    LLM backend switch, settings, prompt library
+  eval · *_bakeoff          eval harness + prompt/extraction bake-offs
+storage/                    sqlite (relational+state) · vec (sqlite-vec ANN) · kb · kb_graph
+infra/                      scheduler(calendar) · calendar_* · google_calendar · supabase_auth ·
+                            enclave(TDX) · fpm_consent · identity · rrf · workspaces · email · magic_links
+connectors/capture/         launch (drive capture runtime-api) · translator (canonical envelope) ·
+                            consumer (Redis segment stream) · identify (FPM voice identity)
+frontend/                   Next.js product UI (dashboard, search, graph, entities, …)
+alembic/versions/           migrations 0001–0016
+tests/                      pytest suite
+METHODOLOGY_SURVEY.md       literature/methodology grounding the KB architecture
+```
+Per-area detail also lives in `transcripts/` docs (`EVAL.md`, `IMPLEMENTATION_PLAN.md`) and `scripts/eval/`.

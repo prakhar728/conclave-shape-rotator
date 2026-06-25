@@ -71,7 +71,7 @@ def test_invite_bot_creates_invitation(client: TestClient):
     assert body["status"] == "joining"
     inv = bot_invitations.get_invitation(body["invitation_id"])
     assert inv["status"] == "joining"
-    assert inv["recato_bot_id"] == 42
+    assert inv["capture_bot_id"] == 42
 
 
 def test_invite_bot_parses_meet_url(client: TestClient):
@@ -128,12 +128,12 @@ def test_invite_bot_writes_attendee_shares(client: TestClient):
 
 
 def test_invite_bot_recato_failure_marks_invitation_failed(client: TestClient, monkeypatch):
-    from connectors.recato.launch import RecatoLaunchError
+    from connectors.capture.launch import CaptureLaunchError
     import api.bot_routes as br
     monkeypatch.setattr(
         br,
         "launch_bot",
-        lambda **kw: (_ for _ in ()).throw(RecatoLaunchError("Recato down")),
+        lambda **kw: (_ for _ in ()).throw(CaptureLaunchError("Recato down")),
     )
 
     me = _login(client, "fail@example.com")
@@ -158,7 +158,7 @@ def test_bot_status(client: TestClient):
     r = client.get(f"/api/meetings/{invite['meeting_session_id']}/bot-status")
     assert r.status_code == 200
     assert r.json()["status"] == "joining"
-    assert r.json()["recato_bot_id"] == 42
+    assert r.json()["capture_bot_id"] == 42
 
 
 def test_bot_status_unknown_meeting(client: TestClient):
@@ -203,7 +203,7 @@ def test_add_share_only_owner_can(client: TestClient):
 
 
 def test_parse_meet_input_variants():
-    from connectors.recato.launch import parse_meet_input
+    from connectors.capture.launch import parse_meet_input
 
     assert parse_meet_input("abc-defg-hij") == "abc-defg-hij"
     assert parse_meet_input("ABC-DEFG-HIJ") == "abc-defg-hij"

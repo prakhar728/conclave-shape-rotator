@@ -17,9 +17,9 @@ import os
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from connectors.recato.launch import (
+from connectors.capture.launch import (
     DEFAULT_BOT_NAME,
-    RecatoLaunchError,
+    CaptureLaunchError,
     launch_bot,
 )
 from infra import bot_invitations
@@ -112,7 +112,7 @@ def dispatch_for_user(user_id: str, *, now: datetime, lookahead_min: int = LOOKA
     """Dispatch the bot to this user's due meetings. Returns the meet codes
     actually launched (deduped). Best-effort: a single failed launch is
     logged and skipped, not fatal to the rest."""
-    webhook_url = os.environ.get("RECATO_MEETING_COMPLETED_URL")
+    webhook_url = os.environ.get("CAPTURE_MEETING_COMPLETED_URL")
     launched: list[str] = []
     for item in due_meetings_for_user(user_id, now=now, lookahead_min=lookahead_min):
         meet_code = item["meet_code"]
@@ -133,12 +133,12 @@ def dispatch_for_user(user_id: str, *, now: datetime, lookahead_min: int = LOOKA
                 bot_name=DEFAULT_BOT_NAME,
                 webhook_url=webhook_url,
             )
-        except RecatoLaunchError as e:
+        except CaptureLaunchError as e:
             logger.warning("auto-dispatch: launch failed for %s: %s", meet_code, e)
             bot_invitations.update_status(inv["id"], "failed", completed=True)
             continue
-        recato_bot_id = resp.get("id") if isinstance(resp, dict) and isinstance(resp.get("id"), int) else None
-        bot_invitations.update_status(inv["id"], "joining", recato_bot_id=recato_bot_id)
+        capture_bot_id = resp.get("id") if isinstance(resp, dict) and isinstance(resp.get("id"), int) else None
+        bot_invitations.update_status(inv["id"], "joining", capture_bot_id=capture_bot_id)
         logger.info("auto-dispatch: launched bot for %s (event %s)", meet_code, item["event_id"])
         launched.append(meet_code)
     return launched

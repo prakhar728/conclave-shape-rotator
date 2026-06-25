@@ -4,7 +4,7 @@ Called from `api/bot_routes.py`. Conclave holds ONE shared Recato API
 token (BUILD_DOC §4 D-shared-bot) so end-users never touch Recato; this
 module is the only thing in the codebase that calls `POST /bots`.
 
-Errors from Recato bubble up as `RecatoLaunchError` so the route handler
+Errors from Recato bubble up as `CaptureLaunchError` so the route handler
 can return a clean 502.
 """
 from __future__ import annotations
@@ -21,7 +21,7 @@ import httpx
 DEFAULT_BOT_NAME = "Conclave"
 
 
-class RecatoLaunchError(Exception):
+class CaptureLaunchError(Exception):
     """Recato API returned a non-2xx response or didn't reach. Detail in `.args[0]`."""
 
 
@@ -72,13 +72,13 @@ def launch_bot(
     ContainerResponse: `{name, container_id, status, ...}` — note: no `id`).
 
     `api_token`/`base_url` (the per-workspace capture credentials) are preferred over the
-    legacy shared `RECATO_API_*` env vars when supplied by the dispatcher (P1). `user_id`
+    legacy shared `CAPTURE_API_*` env vars when supplied by the dispatcher (P1). `user_id`
     is the tenant/account the dispatcher assigned (runtime-api requires it)."""
-    base = (base_url or os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
-    token = api_token or os.environ.get("RECATO_API_TOKEN") or ""
+    base = (base_url or os.environ.get("CAPTURE_API_BASE_URL") or "").rstrip("/")
+    token = api_token or os.environ.get("CAPTURE_API_TOKEN") or ""
     if not base or not token:
-        raise RecatoLaunchError(
-            "Recato is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
+        raise CaptureLaunchError(
+            "Recato is not configured (CAPTURE_API_BASE_URL / CAPTURE_API_TOKEN missing)"
         )
 
     # The bot reads its ENTIRE meeting config from one env var, BOT_CONFIG, which the
@@ -174,16 +174,16 @@ def launch_bot(
             timeout=timeout_s,
         )
     except httpx.HTTPError as e:
-        raise RecatoLaunchError(f"capture runtime-api unreachable: {e}") from e
+        raise CaptureLaunchError(f"capture runtime-api unreachable: {e}") from e
 
     if resp.status_code >= 400:
-        raise RecatoLaunchError(
+        raise CaptureLaunchError(
             f"capture runtime-api {resp.status_code}: {resp.text[:300]}"
         )
     try:
         return resp.json()
     except Exception as e:  # noqa: BLE001
-        raise RecatoLaunchError(f"Recato response not JSON: {e}") from e
+        raise CaptureLaunchError(f"Recato response not JSON: {e}") from e
 
 
 def stop_bot(
@@ -201,11 +201,11 @@ def stop_bot(
 
     Returns the JSON body (typically `{"status": "deleted"}` or similar).
     """
-    base = (os.environ.get("RECATO_API_BASE_URL") or "").rstrip("/")
-    token = os.environ.get("RECATO_API_TOKEN") or ""
+    base = (os.environ.get("CAPTURE_API_BASE_URL") or "").rstrip("/")
+    token = os.environ.get("CAPTURE_API_TOKEN") or ""
     if not base or not token:
-        raise RecatoLaunchError(
-            "capture runtime-api is not configured (RECATO_API_BASE_URL / RECATO_API_TOKEN missing)"
+        raise CaptureLaunchError(
+            "capture runtime-api is not configured (CAPTURE_API_BASE_URL / CAPTURE_API_TOKEN missing)"
         )
     name = f"bot-{native_meeting_id}"
     try:
@@ -219,9 +219,9 @@ def stop_bot(
             timeout=timeout_s,
         )
     except httpx.HTTPError as e:
-        raise RecatoLaunchError(f"capture runtime-api unreachable: {e}") from e
+        raise CaptureLaunchError(f"capture runtime-api unreachable: {e}") from e
     if resp.status_code >= 400:
-        raise RecatoLaunchError(
+        raise CaptureLaunchError(
             f"capture runtime-api {resp.status_code}: {resp.text[:300]}"
         )
     try:
