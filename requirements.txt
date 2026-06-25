@@ -8,7 +8,6 @@ langchain-core
 langchain-openai
 langchain-anthropic
 langchain-google-genai
-langgraph
 python-dotenv
 pytest
 pytest-asyncio
@@ -20,15 +19,11 @@ supabase>=2.0.0
 cryptography>=42.0.0
 scipy
 pandas
-langgraph-cli[inmem]
 pdfplumber
 python-docx
-solders
-solana
 dstack-sdk>=0.5.2
 base58>=2.1.0
 PyYAML
-mcp>=1.27.0
 alembic>=1.13
 sqlite-vec>=0.1.0  # vector ext loaded by storage/vec.py; required by migrations — absent → migrations skip → schema tests fail in CI
 SQLAlchemy>=2.0
