@@ -106,7 +106,7 @@ export default function InvitePage() {
         setError("That doesn't look like a Google Meet link or code.");
       } else if (err instanceof ApiError && err.status === 502) {
         setError(
-          "The bot service didn't respond. Recato may be down; check the local stack and try again.",
+          "The bot service didn't respond. the capture service may be down; check the local stack and try again.",
         );
       } else {
         setError(err instanceof Error ? err.message : "Failed to invite bot");

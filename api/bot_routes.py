@@ -247,7 +247,7 @@ def stop_bot_route(
     # session rows in Conclave). So we do the same fetch+translate+save the
     # webhook handler does, inline.
     try:
-        _ingest_from_recato_now(session_id, inviter_user_id=user["id"],
+        _ingest_from_capture_now(session_id, inviter_user_id=user["id"],
                                 workspace_id=inv["workspace_id"])
     except Exception:  # noqa: BLE001 — best-effort; don't block the stop UX
         logger.exception("post-stop ingest failed for %s", session_id)
@@ -256,7 +256,7 @@ def stop_bot_route(
     return {"ok": True, "status": "completed"}
 
 
-def _ingest_from_recato_now(
+def _ingest_from_capture_now(
     session_id: str,
     *,
     inviter_user_id: str,

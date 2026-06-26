@@ -5,7 +5,7 @@
  * sends the browser to Google's consent screen. The backend stores encrypted
  * tokens and redirects back (set CONCLAVE_CALENDAR_POST_CONNECT_URL=/settings to
  * land here). When connected, lists upcoming meetings; flipping "Auto-record"
- * opts an event into the background poller, which dispatches a Recato bot to its
+ * opts an event into the background poller, which dispatches a capture bot to its
  * Meet at start time. Auto-record needs a Google Meet link on the event and a
  * selected workspace (that's where the transcript lands).
  */

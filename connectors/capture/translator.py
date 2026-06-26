@@ -1,8 +1,9 @@
 """Vexa/Recato TranscriptionResponse → Conclave canonical payload.
 
 Pure data transform. No I/O, no network, no env reads. ``to_canonical`` is
-the only entry point the rest of the package needs; ``consumer.py`` and
-``cli.py`` both call it after fetching.
+the only entry point the rest of the package needs — the webhook finalize
+(``api/webhooks_capture.py``) and the on-Stop ingest (``api/bot_routes.py``)
+both call it on the buffered live segments.
 
 The two schemas are documented:
 
@@ -20,7 +21,7 @@ from uuid import uuid4
 def to_canonical(
     capture_response: dict,
     *,
-    source: str = "recato",
+    source: str = "capture",
     event_id: Optional[str] = None,
     produced_at: Optional[str] = None,
 ) -> dict:
@@ -74,11 +75,11 @@ def to_canonical(
         meeting["end_time"] = _to_iso(capture_response["end_time"])
 
     # --- Segments ---------------------------------------------------------
-    recato_segments = capture_response.get("segments") or []
+    raw_segments = capture_response.get("segments") or []
     seen_speakers: list[str] = []
     seen_set: set[str] = set()
     segments: list[dict] = []
-    for seg in recato_segments:
+    for seg in raw_segments:
         if not isinstance(seg, dict):
             continue
         text = str(seg.get("text") or "").strip()

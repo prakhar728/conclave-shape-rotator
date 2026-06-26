@@ -344,7 +344,7 @@ export type BotInviteResp = {
 export type BotStatusResp = {
   invitation_id: string;
   status: BotStatus;
-  recato_bot_id: number | null;
+  capture_bot_id: number | null;
   created_at: string;
   completed_at: string | null;
 };
@@ -355,7 +355,7 @@ export type ActiveInvitation = {
   platform: string;
   status: BotStatus;
   bot_name: string;
-  recato_bot_id: number | null;
+  capture_bot_id: number | null;
   created_at: string;
 };
 
