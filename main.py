@@ -123,6 +123,10 @@ app.include_router(bot_router)
 from api.capture_routes import router as capture_router
 app.include_router(capture_router)
 
+# Live transcription view (SSE) — watch diart's live segments arrive during a meeting.
+from api.live_routes import router as live_router
+app.include_router(live_router)
+
 # Transcript Saving (Phase 2): account settings — transcript retention default.
 from api.users_routes import router as users_router
 app.include_router(users_router)

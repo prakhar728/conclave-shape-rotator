@@ -36,11 +36,14 @@ class _Session:
 
 @pytest.fixture
 def wiring(monkeypatch):
+    # Patch the real modules' functions (setattr) rather than swapping sys.modules entries — robust to
+    # import order (`from transcripts import store` binds the package attr, which a sys.modules swap misses).
+    import infra.fpm_consent as fpm
+    import transcripts.store as store
     calls = {"identify_spans": None, "diarize_audio": None, "set_metadata": None}
 
     async def fake_identify_spans(ws, audio, spans, *, tag="offline"):
         calls["identify_spans"] = {"ws": ws, "spans": spans, "tag": tag}
-        # VFTE returns identity per span (speaker0 → Alice, speaker1 → anon)
         return [{"start": s["start"], "end": s["end"], "local_speaker": s["local_speaker"],
                  "voiceprint_id": "vp_A" if s["local_speaker"] == "speaker0" else "vp_B",
                  "name": "Alice" if s["local_speaker"] == "speaker0" else None}
@@ -50,14 +53,11 @@ def wiring(monkeypatch):
         calls["diarize_audio"] = {"ws": ws, "tag": tag}
         return [{"start": 0.0, "end": 4.0, "voiceprint_id": "vp_A", "name": "Alice"}]
 
-    fake_fpm = types.SimpleNamespace(identify_spans=fake_identify_spans, diarize_audio=fake_diarize_audio)
     session = _Session()
-    fake_store = types.SimpleNamespace(
-        load_session=lambda sid: session,
-        set_metadata=lambda sid, md: calls.__setitem__("set_metadata", md),
-    )
-    monkeypatch.setitem(__import__("sys").modules, "infra.fpm_consent", fake_fpm)
-    monkeypatch.setitem(__import__("sys").modules, "transcripts.store", fake_store)
+    monkeypatch.setattr(fpm, "identify_spans", fake_identify_spans)
+    monkeypatch.setattr(fpm, "diarize_audio", fake_diarize_audio)
+    monkeypatch.setattr(store, "load_session", lambda sid: session)
+    monkeypatch.setattr(store, "set_metadata", lambda sid, md: calls.__setitem__("set_metadata", md))
     monkeypatch.setattr(idmod, "_assemble_audio", lambda nid: b"RIFFfakeaudio")
     return calls, session
 
