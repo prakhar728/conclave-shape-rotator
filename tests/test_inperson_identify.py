@@ -62,26 +62,46 @@ def wiring(monkeypatch):
     return calls, session
 
 
-async def _run(flag, monkeypatch):
+async def _run(flag, monkeypatch, diarize_url=""):
     from config import settings
     monkeypatch.setattr(settings, "inperson_via_capture", flag)
+    monkeypatch.setattr(settings, "diarize_url", diarize_url)
     await idmod.identify_meeting("sess1", "meet1", "ws1")
 
 
 @pytest.mark.asyncio
-async def test_flag_on_uses_identify_spans_from_capture_diarization(wiring, monkeypatch):
+async def test_flag_on_no_diarize_url_falls_back_to_diart_spans(wiring, monkeypatch):
+    # finalizer URL unset → use capture's own (diart) spans from raw_diarization
     calls, session = wiring
-    await _run(True, monkeypatch)
-    assert calls["diarize_audio"] is None, "must NOT re-diarize when flag is on"
+    await _run(True, monkeypatch, diarize_url="")
+    assert calls["diarize_audio"] is None, "must NOT re-diarize via FPM when flag is on"
     assert calls["identify_spans"] is not None
     spans = calls["identify_spans"]["spans"]
-    # spans derived from the meeting's own diarization labels
-    assert {s["local_speaker"] for s in spans} == {"speaker0", "speaker1"}
-    # resolved_speakers got the voted voiceprint_id + name
+    assert {s["local_speaker"] for s in spans} == {"speaker0", "speaker1"}   # diart's own labels
     md = calls["set_metadata"]
     assert md.resolved_speakers["speaker0"]["voiceprint_id"] == "vp_A"
     assert md.resolved_speakers["speaker0"]["name"] == "Alice"
-    assert md.resolved_speakers["speaker1"]["voiceprint_id"] == "vp_B"
+
+
+@pytest.mark.asyncio
+async def test_flag_on_with_diarize_url_uses_authoritative_diarizen(wiring, monkeypatch):
+    # finalizer A: the AUTHORITATIVE spans come from the DiariZen post engine, not diart.
+    calls, session = wiring
+    from connectors.capture import diarize_client
+
+    async def fake_diarize_recording(audio, *, filename="meeting.wav", workspace=""):
+        calls["diarize_recording"] = {"workspace": workspace, "bytes": len(audio)}
+        return [{"start": 0.0, "end": 4.0, "local_speaker": "speaker0"},
+                {"start": 4.0, "end": 8.0, "local_speaker": "speaker1"}]
+
+    monkeypatch.setattr(diarize_client, "diarize_recording", fake_diarize_recording)
+    await _run(True, monkeypatch, diarize_url="http://localhost:8086")
+    assert calls.get("diarize_recording") is not None, "must call the DiariZen post engine"
+    assert calls["diarize_audio"] is None
+    # identity ran on the DiariZen spans, and resolved_speakers populated
+    assert calls["identify_spans"] is not None
+    md = calls["set_metadata"]
+    assert md.resolved_speakers["speaker0"]["voiceprint_id"] == "vp_A"
 
 
 @pytest.mark.asyncio

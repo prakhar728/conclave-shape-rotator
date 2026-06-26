@@ -103,6 +103,14 @@ class Settings(BaseSettings):
     # toggle — flipping it back restores the old pipeline with no code change.
     inperson_via_capture: bool = False     # env CONCLAVE_INPERSON_VIA_CAPTURE
 
+    # Authoritative finalizer (topology A): the DiariZen post engine (GPU, hosted). When set, the
+    # finalizer-A path POSTs the recording here for the AUTHORITATIVE diarization, then feeds those spans
+    # to VFTE /v1/identify-spans. Empty → fall back to capture's own (diart) spans from raw_diarization.
+    # Local stack reaches the GPU box via an SSH tunnel → http://localhost:8086. Swap GPU = retarget the
+    # tunnel; this URL stays put.
+    diarize_url: str = ""                  # env CONCLAVE_DIARIZE_URL (e.g. http://localhost:8086)
+    diarize_token: str = ""                # env CONCLAVE_DIARIZE_TOKEN (the service's bearer)
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
 
     def record_meeting_enabled(self) -> bool:

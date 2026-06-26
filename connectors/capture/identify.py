@@ -74,13 +74,21 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
 
     try:
         if settings.inperson_via_capture:
-            # P4 boundary path (atomic cutover): capture already diarized — send ITS spans to VFTE
-            # for identity ONLY (no re-diarization). The spans are the meeting's own labels.
-            spans = [{"start": seg.start, "end": seg.end, "local_speaker": seg.speaker}
-                     for seg in session.raw_diarization
-                     if seg.speaker is not None and seg.start is not None]
+            # Boundary path: capture/DiariZen diarizes → VFTE identifies the spans (no re-diarize in VFTE).
+            if settings.diarize_url:
+                # Finalizer A: the AUTHORITATIVE diarization comes from the DiariZen GPU post engine
+                # (diart was only the live preview). Post the recording → authoritative spans.
+                from connectors.capture import diarize_client
+                spans = await diarize_client.diarize_recording(audio, workspace=workspace_id)
+                src = "DiariZen"
+            else:
+                # No post engine configured → use capture's own (diart) spans from the live transcript.
+                spans = [{"start": seg.start, "end": seg.end, "local_speaker": seg.speaker}
+                         for seg in session.raw_diarization
+                         if seg.speaker is not None and seg.start is not None]
+                src = "diart(raw_diarization)"
             if not spans:
-                logger.info("identify_meeting: no capture spans for %s — skipping", native_meeting_id)
+                logger.info("identify_meeting: no %s spans for %s — skipping", src, native_meeting_id)
                 return
             fpm_segs = await fpm_consent.identify_spans(workspace_id, audio, spans, tag="offline")
         else:
