@@ -126,6 +126,53 @@ async def diarize_audio(
     return segments
 
 
+async def identify_spans(
+    workspace: str,
+    audio: bytes,
+    spans: list[dict],
+    *,
+    tag: str = "offline",
+    filename: str = "audio.wav",
+) -> list[dict]:
+    """POST /v1/identify-spans — identity ONLY, on spans capture already diarized (migration P5).
+
+    The boundary-correct replacement for `diarize_audio`: capture diarized the recording into
+    `spans` (`[{start, end, local_speaker}]`); VFTE just puts identity on them — no re-diarization.
+    Same NDJSON response shape as `/v1/diarize` (per-segment lines + a final `transcript`), so the
+    overlap-vote downstream is unchanged. `tag="offline"` writes, `tag="live"` is read-only.
+    """
+    payload_spans = [
+        {"start": float(s.get("start") or 0), "end": float(s.get("end") or 0),
+         "local_speaker": str(s.get("local_speaker") or s.get("speaker") or "")}
+        for s in spans
+    ]
+    segments: list[dict] = []
+    async with httpx.AsyncClient(timeout=DIARIZE_TIMEOUT) as client:
+        async with client.stream(
+            "POST", f"{_base()}/v1/identify-spans", headers=_headers(),
+            files={"file": (filename, audio, "audio/wav")},
+            data={"workspace": workspace, "tag": tag, "spans": json.dumps(payload_spans)},
+        ) as resp:
+            if resp.status_code != 200:
+                body = await resp.aread()
+                raise HTTPException(
+                    502, f"FPM identify-spans failed ({resp.status_code}): {body[:200]!r}"
+                )
+            async for line in resp.aiter_lines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    continue
+                if obj.get("type") == "transcript":
+                    segments = obj.get("segments", segments)
+                elif "start" in obj:
+                    segments.append(obj)
+    return segments
+
+
 async def consent_resolve_batch(workspace: str, voiceprint_ids: list[str]) -> dict:
     """POST /v1/consent/resolve/{workspace} — read-side name/visibility for a set of
     voiceprints. Returns the `resolved` map `{vid: {name, owner_email, visibility}}`."""

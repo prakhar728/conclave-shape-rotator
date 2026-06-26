@@ -97,6 +97,12 @@ class Settings(BaseSettings):
     transcription_service_token: str = ""  # optional bearer
     transcription_model: str = "whisper-1"
 
+    # Migration P4 atomic cutover (R1): when True, in-person identity comes from CAPTURE's diarization
+    # — Conclave sends capture's own spans to VFTE `/v1/identify-spans` (identity only). When False
+    # (default), the legacy path re-diarizes via FPM `/v1/diarize`. This is the instant-rollback
+    # toggle — flipping it back restores the old pipeline with no code change.
+    inperson_via_capture: bool = False     # env CONCLAVE_INPERSON_VIA_CAPTURE
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
 
     def record_meeting_enabled(self) -> bool:

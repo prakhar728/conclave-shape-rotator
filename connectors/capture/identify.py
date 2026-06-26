@@ -61,20 +61,35 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
     from infra import fpm_consent
     from transcripts import store
 
+    from config import settings
+
     audio = _assemble_audio(native_meeting_id)
     if not audio:
         logger.info("identify_meeting: no stored audio for %s — skipping", native_meeting_id)
         return
-    try:
-        fpm_segs = await fpm_consent.diarize_audio(workspace_id, audio, tag="offline")
-    except Exception as e:  # noqa: BLE001 — best-effort, never block finalize
-        logger.warning("identify_meeting: FPM diarize failed for %s: %s", session_id, e)
-        return
-    if not fpm_segs:
-        return
 
     session = store.load_session(session_id)
     if session is None:
+        return
+
+    try:
+        if settings.inperson_via_capture:
+            # P4 boundary path (atomic cutover): capture already diarized — send ITS spans to VFTE
+            # for identity ONLY (no re-diarization). The spans are the meeting's own labels.
+            spans = [{"start": seg.start, "end": seg.end, "local_speaker": seg.speaker}
+                     for seg in session.raw_diarization
+                     if seg.speaker is not None and seg.start is not None]
+            if not spans:
+                logger.info("identify_meeting: no capture spans for %s — skipping", native_meeting_id)
+                return
+            fpm_segs = await fpm_consent.identify_spans(workspace_id, audio, spans, tag="offline")
+        else:
+            # Legacy rollback path: FPM re-diarizes + identifies the recording.
+            fpm_segs = await fpm_consent.diarize_audio(workspace_id, audio, tag="offline")
+    except Exception as e:  # noqa: BLE001 — best-effort, never block finalize
+        logger.warning("identify_meeting: identity for %s failed: %s", session_id, e)
+        return
+    if not fpm_segs:
         return
 
     # Vote per transcript label across its segments → majority voiceprint_id.
