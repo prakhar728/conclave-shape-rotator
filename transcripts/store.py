@@ -65,6 +65,14 @@ def set_derived(session_id: str, derived: Derived) -> None:
     sqlite.update_transcript_derived(session_id, derived.model_dump())
 
 
+def set_raw_diarization(session_id: str, segments: list[dict]) -> None:
+    """Overwrite raw_diarization with the authoritative post-pass result (in-person DiariZen upgrade ONLY).
+
+    The sole sanctioned write-once exception (see sqlite.update_transcript_raw): diart's live transcript
+    is replaced once by DiariZen's authoritative diarization at finalize."""
+    sqlite.update_transcript_raw(session_id, segments)
+
+
 def set_metadata(session_id: str, metadata: SessionMetadata) -> None:
     sqlite.update_transcript_metadata(session_id, metadata.model_dump())
 

@@ -640,6 +640,18 @@ def update_transcript_derived(session_id: str, derived: dict) -> None:
     )
 
 
+def update_transcript_raw(session_id: str, raw_diarization: list) -> None:
+    """Replace `raw_diarization` for a session — the AUTHORITATIVE post-pass upgrade.
+
+    `raw_diarization` is normally write-once (the live capture record). The ONE sanctioned exception is
+    the in-person finalize: diart's live transcript is materialized immediately, then the DiariZen
+    authoritative pass overwrites it once with the better diarization. Use only on that path."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET raw_diarization = ?, updated_at = ? WHERE session_id = ?",
+        (json.dumps(_to_jsonable(raw_diarization)), _now(), session_id),
+    )
+
+
 def update_transcript_metadata(session_id: str, metadata: dict) -> None:
     """Replace the `metadata` block for a session (raw stays untouched)."""
     _get_conn().execute(

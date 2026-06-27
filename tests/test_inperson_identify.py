@@ -13,8 +13,8 @@ from connectors.capture import identify as idmod
 
 
 class _Seg:
-    def __init__(self, start, end, speaker):
-        self.start, self.end, self.speaker = start, end, speaker
+    def __init__(self, start, end, speaker, text="hi"):
+        self.start, self.end, self.speaker, self.text = start, end, speaker, text
 
 
 class _Meta:
@@ -40,7 +40,7 @@ def wiring(monkeypatch):
     # import order (`from transcripts import store` binds the package attr, which a sys.modules swap misses).
     import infra.fpm_consent as fpm
     import transcripts.store as store
-    calls = {"identify_spans": None, "diarize_audio": None, "set_metadata": None}
+    calls = {"identify_spans": None, "diarize_audio": None, "set_metadata": None, "set_raw": None}
 
     async def fake_identify_spans(ws, audio, spans, *, tag="offline"):
         calls["identify_spans"] = {"ws": ws, "spans": spans, "tag": tag}
@@ -58,6 +58,7 @@ def wiring(monkeypatch):
     monkeypatch.setattr(fpm, "diarize_audio", fake_diarize_audio)
     monkeypatch.setattr(store, "load_session", lambda sid: session)
     monkeypatch.setattr(store, "set_metadata", lambda sid, md: calls.__setitem__("set_metadata", md))
+    monkeypatch.setattr(store, "set_raw_diarization", lambda sid, segs: calls.__setitem__("set_raw", segs))
     monkeypatch.setattr(idmod, "_assemble_audio", lambda nid: b"RIFFfakeaudio")
     return calls, session
 
@@ -98,10 +99,25 @@ async def test_flag_on_with_diarize_url_uses_authoritative_diarizen(wiring, monk
     await _run(True, monkeypatch, diarize_url="http://localhost:8086")
     assert calls.get("diarize_recording") is not None, "must call the DiariZen post engine"
     assert calls["diarize_audio"] is None
-    # identity ran on the DiariZen spans, and resolved_speakers populated
     assert calls["identify_spans"] is not None
+    # AUTHORITATIVE: raw_diarization is OVERWRITTEN with the re-attributed segments (DiariZen replaces diart)
+    raw = calls["set_raw"]
+    assert raw is not None, "must overwrite raw_diarization with the authoritative result"
+    assert len(raw) == 3 and all("text" in s and "speaker" in s for s in raw)   # text preserved, re-labeled
+    assert raw[0]["speaker"] == "speaker0" and raw[1]["speaker"] == "speaker1"   # by DiariZen overlap
+    # resolved_speakers keyed by DiariZen labels + names
     md = calls["set_metadata"]
     assert md.resolved_speakers["speaker0"]["voiceprint_id"] == "vp_A"
+    assert md.resolved_speakers["speaker0"]["name"] == "Alice"
+
+
+@pytest.mark.asyncio
+async def test_flag_on_no_url_does_not_overwrite_raw(wiring, monkeypatch):
+    # diart fallback (no DiariZen URL) → identity votes onto diart labels, but raw is NOT overwritten.
+    calls, _ = wiring
+    await _run(True, monkeypatch, diarize_url="")
+    assert calls["set_raw"] is None, "diart fallback must NOT overwrite the live transcript"
+    assert calls["set_metadata"] is not None   # still resolves names onto diart labels
 
 
 @pytest.mark.asyncio

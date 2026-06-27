@@ -100,7 +100,33 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
     if not fpm_segs:
         return
 
-    # Vote per transcript label across its segments → majority voiceprint_id.
+    # AUTHORITATIVE path (DiariZen): the live diart transcript was a preview; now re-attribute each ASR
+    # text segment to DiariZen's overlapping speaker and OVERWRITE the stored transcript (the one
+    # sanctioned write-once exception). resolved_speakers is keyed by DiariZen's labels.
+    if settings.inperson_via_capture and settings.diarize_url:
+        from transcripts.models import RawSegment
+        new_raw = []
+        for seg in session.raw_diarization:                # diart's ASR text + timestamps
+            ident = _overlapping_identity(seg.start, seg.end, fpm_segs)
+            label = (ident or {}).get("local_speaker") or seg.speaker   # DiariZen label (fallback diart)
+            new_raw.append(RawSegment(speaker=label, text=seg.text, start=seg.start, end=seg.end))
+        resolved = dict(session.metadata.resolved_speakers or {})
+        for fs in fpm_segs:                                # names keyed by DiariZen label
+            ls = fs.get("local_speaker")
+            if ls and fs.get("voiceprint_id"):
+                entry = dict(resolved.get(ls) or {})
+                entry["voiceprint_id"] = fs["voiceprint_id"]
+                if fs.get("name") and not entry.get("name"):  # don't clobber a manual tag
+                    entry["name"] = fs["name"]
+                resolved[ls] = entry
+        store.set_raw_diarization(session_id, [s.model_dump() for s in new_raw])
+        md = session.metadata.model_copy(update={"resolved_speakers": resolved})
+        store.set_metadata(session_id, md)
+        logger.info("identify_meeting: %s — AUTHORITATIVE DiariZen overwrite (%d segs, %d speakers)",
+                    session_id, len(new_raw), len(resolved))
+        return
+
+    # FALLBACK (diart-only / legacy): vote identity onto the existing diart labels; do NOT overwrite raw.
     votes: dict[str, dict[str, tuple[int, str | None]]] = {}
     for seg in session.raw_diarization:
         ident = _overlapping_identity(seg.start, seg.end, fpm_segs)
