@@ -63,6 +63,11 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
 
     from config import settings
 
+    # VFTE is scoped by the FPM workspace (fpm_workspace_for) — the SAME mapping the tag path uses
+    # (record_routes.tag_speaker → propose_binding). Enroll voiceprints under it, not the raw Conclave
+    # workspace, or tagging looks in a different VFTE workspace and never finds the voiceprint.
+    vfte_ws = settings.fpm_workspace_for(workspace_id)
+
     audio = _assemble_audio(native_meeting_id)
     if not audio:
         logger.info("identify_meeting: no stored audio for %s — skipping", native_meeting_id)
@@ -90,10 +95,10 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
             if not spans:
                 logger.info("identify_meeting: no %s spans for %s — skipping", src, native_meeting_id)
                 return
-            fpm_segs = await fpm_consent.identify_spans(workspace_id, audio, spans, tag="offline")
+            fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, spans, tag="offline")
         else:
             # Legacy rollback path: FPM re-diarizes + identifies the recording.
-            fpm_segs = await fpm_consent.diarize_audio(workspace_id, audio, tag="offline")
+            fpm_segs = await fpm_consent.diarize_audio(vfte_ws, audio, tag="offline")
     except Exception as e:  # noqa: BLE001 — best-effort, never block finalize
         logger.warning("identify_meeting: identity for %s failed: %s", session_id, e)
         return
