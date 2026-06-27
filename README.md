@@ -1,267 +1,341 @@
 # Conclave — Confidential Team Memory
 
-Conclave is a **meeting-intelligence system where the operator provably cannot read your meetings.**
-Transcripts are captured, enriched, and turned into a searchable, graph-connected team memory —
-inside attestable confidential infrastructure (Intel TDX). Every LLM call happens **at ingest**; the
-read path (search, entities, obligations, graph) is pure SQL + local embeddings, so no third-party
-API ever sees your data. The one exception is the optional `/ask` RAG endpoint, which synthesizes an
-answer with the same TEE-served LLM used at ingest.
+Conclave is a **meeting-intelligence product where the operator provably cannot read your meetings.**
+Meetings (online bots, in-person walk-up recordings, or pasted uploads) are captured, enriched, and
+turned into a searchable, graph-connected team memory — inside attestable confidential infrastructure
+(Intel TDX). Every LLM call happens **at ingest**; the read path (search, entities, obligations, graph)
+is pure SQL + local embeddings, so no third-party API ever sees your data. The one read-path exception
+is the optional `/ask` RAG endpoint, which synthesizes an answer with the same TEE-served LLM used at
+ingest.
 
-> **Read this first (mental model).** One FastAPI process + one SQLite file (relational + full-text +
-> vectors) + a Next.js frontend. Transcripts arrive from the **capture** microservice (Conclave's
-> meeting bot, extracted from Recato — see the `capture/` repo), in-person
-> **Record** capture, or **upload**. Ingest does all the AI (enrich → chunk → embed → extract →
-> store, bi-temporally). The frontend reads via fast, LLM-free queries. Speaker **identity** is
-> resolved against **VFTE/FPM** (voiceprints). The whole thing runs in a **Phala dstack TDX CVM** and
-> exposes a `/attestation` quote so a client can verify the enclave before trusting it.
+> **Mental model (read this first).** One FastAPI process + one SQLite file (relational + full-text +
+> vectors) + a Next.js frontend. The AI lives at **ingest** (parse → enrich → chunk → embed → extract →
+> store, bi-temporally). The frontend reads via fast, LLM-free queries. Speaker **identity** is resolved
+> against **VFTE/FPM** voiceprints. The whole thing runs in a **Phala dstack TDX CVM** and exposes a
+> `/attestation` quote so a client can verify the enclave before trusting it.
 
-> **Heads-up for anyone reading old docs:** this repo used to also host a "hackathon-novelty / interview
-> skill runtime" (a LangGraph-based `/instances`+`/submit` product with its own `client/` frontend).
-> **That was removed** — Conclave is now purely the transcript-intelligence product. If you see
-> references to skills, `/instances`, langgraph, or `client/apps/web`, they are stale.
+> **Heads-up for old docs:** this repo once hosted a hackathon "interview skill runtime"
+> (LangGraph `/instances`+`/submit` with a `client/` frontend). **That was removed.** References to
+> skills, `/instances`, langgraph, or `client/apps/web` are stale.
 
-## Contents
-- [Architecture at a glance](#architecture-at-a-glance)
-- [Ingest pipeline (where the AI is)](#ingest-pipeline-where-the-ai-is)
-- [Query path (deliberately LLM-free)](#query-path-deliberately-llm-free)
-- [Ingest sources](#ingest-sources)
-- [HTTP API surface](#http-api-surface)
-- [Storage & migrations](#storage--migrations)
-- [Trust, privacy & attestation](#trust-privacy--attestation)
-- [Identity (speaker → person)](#identity-speaker--person)
-- [Frontend](#frontend)
-- [Configuration](#configuration)
-- [Run it locally](#run-it-locally)
-- [Deploy](#deploy)
-- [Tests & eval](#tests--eval)
-- [Repo map](#repo-map)
+---
 
-## Architecture at a glance
+## 1. Where Conclave sits — the 3-repo system
+
+Conclave is **1 of 3 repos** that together deliver confidential team-meeting intelligence with in-person
+diarization + voice identity (validated live end-to-end, all merged to `main`, 2026-06-27):
+
+| Repo | Dir | Role | State |
+|---|---|---|---|
+| **Conclave** (this repo) | `conclave-shape-rotator/` | **The product.** Orchestration, transcript persistence, enrichment / KB / intelligence, and the **in-person finalize** (consumes capture's live stream, then runs authoritative DiariZen diarization + VFTE identity). | — |
+| **capture** | repo `conclave-sync`, dir `capture/services/diarization/` | Diarization + ASR microservice: **diart** (live/CPU) + **DiariZen** (post/GPU) acoustic diarization, in-person browser-mic ingress, NEAR Whisper ASR per span. | **Stateless** — holds no voiceprints |
+| **VFTE / FPM** | repo `VFTE`, dir `FPM/` | Identity-only layer: voiceprint **embed → match → tag** with consent (`/v1/identify-spans`). Diarization was stripped out. | Identity only |
+
+### The flagship in-person pipeline (Conclave's role in **bold**)
+
 ```
- capture bot ┐
- in-person   ┤ transcript ──► INGEST PIPELINE (all LLM work, in the TEE)
- upload     ┘                  parse → enrich → chunk → embed → extract → store
-                                          │
-                                          ▼
-                          ONE SQLite file: relational + FTS5 + sqlite-vec
-                                          │
-                                          ▼
-                        QUERY PATH (no LLM*): search · entities · obligations · graph
-                                          │
-                                          ▼
-                          Next.js UI (frontend/) · per-meeting visibility enforced
+ user clicks RECORD in Conclave's frontend
+        │  browser mic stream
+        ▼
+ capture WS ──► diart live-diarize + NEAR ASR per span ──► Redis `transcription_segments`
+        │                                                          │
+        │                                          ┌───────────────┘
+        ▼                                          ▼
+ on Stop, capture uploads recording      **Conclave consumer ingests → `live_segments`**
+ + fires Conclave's `meeting-completed`   **→ live SSE view shows [speaker] text live**
+ webhook
+        │
+        ▼
+ **Conclave FINALIZES (non-blocking background task):**
+   1. materialize the diart transcript immediately (write-once `raw_diarization`)
+   2. **DiariZen (GPU) re-diarizes AUTHORITATIVELY → OVERWRITES `raw_diarization`**
+   3. **VFTE identifies the speakers** (enroll on 1st meeting / recognize later)
+   4. names resolve via **consent-gated tagging**
 ```
-- **One process, one DB.** FastAPI app (`main.py`) + a single SQLite file holding relational data, the
-  BM25 index (FTS5), and the vector ANN index (`sqlite-vec`). No Postgres / Pinecone / Elastic — every
-  external service is a hole in the attestation story.
-- **LLM backends** (`config.py`, `transcripts/llm.py`): **RedPill** (Phala TEE-served `gemma-3-27b-it`,
-  default) · **NEAR AI** (`DeepSeek-V3.1`) · **Ollama** (local `qwen2.5-conclave`). Flip with
-  `python -m transcripts.cli llm use <backend>`.
-- **Embeddings** (`transcripts/embed.py`): `nomic-embed-text v1.5` via Ollama — 768-dim stored in
-  `embeddings`, 256-dim Matryoshka-truncated copies in the `chunks_vec` ANN index. Local, in-process.
-- `*` the only LLM on the read path is the optional `/ask` RAG answer.
 
-## Ingest pipeline (where the AI is)
-Triggered async after a transcript lands (`api/transcripts_routes.py::_enrich_in_background`):
+A 2nd meeting **recognizes the same speakers** from stored voiceprints with no re-tagging.
+
+The online-bot path is the same shape minus the mic: a capture bot streams `transcription_segments`
+live, then the `meeting-completed` webhook finalizes from the buffered segments.
+
+**Monorepo-root reference docs** (`shape-rotator-all/`): `DIARIZATION-MIGRATION.md`,
+`BUILD-LOG-diarization-deployment.md`, `TROUBLESHOOTING-inperson.md`, `JOBS-QUEUE-HANDOFF-PROMPT.md`,
+`DEPLOY-LOCAL.md`, `CONCLAVE-CAPTURE-ARCHITECTURE.md`.
+
+---
+
+## 2. Architecture & key directories
+
+**One process, one DB.** `main.py` boots a single FastAPI app, runs `storage.init_db()` then Alembic
+`upgrade head`, mounts every router, and on lifespan-start launches the calendar scheduler + the capture
+Redis consumer. The DB is one SQLite file holding relational data, the BM25 index (FTS5), and the vector
+ANN index (`sqlite-vec`). No Postgres / Pinecone / Elastic — every external service is a hole in the
+attestation story.
+
+```
+main.py            FastAPI entrypoint — mounts routers, init_db + alembic upgrade head, starts scheduler + capture consumer
+config.py          Settings (CONCLAVE_ env prefix) + get_llm() backend switch; LangSmith tracing force-disabled here
+api/               HTTP routers (one file per surface) — see §4
+auth/              cookie-backed v1 auth (/auth/v1) + require_current_user session dep
+connectors/capture/  the capture bridge (see below)
+transcripts/       the intelligence pipeline + CLI + persistence models
+storage/           sqlite (relational + state) · vec (sqlite-vec ANN) · kb · kb_graph
+infra/             scheduler · calendar_* · enclave (TDX) · fpm_consent · identity · rrf · workspaces · email · magic_links · bot_invitations
+frontend/          Next.js product UI (dashboard, search, graph, entities, meeting, record, …)
+alembic/versions/  migrations 0001–0016
+tests/             pytest suite
+web/               legacy static dashboard mounted at /dashboard
+```
+
+### Load-bearing modules (the ones to read first)
+
+| Module | What it does |
+|---|---|
+| `api/webhooks_capture.py` | **In-person + online finalize trigger.** `POST /api/webhooks/capture/meeting-completed`: HMAC-verify → materialize `raw_diarization` from the `live_segments` buffer (write-once, idempotent) → bind workspace (bot_invitation for online; payload `workspace_id` for in-person, owned by the workspace creator) → spawn the non-blocking `_identify_then_enrich()` background task. |
+| `connectors/capture/identify.py` | **Finalizer-A** (`identify_meeting`). The authoritative post-pass: when `CONCLAVE_INPERSON_VIA_CAPTURE` + `CONCLAVE_DIARIZE_URL` are set, POSTs the recording to **DiariZen** → authoritative spans → VFTE `/v1/identify-spans` for names → **re-attributes every ASR segment to DiariZen's speaker and OVERWRITES `raw_diarization`** via `set_raw_diarization`. Falls back to (a) capture's own diart spans, or (b) legacy FPM re-diarize. Best-effort — never blocks finalize. |
+| `connectors/capture/consumer.py` | **Redis stream → `live_segments`.** Reads `transcription_segments` as a consumer group (replay-safe), buffers each segment via `store.append_segment`. No-op if `REDIS_URL` unset. |
+| `connectors/capture/diarize_client.py` | HTTP client for the DiariZen GPU service (heartbeat-NDJSON; diarize-only, no identity). |
+| `connectors/capture/translator.py` | Normalizes any producer into the **canonical transcript envelope** (`to_canonical`). |
+| `connectors/capture/launch.py` | Drives capture's runtime-api to *launch* bots for online meetings. |
+| `api/record_routes.py` | **Legacy in-person batch path** + the reusable merge/tag helpers: `merge_by_timestamp` (ASR ∥ identity → `[speaker] text`, deterministic labels), `build_resolved_speakers`, and `tag_speaker` (host binds `Speaker N` → name/email via FPM). |
+| `api/live_routes.py` | **Live SSE view** — `GET /api/meetings/{id}/live` tails the `live_segments` buffer (diart preview) before DiariZen finalizes; `/live-view` is a minimal EventSource page. |
+| `transcripts/store.py` + `storage/sqlite.py` | Persistence. `store` is the typed `Session`↔table translation; `sqlite` owns the write-once `raw_diarization` invariant (`set_raw_diarization` is the one sanctioned override). |
+
+### Ingest pipeline (where all the AI is)
+
+Triggered async after a transcript is materialized (`_enrich_in_background`):
 
 1. **Parse → store** (`transcripts/parse.py`, `store.py`): raw turns persist immutably in
-   `transcript_sessions.raw_diarization`; all derived data lands in `derived` (JSON). This split is
-   what makes "delete raw, keep summary" clean.
+   `transcript_sessions.raw_diarization`; derived data lands in `derived` (JSON). This split is what makes
+   "delete raw, keep summary" clean.
 2. **v1 enrichment** (`transcripts/enrich.py`): map-reduce summary + signals via the TEE LLM.
 3. **3.5a retrieval indexing — always on** (`transcripts/kb_pipeline.py`): turn-aware chunking
-   (`kb_chunk.py`, never splits mid-turn) → 1–2 sentence context header per chunk (`context_header.py`)
-   → embed → FTS5 (trigger-synced) + `sqlite-vec` ANN. Best-effort & idempotent (re-runnable).
-4. **3.5b knowledge extraction — flag `ENABLE_KB_PIPELINE`** (`transcripts/kb_extract.py`,
-   `extract.py`, `entity_resolution.py`, `importance.py`, `upsert.py`): typed entity + obligation
-   extraction (1 call/chunk) → **lexical-first** entity resolution over definition embeddings (the
-   OI-7 over-merge fix — no bare-name cosine auto-merge) → importance scoring (batched) → Mem0-style
-   ADD/UPDATE/DELETE/NOOP upsert → **bi-temporal write** (`valid_to`/`superseded_by`, never hard-deletes).
+   (`kb_chunk.py`, never splits mid-turn) → 1–2 sentence context header per chunk (`context_header.py`) →
+   embed → FTS5 (trigger-synced) + `sqlite-vec` ANN. Best-effort & idempotent.
+4. **3.5b knowledge extraction — flag `ENABLE_KB_PIPELINE`** (`kb_extract.py`, `extract.py`,
+   `entity_resolution.py`, `importance.py`, `upsert.py`): typed entity + obligation extraction (1 call/chunk)
+   → **lexical-first** entity resolution over definition embeddings (the OI-7 over-merge fix) → importance
+   scoring → Mem0-style ADD/UPDATE/DELETE/NOOP upsert → **bi-temporal write** (`valid_to`/`superseded_by`,
+   never hard-deletes).
 
 Per-stage cost is queryable live at `GET /api/workspaces/{id}/ingest-metrics`.
 
-## Query path (deliberately LLM-free)
-`POST /api/workspaces/{id}/search` (`api/kb_routes.py`, `infra/rrf.py`):
-- embed query locally (nomic, `search_query:` prefix) ‖ FTS5 BM25 (sanitized — no operator injection)
-- **Reciprocal Rank Fusion** (k=60, ~20 lines, no model) merges the two legs
-- per-meeting **visibility filter** (`can_user_see`) applied server-side on every route
+### Query path (deliberately LLM-free)
 
-`entities` / `obligations` / `graph` are pure SQL projections. `POST /api/workspaces/{id}/ask` is the
-one read endpoint that calls the LLM (RAG answer synthesis over retrieved chunks).
+`POST /api/workspaces/{id}/search` embeds the query locally (nomic, `search_query:` prefix) ‖ runs FTS5
+BM25 (sanitized), merges the two legs with **Reciprocal Rank Fusion** (k=60, `infra/rrf.py`), and applies
+the per-meeting visibility filter server-side. `entities` / `obligations` / `graph` are pure SQL
+projections. `POST /api/workspaces/{id}/ask` is the only read endpoint that calls the LLM (RAG synthesis).
 
-## Ingest sources
-| Source | Endpoint | Notes |
-|---|---|---|
-| **Capture bot** (online meetings) | bot streams to Redis `transcription_segments` live; `POST /api/webhooks/capture/meeting-completed` finalizes | HMAC-signed, idempotent; finalize = live buffer → canonical envelope → bind workspace → identity → enrich |
-| **In-person Record** | `POST /api/workspaces/{id}/record` | capture audio → FPM diarize/identify + ASR → merge → ingest (consent plane) |
-| **Upload** | `POST /api/workspaces/{id}/transcripts` | paste/file; same enrich chain as the webhook |
-| **Capture stream** | `POST /api/capture/audio-chunk` + Redis `transcription_segments` consumer (`connectors/capture`) | audio → Conclave TEE; segment stream consumed as a consumer group |
-| **Calendar auto-dispatch** | `infra/scheduler.py` poll → `infra/calendar_dispatch.py` | sends the bot to soon-starting connected-calendar meetings |
+**LLM backends** (`config.py`, `transcripts/llm.py`): **RedPill** (Phala TEE `google/gemma-3-27b-it`,
+default) · **NEAR AI** (`DeepSeek-V3.1`) · **Ollama** (local `qwen2.5-conclave`). Switch with
+`python -m transcripts.cli llm use <backend>`. **Embeddings**: `nomic-embed-text v1.5` via Ollama —
+768-dim stored, 256-dim Matryoshka copies in the ANN index. Local, in-process.
 
-Producers translate to a **canonical transcript envelope** before Conclave core sees them
-(`connectors/capture/`), so Conclave stays source-agnostic.
+---
 
-### Ingest contract — what shapes each endpoint accepts
-Everything normalizes into one **canonical transcript envelope** (`connectors/capture/translator.py`)
-before enrichment. That target shape is:
-```jsonc
-{
-  "meeting": {
-    "external_id": "abc-defg-hij",      // native meeting id (e.g. a Meet code)
-    "platform": "google_meet",          // lowercased; optional
-    "url": "https://meet.google.com/…", // optional
-    "title": "…",                       // optional
-    "participants": ["Alice", "Bob"]    // optional
-  },
-  "segments": [
-    { "speaker": "Alice", "text": "…",
-      "start": 0.0, "end": 1.8,         // relative seconds (floats)
-      "language": "en",                  // optional
-      "absolute_start": "2026-06-25T12:00:03Z", "absolute_end": "…" }  // optional UTC
-  ]
-}
-```
-What each ingest path expects on the wire:
+## 3. Data model
 
-| Endpoint | Content type | Shape it accepts |
-|---|---|---|
-| `POST /api/webhooks/capture/meeting-completed` | JSON, **HMAC-signed** (`X-Signature: sha256=…`, `CAPTURE_WEBHOOK_SECRET`) | `{event_id, event_type:"meeting.completed", api_version, created_at, data:{meeting:{platform, native_meeting_id, status}}}`. **Finalize signal** — the bot has already streamed segments into the live buffer (`transcription_segments`); this materializes `raw_diarization` from that buffer (write-once), then translates → binds → enriches. **No fetch.** (`CAPTURE_API_BASE_URL`/`CAPTURE_API_TOKEN` point at the capture runtime-api, used by `connectors/capture/launch.py` to *launch* bots.) |
-| `POST /api/workspaces/{id}/transcripts` (upload) | JSON `{ "text": "<≤2 MB>" }` | `text` is auto-detected: a **JSON** transcript (VoxTerm/generic segment shapes) **or** **Otter-style plaintext** (`Speaker  M:SS` lines). 422 if zero segments parse — junk is never stored. |
-| `POST /api/workspaces/{id}/record` (in-person) | JSON (capture handle) | kicks the capture→FPM diarize/identify + ASR→merge chain, which emits envelope segments. |
-| `POST /api/capture/audio-chunk` | `multipart/form-data` | `metadata` (JSON: `{meeting_id, session_uid, format, chunk_seq, is_final}`), `chunk_seq` (int), `is_final`, `file` (audio bytes). Raw audio is **stored, not parsed** here (staged for diarization/VFTE); transcript text arrives via the segment stream below. |
-| Redis stream `transcription_segments` (consumed by `connectors/capture`) | Redis `XADD` | live bot segments: `{type:"transcription", token, uid, segments:[{start, end, text, speaker, completed, absolute_start_time, absolute_end_time}]}` (`completed:false` draft → `true` confirmed). |
+The core row is a **Session** (`transcript_sessions`), three logical parts:
 
-Speaker labels and timestamps are preserved verbatim through translation; identity resolution
-(speaker → person) happens later in the pipeline, not at the ingest boundary.
+| Part | Column | Mutability | Contents |
+|---|---|---|---|
+| **Raw** | `raw_diarization` | **Write-once (§A invariant)** — `save_session` refuses to overwrite once a row exists. **One sanctioned exception:** the in-person **DiariZen post-pass overwrite** via `store.set_raw_diarization` → `sqlite.update_transcript_raw`. | The immutable diarized turns `[{speaker, text, start, end}]`. |
+| **Metadata** | `metadata` (JSON) | Mutable | Source, date, owner/visibility mirrors, `raw_intent`, and **`resolved_speakers`** (`{label: {voiceprint_id, name, confidence}}` — the speaker→person map identity writes). |
+| **Derived** | `derived` (JSON) | Mutable (re-runnable) | The served projection: summary, signals, action items — everything enrichment + KB produce. |
 
-## HTTP API surface
+Re-running enrichment only moves `derived`/`metadata` forward; raw stays put. The live buffer
+(`live_segments`, keyed by native meeting id) is a **separate** append-only table that the finalize path
+materializes into `raw_diarization` exactly once, then clears.
+
+**Served vs withheld (transcript-read gating, `api/transcripts_routes.py`):** the derived projection
+(summary, entities, action items, resolved-speaker chips) is broadly served; **`raw_diarization` is the
+only field stripped at the API boundary**. `can_user_see` gates a session generally; the stricter
+`can_see_transcript` gates the raw transcript — served only to the owner, workspace members, and
+`summary_and_transcript` shares. `summary_only` recipients pass `can_user_see` (get the summary) but fail
+`can_see_transcript` (raw withheld).
+
+Other core tables: `workspaces`, `users`, `meeting_shares` (`scope`: `summary_and_transcript` |
+`summary_only`), `chunks`/`embeddings`/`chunks_vec`, `entities`/`mentions`/`obligations`/`facts`,
+`ingest_metrics`, `google_oauth_tokens`, `bot_invitations`, `live_segments`. Migrations live in
+`alembic/versions/` (0001–0016; notable: 0006 embeddings, 0007 entities/obligations, 0011 calendar,
+0012 share-scope, 0013 retention, 0015 capture_state, 0016 live_segments).
+
+---
+
+## 4. HTTP API surface
+
 Mounted in `main.py`. Prefix → file:
 
 | Prefix | File | Key endpoints |
 |---|---|---|
 | _(none)_ | `api/routes.py` | `/health`, `/attestation` (TDX quote), legacy token/OTP auth (`/register`, `/generate-token`, `/auth/*`, `/me`) |
-| `/auth/v1` | `auth/routes.py` | cookie-backed v1 auth: `send-otp`, `verify-otp`, `exchange-token`, `dev-login`, `logout`, `me` |
+| `/auth/v1` | `auth/routes.py` | cookie auth: `send-otp`, `verify-otp`, `exchange-token`, `dev-login`, `logout`, `me` |
 | `/transcripts` | `api/transcripts_routes.py` | `sessions`, `sessions/{id}`, `sessions/{id}/transcript` (raw, gated), `…/visibility`, `me/action-items`, ingest |
-| `/api/workspaces` | `workspaces_routes.py` | list/create, `{id}`, `{id}/meetings`, `{id}/open-questions`, members (501 stub) |
-| `/api/workspaces` | `kb_routes.py` | `{id}/entities`, `{id}/entities/{name}`, `{id}/obligations`, `{id}/ingest-metrics`, `{id}/graph`, `{id}/search`, `{id}/ask` |
-| `/api/workspaces` | `upload_routes.py` / `record_routes.py` | `{id}/transcripts` (upload), `{id}/record`, `{id}/meetings/{sid}/tag-speaker` |
-| `/api/meetings` | `bot_routes.py` | `invite-bot`, `bot/status_change`, `active`, bot delete/status, `{sid}/visibility`, `{sid}/shares` (GET/POST), `{sid}/retention`, `{sid}/tag-speaker` |
-| `/api/users` | `users_routes.py` | `me/settings` (GET/POST) — account retention default |
-| `/api/calendar` | `calendar_routes.py` | Google OAuth `connect`/`callback`/`status`/`disconnect`, `events` (GET/POST), `events/{id}/auto-record`, `auto-record-all` |
-| `/api/capture` | `capture_routes.py` | `audio-chunk` |
-| `/api/webhooks/capture` | `webhooks_capture.py` | `meeting-completed` |
-| `/api/magic-links` | `magic_link_routes.py` | `{token}`, `{token}/consume` (public token resolve; meeting still permission-gated) |
+| `/api/workspaces` | `api/workspaces_routes.py` | list/create, `{id}`, `{id}/meetings`, `{id}/open-questions`, members |
+| `/api/workspaces` | `api/kb_routes.py` | `{id}/entities`, `{id}/entities/{name}`, `{id}/obligations`, `{id}/ingest-metrics`, `{id}/graph`, `{id}/search`, `{id}/ask` |
+| `/api/workspaces` | `api/upload_routes.py` · `api/record_routes.py` | `{id}/transcripts` (upload), `{id}/record` (in-person batch), `{id}/meetings/{sid}/tag-speaker` |
+| `/api/meetings` | `api/bot_routes.py` | `invite-bot`, `bot/status_change`, `active`, `{sid}/visibility`, `{sid}/shares`, `{sid}/retention`, `{sid}/tag-speaker` |
+| `/api/meetings` | `api/live_routes.py` | `{native_id}/live` (SSE), `{native_id}/live-view` (page) |
+| `/api/users` | `api/users_routes.py` | `me/settings` (account retention default) |
+| `/api/calendar` | `api/calendar_routes.py` | Google OAuth `connect`/`callback`/`status`/`disconnect`, `events`, `events/{id}/auto-record`, `auto-record-all` |
+| `/api/capture` | `api/capture_routes.py` | `audio-chunk` (multipart audio → `CONCLAVE_AUDIO_DIR`; staged for DiariZen/VFTE) |
+| `/api/webhooks/capture` | `api/webhooks_capture.py` | `meeting-completed` (**finalize**; HMAC-signed, idempotent) |
+| `/api/magic-links` | `api/magic_link_routes.py` | `{token}`, `{token}/consume` (public resolve; meeting still permission-gated) |
 
-A static dashboard is also mounted at `/dashboard` (serves `web/`, reads `/transcripts/sessions`).
+A legacy static dashboard is also mounted at `/dashboard` (serves `web/`).
 
-## Storage & migrations
-- `storage/sqlite.py` — relational tables + app state; `storage/vec.py` — `sqlite-vec` (vec0) ANN;
-  `storage/kb.py` + `storage/kb_graph.py` — KB read/write.
-- On import, `main.py` runs `storage.init_db()` then **Alembic `upgrade head`** (migrations
-  `alembic/versions/0001`–`0016`). Notable: `0006` embeddings/chunks, `0007` entities/facts/obligations,
-  `0008` ingest_metrics, `0011` google_calendar, `0012` meeting_share_scope, `0013` retention,
-  `0015` capture_state, `0016` live_segments.
-- Core tables: `transcript_sessions` (`raw_diarization` immutable + `derived` JSON), `workspaces`,
-  `users`, `meeting_shares` (`scope`: `summary_and_transcript` | `summary_only`), `chunks`/`embeddings`/
-  `chunks_vec`, `entities`/`mentions`/`obligations`/`facts`, `ingest_metrics`, `google_oauth_tokens`.
+### Ingest contract (canonical envelope)
 
-## Trust, privacy & attestation
-- **Operator-blind by construction:** all LLM work is at ingest inside the TEE; the read path is local.
-- **Raw transcript is gated:** `transcript_sessions.raw_diarization` is served only to the owner /
-  workspace members / `summary_and_transcript` shares. `summary_only` recipients are stripped of raw
-  (`api/transcripts_routes.py`). Visibility (`can_user_see`) is enforced server-side on every route.
-- **Retention / auto-delete** (`transcripts/retention.py`): account default (`/api/users/me/settings`)
-  + per-meeting override (`/api/meetings/{sid}/retention`). The sweep purges **only the raw transcript**
-  (`raw_transcript_deleted_at`); summary + derived KB are kept.
-- **TDX attestation:** `GET /attestation?nonce=` → dstack TDX quote (`infra/enclave.py`), verifiable via
-  Phala's endpoint. Stub outside a TEE (`IN_TEE != "true"`). This is how a client verifies the CVM before
-  routing meetings/secrets to it.
+Every producer is translated to one **canonical transcript envelope**
+(`connectors/capture/translator.py`) before core sees it, so Conclave stays source-agnostic:
 
-## Identity (speaker → person)
-Post-meeting voice identity (P4): after ingest, diarized segments are re-embedded and matched against
-**VFTE/FPM** voiceprints (`infra/fpm_consent.py`, `infra/identity.py`, `transcripts/identity.py`).
-Confident matches name the speaker; borderline → "Is this you?"; no match → anonymous. Manual fixes via
-`tag-speaker`. Resolved speakers carry `voiceprint_id`s into the read path. Conclave consumes identity —
-it does **not** own diarization (capture) or voiceprint policy (VFTE).
+```jsonc
+{
+  "meeting": { "external_id": "abc-defg-hij", "platform": "google_meet",
+               "url": "…", "title": "…", "participants": ["Alice","Bob"] },
+  "segments": [ { "speaker": "Alice", "text": "…", "start": 0.0, "end": 1.8,
+                  "language": "en", "absolute_start": "…", "absolute_end": "…" } ]
+}
+```
 
-## Frontend
-Next.js app in **`frontend/`** (this is the product UI; the old skills `client/` app was removed).
-Routes under `frontend/src/app/`: `dashboard`, `search`, `entities` / `entity`, `graph`, `obligations`,
-`questions`, `meeting`, `workspace`, `calendar`, `settings`, `login` / `signup` / `auth`, `invite`,
-`m` (magic-link recipient view).
+| Ingest path | Wire shape |
+|---|---|
+| `POST /api/webhooks/capture/meeting-completed` | HMAC-signed (`X-Signature: sha256=…`, `CAPTURE_WEBHOOK_SECRET`) `{event_id, event_type:"meeting.completed", data:{meeting:{platform, native_meeting_id, status, workspace_id?}}}`. **Finalize signal** — segments already streamed into `live_segments`; this materializes `raw_diarization` from that buffer. No post-hoc fetch. |
+| `POST /api/workspaces/{id}/transcripts` (upload) | JSON `{ "text": "<≤2 MB>" }`; auto-detects a JSON transcript or Otter-style plaintext. 422 if zero segments parse. |
+| `POST /api/workspaces/{id}/record` (in-person batch) | multipart `file=<audio>`, `intent?`. Server-side: FPM diarize+identify ∥ NEAR ASR → `merge_by_timestamp` → upload ingest path. Tokens stay server-side. |
+| `POST /api/capture/audio-chunk` | multipart `metadata` (JSON), `chunk_seq`, `is_final`, `file`. Raw audio **stored, not parsed**. |
+| Redis `transcription_segments` | `XADD` of `{type:"transcription", uid, segments:[{start,end,text,speaker,...}]}`; consumed by `connectors/capture/consumer.py`. |
 
-## Configuration
-All env vars use the `CONCLAVE_` prefix (`config.py`, `.env.example`):
+---
+
+## 5. Identity & consent
+
+Identity is resolved against **VFTE/FPM** voiceprints; Conclave **consumes** identity and owns the
+consent-gated tagging UX, but does **not** own diarization (capture) or voiceprint policy (VFTE).
+
+- **Post-meeting (authoritative in-person path):** `identify_meeting` sends DiariZen's spans to VFTE
+  `/v1/identify-spans`, writes `resolved_speakers[label] = {voiceprint_id, name}`, and overwrites the
+  stored transcript with DiariZen's labels. First meeting **enrolls**; later meetings **recognize** the
+  same voiceprint with no re-tagging (`reresolve_voiceprint` propagates a confirmed name across all of the
+  workspace's transcripts, keyed on `voiceprint_id`, never the label).
+- **Manual tagging** (`record_routes.tag_speaker`): the host binds a `Speaker N` label → `(name, email)`.
+  Conclave maps label → `voiceprint_id` from `resolved_speakers` and calls FPM `propose_binding` with the
+  host's email as `proposed_by`:
+  - **Self-tag / dev auto-confirm** → status `confirmed` → name re-resolves across the workspace
+    immediately.
+  - **Tagging someone else** → status `pending` → the target confirms on the **VFTE consent dashboard**;
+    nothing is named until they do.
+
+> **Workspace-mapping gotcha (load-bearing).** VFTE is scoped by `settings.fpm_workspace_for(workspace_id)`
+> (= `CONCLAVE_FPM_WORKSPACE`, e.g. `local-ws`/`live-test`; falls back to the raw Conclave `workspace_id`
+> when unset). **Enroll AND tag must use the same value** — `identify_meeting` and `tag_speaker` both call
+> `fpm_workspace_for`. Enroll under the bare workspace id but tag under the FPM workspace (or vice-versa)
+> and tagging looks in a different VFTE workspace and never finds the voiceprint.
+
+---
+
+## 6. Configuration
+
+All Conclave env vars use the `CONCLAVE_` prefix (`config.py`, `.env.example`). Capture-bot dispatch vars
+are unprefixed.
 
 | Group | Vars |
 |---|---|
-| **LLM** | `LLM_BACKEND` (`redpill`\|`nearai`\|`ollama`), `REDPILL_API_KEY`/`REDPILL_MODEL`, `NEARAI_API_KEY`, `DEFAULT_MODEL` |
-| **Auth** | `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `TOKEN_ENC_KEY` |
-| **Calendar** | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` |
-| **Capture** | `CAPTURE_API_BASE_URL`, `CAPTURE_API_TOKEN` (capture runtime-api, for bot launch), `CAPTURE_MEETING_COMPLETED_URL`, `CAPTURE_WEBHOOK_SECRET` |
-| **Identity (VFTE/FPM)** | `FPM_BASE_URL`, `FPM_API_TOKEN`, `FPM_WORKSPACE` |
-| **ASR** | `TRANSCRIPTION_SERVICE_URL` (NEAR Whisper), `TRANSCRIPTION_SERVICE_TOKEN`, `TRANSCRIPTION_MODEL` |
-| **TEE / tracing** | `IN_TEE`, `DSTACK_AGENT_URL`, `LANGCHAIN_TRACING_V2`/`LANGCHAIN_API_KEY`/`LANGCHAIN_PROJECT` |
+| **LLM** | `CONCLAVE_LLM_BACKEND` (`redpill`\|`nearai`\|`ollama`), `CONCLAVE_REDPILL_API_KEY`/`CONCLAVE_REDPILL_MODEL`, `CONCLAVE_NEARAI_API_KEY`/`CONCLAVE_DEFAULT_MODEL`, `CONCLAVE_OLLAMA_MODEL`/`CONCLAVE_OLLAMA_BASE_URL`, `CONCLAVE_EXTRACT_CONCURRENCY` |
+| **Auth** | `CONCLAVE_SUPABASE_URL`, `CONCLAVE_SUPABASE_ANON_KEY`, `CONCLAVE_TOKEN_ENC_KEY` (Fernet, also encrypts Google tokens) |
+| **Calendar** | `CONCLAVE_GOOGLE_CLIENT_ID`, `CONCLAVE_GOOGLE_CLIENT_SECRET`, `CONCLAVE_GOOGLE_REDIRECT_URI` (all unset → `/api/calendar/*` 503 + poller no-op) |
+| **In-person toggles** | `CONCLAVE_INPERSON_VIA_CAPTURE` (true → boundary path: capture/DiariZen diarizes, VFTE identifies spans; false → legacy FPM re-diarize, the instant rollback) |
+| **Authoritative diarizer** | `CONCLAVE_DIARIZE_URL` (DiariZen GPU service, e.g. `http://localhost:8086` via SSH tunnel), `CONCLAVE_DIARIZE_TOKEN`. Empty → fall back to diart spans. |
+| **Identity (VFTE/FPM)** | `CONCLAVE_FPM_BASE_URL`, `CONCLAVE_FPM_API_TOKEN`, `CONCLAVE_FPM_WORKSPACE` (the scope used for BOTH enroll and tag — see §5) |
+| **ASR** | `CONCLAVE_TRANSCRIPTION_SERVICE_URL` (NEAR Whisper; base or full `/v1/audio/transcriptions`), `CONCLAVE_TRANSCRIPTION_SERVICE_TOKEN`, `CONCLAVE_TRANSCRIPTION_MODEL` |
+| **Audio staging** | `CONCLAVE_AUDIO_DIR` (where `audio-chunk` writes; `identify_meeting` re-assembles from here) |
+| **Capture stream / dispatch** | `REDIS_URL`, `CAPTURE_SEGMENT_STREAM`, `CAPTURE_CONSUMER_GROUP`; `CAPTURE_API_BASE_URL`/`CAPTURE_API_TOKEN` (runtime-api for bot launch), `CAPTURE_MEETING_COMPLETED_URL`, `CAPTURE_WEBHOOK_SECRET`, `CONCLAVE_CAPTURE_INGEST_SECRET` |
+| **TEE** | `CONCLAVE_IN_TEE`, `DSTACK_AGENT_URL` |
 
-## Run it locally
-**Backend**
+> **Telemetry kill-switch:** `config.py` force-disables all LangChain/LangSmith tracing env vars at import
+> — prompts (transcript content) can never be POSTed to a third party, regardless of `.env` or deploy
+> config. (`.env.example` still shows `LANGCHAIN_*` lines; they are popped at startup.)
+
+---
+
+## 7. Run locally
+
+The realistic local stack is brought up from the **monorepo root** (`shape-rotator-all/`), which mounts
+all three repos' `main` checkouts. See `DEPLOY-LOCAL.md` for the full runbook.
+
+```bash
+# from shape-rotator-all/
+./scripts/diarize-tunnel.sh up        # SSH tunnel → GPU DiariZen at localhost:8086 (authoritative pass)
+./envctl local                        # render environments/matrix.local.env into each repo's .env
+docker compose -f docker-compose.local.yml -f docker-compose.migrated.yml up -d
+```
+
+| Service | Port | What it is |
+|---|---|---|
+| **conclave-api** | `:8000` | this repo, `uvicorn main:app`; `CONCLAVE_INPERSON_VIA_CAPTURE=true`, `CONCLAVE_DIARIZE_URL=http://host.docker.internal:8086`. The migrated override **mounts `./conclave-shape-rotator` into the container** so it runs the live source. |
+| **conclave-web** | `:3001` | the Next.js frontend (`frontend/`), `next dev -p 3001`, `NEXT_PUBLIC_API_BASE=http://conclave-api:8000` |
+| capture diart | `:8087` | live diarize+ASR; `http://localhost:8087/inperson` records a room on one mic and publishes to Redis |
+| fpm-backend | `:8085` | VFTE identity-only |
+| redis | `:6379` | in-RAM `transcription_segments` bus (no persistence) |
+| DiariZen | `:8086` (tunnel) | GPU authoritative diarizer |
+
+**Watch it live:** record via `http://localhost:8087/inperson`, watch `[speaker] text` arrive at
+`http://localhost:8000/api/meetings/<id>/live-view`, Stop, then confirm the finalized transcript shows
+DiariZen's authoritative speakers + VFTE names.
+
+**Standalone backend (no Docker), for tests/dev:**
 ```bash
 cp .env.example .env
 pip install -r requirements.txt
 uvicorn main:app --reload          # → http://localhost:8000
-# or: python -m transcripts.cli serve   (FastAPI + static /dashboard)
+# fully local LLM:
+make ollama-prereqs && make ollama-models
+python -m transcripts.cli llm use ollama && python -m transcripts.cli llm smoke
 ```
-**LLM**: defaults to RedPill (cloud TEE). For fully local, use Ollama:
-```bash
-make ollama-prereqs && make ollama-models     # pull nomic-embed-text + the chat model
-python -m transcripts.cli llm use ollama
-python -m transcripts.cli llm smoke            # prove wiring
-```
-**Frontend**
-```bash
-cd frontend && npm install && npm run dev      # → http://localhost:3000
-```
-**CLI** (`python -m transcripts.cli …`): `ingest` (batch parse, no LLM) · `enrich` (LLM map-reduce) ·
-`serve` · `eval` (score vs golden YAML) · `link` (identity linkage) · `llm status|use|smoke` · `run`.
 
-## Deploy
-- **Docker:** `Dockerfile` + `docker-compose.yml`. Set `IN_TEE=true` for the enclave path.
-- **Production:** runs as a **Phala dstack TDX CVM** (`conclave`). Updates are typically env-only via the
-  Phala CLI (`phala deploy --cvm-id <id>`). The `/attestation` endpoint proves the deployed image.
+**CLI** (`python -m transcripts.cli …`): `ingest` (batch parse, no LLM) · `enrich` · `serve` · `eval` ·
+`link` (identity) · `llm status|use|smoke` · `run`.
 
-## Tests & eval
+---
+
+## 8. Test
+
 ```bash
-pytest tests -q
+# canonical venv (the in-repo .venv is incomplete — missing sqlite_vec/alembic)
+/Users/prakharojha/Desktop/me/personal/conclave/.venv/bin/python -m pytest
+# or, with that venv active:
+PYTHONPATH=. pytest
 ```
-~548 tests pass. A handful of pre-existing failures exist in `test_webhooks_capture`, `test_calendar_stop_link`,
-and `test_record_routes` (env/idempotency — unrelated to core read/ingest). The KB design rationale lives
-in `METHODOLOGY_SURVEY.md`; eval harness + policy registry + gold queries live in `transcripts/eval.py`,
+
+**~544 pass, 7 pre-existing failures** (test-isolation / env ordering — **not regressions**):
+`record_routes` returning 503-vs-400 under full-suite ordering, and webhook-secret / calendar env tests
+that depend on process env state. They pass in isolation. KB design rationale lives in
+`METHODOLOGY_SURVEY.md`; the eval harness + policy registry + gold queries are in `transcripts/eval.py`,
 `transcripts/EVAL.md`, and `scripts/eval/`.
 
-## Repo map
-```text
-main.py                     FastAPI entrypoint — mounts all routers, init_db + alembic upgrade
-api/                        HTTP routers (transcripts, kb, workspaces, bot, calendar, capture, …)
-auth/routes.py              cookie-backed v1 auth (/auth/v1)
-transcripts/                the intelligence pipeline + CLI
-  parse · enrich            raw parse, map-reduce summary/signals
-  kb_pipeline · kb_chunk    chunk → context header → embed → index (3.5a)
-  kb_extract · extract      typed entity/obligation extraction (3.5b, ENABLE_KB_PIPELINE)
-  entity_resolution         lexical-first resolution over definition embeddings (OI-7 fix)
-  importance · upsert       importance scoring + Mem0-style bi-temporal upsert
-  embed                     nomic-embed-text v1.5 via Ollama (768 stored / 256 indexed)
-  answer · compile_intent   /ask RAG synthesis + query intent
-  retention · store         retention sweep + session read/write
-  identity · team_context   speaker identity + cohort context
-  llm · config · prompts    LLM backend switch, settings, prompt library
-  eval · *_bakeoff          eval harness + prompt/extraction bake-offs
-storage/                    sqlite (relational+state) · vec (sqlite-vec ANN) · kb · kb_graph
-infra/                      scheduler(calendar) · calendar_* · google_calendar · supabase_auth ·
-                            enclave(TDX) · fpm_consent · identity · rrf · workspaces · email · magic_links
-connectors/capture/         launch (drive capture runtime-api) · translator (canonical envelope) ·
-                            consumer (Redis segment stream) · identify (FPM voice identity)
-frontend/                   Next.js product UI (dashboard, search, graph, entities, …)
-alembic/versions/           migrations 0001–0016
-tests/                      pytest suite
-METHODOLOGY_SURVEY.md       literature/methodology grounding the KB architecture
-```
-Per-area detail also lives in `transcripts/` docs (`EVAL.md`, `IMPLEMENTATION_PLAN.md`) and `scripts/eval/`.
+---
+
+## 9. Trust, privacy & status
+
+- **Operator-blind by construction:** all LLM work is at ingest inside the TEE; the read path is local SQL +
+  embeddings. LangSmith tracing is force-disabled in code.
+- **Raw transcript is gated:** `raw_diarization` is the only field stripped at the API boundary; served only
+  to owner / workspace members / `summary_and_transcript` shares (§3).
+- **Retention / auto-delete** (`transcripts/retention.py`): account default (`/api/users/me/settings`) +
+  per-meeting override (`/api/meetings/{sid}/retention`); the sweep purges **only** the raw transcript,
+  keeping summary + KB.
+- **TDX attestation:** `GET /attestation?nonce=` → dstack TDX quote (`infra/enclave.py`), verifiable via
+  Phala. Stub outside a TEE (`CONCLAVE_IN_TEE != "true"`).
+- **Production:** runs as a **Phala dstack TDX CVM** (`conclave`); env-only updates via
+  `phala deploy --cvm-id <id>`.
+
+### Status (2026-06-27)
+
+The **in-person pipeline is validated live end-to-end and merged to `main`** across all three repos
+(record → diart live → DiariZen authoritative → VFTE enroll → tag → recognize). The interim finalize runs
+as a **non-blocking in-process background task** (`asyncio.create_task(_identify_then_enrich())`), which
+holds the DiariZen HTTP connection open for the whole ~6-minute job and is lost on a Conclave restart. The
+planned next step is a **durable diarization job queue** (Redis-backed, retryable, horizontally scalable
+across GPU workers) — full spec in `JOBS-QUEUE-HANDOFF-PROMPT.md`. Cut a new `feat/` branch off `main` for
+that work; keep `main` clean.
