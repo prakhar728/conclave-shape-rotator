@@ -150,10 +150,15 @@ async def on_meeting_completed(
         payload_ws = meeting.get("workspace_id")
         if payload_ws:
             try:
+                # In-person has no inviter → default ownership to the workspace creator so they can
+                # manage/TAG the meeting (tagging is owner-gated; a NULL owner makes it un-taggable).
+                from infra.workspaces import get_workspace
+                ws_row = get_workspace(payload_ws)
+                owner = ws_row.get("created_by") if ws_row else None
                 transcripts_store.set_workspace(
                     session_id=session_id,
                     workspace_id=payload_ws,
-                    owner_user_id=None,           # no inviting user for an in-person walk-up
+                    owner_user_id=owner,          # workspace creator owns walk-up recordings
                     visibility="workspace",       # visible to workspace members
                 )
             except Exception:  # noqa: BLE001 — never block finalize on a bad workspace binding
