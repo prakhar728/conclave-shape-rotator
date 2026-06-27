@@ -170,7 +170,9 @@ async def on_meeting_completed(
     if status_label == "accepted":
         from api.transcripts_routes import _enrich_in_background
         from connectors.capture.identify import identify_meeting
-        ws_for_identity = inv["workspace_id"] if inv else None
+        # In-person meetings have no bot_invitation → fall back to the workspace carried in the webhook
+        # payload (capture sends it). Online still prefers the invitation's workspace.
+        ws_for_identity = (inv["workspace_id"] if inv else None) or meeting.get("workspace_id")
 
         async def _identify_then_enrich():
             try:
