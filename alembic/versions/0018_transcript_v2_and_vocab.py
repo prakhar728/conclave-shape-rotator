@@ -26,8 +26,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0015_transcript_v2_and_vocab"
-down_revision = "0014_bot_invitation_intent"
+revision = "0018_transcript_v2_and_vocab"
+down_revision = "0017_rename_recato_bot_id"
 branch_labels = None
 depends_on = None
 

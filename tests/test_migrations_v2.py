@@ -1,7 +1,7 @@
-"""Part 1 data-foundation migration (0015) — applies, rolls back, at head.
+"""Part 1 data-foundation migration (0018) — applies, rolls back, at head.
 
 Throwaway DB (NOT the conftest DB, which is already at head) so up/down run in
-isolation. The full chain to 0015 passes through 0006 (chunks_vec), so this
+isolation. The full chain to 0018 passes through 0006 (chunks_vec), so this
 module needs sqlite-vec loadable — same guard as the kb migration tests.
 """
 from __future__ import annotations
@@ -15,8 +15,8 @@ import pytest
 from storage.vec import load_vec_extension
 
 EXPECTED_V2_OBJECTS = {"transcript_v2", "vocab"}
-HEAD = "0015_transcript_v2_and_vocab"
-PREV = "0014_bot_invitation_intent"
+HEAD = "0018_transcript_v2_and_vocab"
+PREV = "0017_rename_recato_bot_id"
 
 
 def _vec_loadable() -> bool:
@@ -29,7 +29,7 @@ def _vec_loadable() -> bool:
 
 pytestmark = pytest.mark.skipif(
     not _vec_loadable(),
-    reason="sqlite-vec not loadable (the 0004->0015 chain runs 0006 chunks_vec)",
+    reason="sqlite-vec not loadable (the 0004->0018 chain runs 0006 chunks_vec)",
 )
 
 
@@ -62,14 +62,14 @@ def _tables(db_path: str) -> set[str]:
         conn.close()
 
 
-def test_0015_upgrade_creates_v2_and_vocab(alembic_db):  # M-1
+def test_0018_upgrade_creates_v2_and_vocab(alembic_db):  # M-1
     from alembic import command
     cfg, db_path = alembic_db
     command.upgrade(cfg, HEAD)
     assert EXPECTED_V2_OBJECTS <= _tables(db_path)
 
 
-def test_0015_downgrade_clean_and_idempotent(alembic_db):  # M-2
+def test_0018_downgrade_clean_and_idempotent(alembic_db):  # M-2
     from alembic import command
     cfg, db_path = alembic_db
     command.upgrade(cfg, HEAD)
@@ -80,7 +80,7 @@ def test_0015_downgrade_clean_and_idempotent(alembic_db):  # M-2
     assert EXPECTED_V2_OBJECTS <= _tables(db_path)
 
 
-def test_0015_present_at_conftest_head():  # M-3
+def test_0018_present_at_conftest_head():  # M-3
     # conftest upgrades the per-process test DB to head at import; the new
     # tables must be reachable on the live connection.
     from storage import sqlite as storage_sqlite
