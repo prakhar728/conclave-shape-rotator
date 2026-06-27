@@ -143,12 +143,27 @@ async def on_meeting_completed(
             except Exception:  # noqa: BLE001 — intent is optional grounding
                 logger.exception("webhook: set raw_intent failed for %s", session_id)
     else:
-        logger.warning(
-            "no bot_invitation found for %s/%s — session lands without "
-            "workspace binding (likely a Recato-originated meeting we didn't launch)",
-            platform,
-            native_id,
-        )
+        # In-person meetings have no bot_invitation, but capture sends the workspace in the payload —
+        # bind the session to it so the transcript is visible in the workspace + identity can resolve.
+        # Best-effort: a bad/non-existent workspace (e.g. a dev label) must NOT 500 the finalize (the FK
+        # to `workspaces` would otherwise raise). In production the record UI passes a real workspace_id.
+        payload_ws = meeting.get("workspace_id")
+        if payload_ws:
+            try:
+                transcripts_store.set_workspace(
+                    session_id=session_id,
+                    workspace_id=payload_ws,
+                    owner_user_id=None,           # no inviting user for an in-person walk-up
+                    visibility="workspace",       # visible to workspace members
+                )
+            except Exception:  # noqa: BLE001 — never block finalize on a bad workspace binding
+                logger.warning("in-person workspace bind to %r failed for %s — session unbound",
+                               payload_ws, native_id)
+        else:
+            logger.warning(
+                "no bot_invitation and no payload workspace for %s/%s — session lands unbound",
+                platform, native_id,
+            )
 
     # 6b. Calendar enrichment (best-effort): if this Meet was auto-recorded
     # from a calendar event, link the transcript to the event and auto-share

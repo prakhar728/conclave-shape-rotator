@@ -42,6 +42,11 @@ def live_segments(native_meeting_id: str) -> list[dict]:
     return sqlite.get_live_segments(native_meeting_id)
 
 
+def clear_live_segments(native_meeting_id: str) -> None:
+    """Drop a meeting's live buffer once it's been materialized into a Session (finalize)."""
+    sqlite.clear_live_segments(native_meeting_id)
+
+
 def load_session(session_id: str) -> Optional[Session]:
     row = sqlite.get_transcript_session(session_id)
     return _row_to_session(row) if row else None
