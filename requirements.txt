@@ -30,3 +30,8 @@ SQLAlchemy>=2.0
 email-validator>=2.0
 resend>=2.4
 redis>=5.0  # capture-segment stream consumer (P1 streaming ingest)
+# Transcript-refine candidate detection — OOV word-highlighting + tag dropdowns.
+# Were dev-only; must be in the image or detection silently no-ops in the container.
+spacy>=3.8,<3.9
+wordfreq>=3.1
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
