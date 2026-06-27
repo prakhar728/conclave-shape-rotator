@@ -45,6 +45,29 @@ export default function MeetingPage({
   const [me, setMe] = useState<MeResponse | null>(null);
   const [meeting, setMeeting] = useState<MeetingView | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  // A freshly-recorded in-person meeting lands here while the background finalize runs (DiariZen
+  // authoritative re-diarization → VFTE names → enrichment). The diart transcript is shown immediately;
+  // we poll until the summary appears (the backend's own `is_processing = not summary` signal) and bump
+  // `reloadKey` so the TranscriptPanel re-fetches — swapping diart for the authoritative transcript.
+  const processing = Boolean(meeting && !meeting.summary);
+  useEffect(() => {
+    if (!processing) return;
+    let n = 0;
+    const iv = setInterval(async () => {
+      n += 1;
+      try {
+        const m = await meetingsApi.get(id);
+        setMeeting(m);
+        setReloadKey((k) => k + 1);
+        if (m.summary || n >= 45) clearInterval(iv); // stop when enriched, or after ~3 min
+      } catch {
+        if (n >= 45) clearInterval(iv);
+      }
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [processing, id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -114,6 +137,16 @@ export default function MeetingPage({
           </p>
         </div>
 
+        {processing ? (
+          <div className="mb-8 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+            <span className="size-2 animate-pulse rounded-full bg-primary" />
+            <p className="text-xs text-muted-foreground">
+              Post-processing — showing the live diart transcript. The final re-diarized transcript,
+              speaker names, and summary will appear here automatically when ready.
+            </p>
+          </div>
+        ) : null}
+
         <SignalGroup
           title="Action items"
           signals={meeting.signals_by_kind.action_items}
@@ -175,6 +208,7 @@ export default function MeetingPage({
               canView={meeting.can_view_transcript}
               workspaceId={meeting.workspace_id ?? null}
               canTag={Boolean(meeting.is_owner)}
+              reloadKey={reloadKey}
             />
           </div>
         ) : null}

@@ -37,11 +37,15 @@ export function TranscriptPanel({
   canView,
   workspaceId = null,
   canTag = false,
+  reloadKey = 0,
 }: {
   sessionId: string;
   canView: boolean;
   workspaceId?: string | null;
   canTag?: boolean;
+  // Bump to force a re-fetch — the meeting page increments this while post-processing so the diart
+  // preview swaps to DiariZen's authoritative transcript (+ names) when the background finalize lands.
+  reloadKey?: number;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [openIdx, setOpenIdx] = useState<number | null>(null);
@@ -77,7 +81,7 @@ export function TranscriptPanel({
   useEffect(() => {
     if (!canView) return;
     return load();
-  }, [canView, load]);
+  }, [canView, load, reloadKey]);
 
   const taggable = Boolean(canTag && workspaceId);
 
