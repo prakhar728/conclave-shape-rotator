@@ -107,7 +107,7 @@ def test_enrich_failure_recoverable(spies, monkeypatch):  # G-8 (parallel: draft
 def test_all_ingest_paths_route_through_choke_point():  # G-10 / N1
     api_dir = pathlib.Path(routes.__file__).parent
     for fname in (
-        "webhooks_recato.py", "upload_routes.py", "record_routes.py", "bot_routes.py",
+        "webhooks_capture.py", "upload_routes.py", "record_routes.py", "bot_routes.py",
     ):
         text = (api_dir / fname).read_text()
         assert "_enrich_in_background" in text, (
