@@ -52,6 +52,8 @@ export default function MeetingPage({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const { draft, setDraft, preparing } = useRefineDraft(id);
+  // True while a post-approve re-derive is running (insights regenerating in the bg).
+  const [regenerating, setRegenerating] = useState(false);
 
   // A freshly-recorded in-person meeting lands here while the background finalize runs (DiariZen
   // authoritative re-diarization → VFTE names → enrichment). The diart transcript is shown immediately;
@@ -74,6 +76,33 @@ export default function MeetingPage({
     }, 4000);
     return () => clearInterval(iv);
   }, [processing, id]);
+
+  // After approve, the summary + signals re-derive from the corrected v2 in the
+  // background. Poll the draft until its `insights_stale` clears (the re-derive's
+  // done-signal), then pull the fresh meeting signals — surfacing an "Updating
+  // insights" sign throughout.
+  useEffect(() => {
+    if (!regenerating) return;
+    let n = 0;
+    const iv = setInterval(async () => {
+      n += 1;
+      try {
+        const d = await refine.getDraft(id);
+        setDraft(d);
+        if (!d.insights_stale || n >= 45) {
+          clearInterval(iv);
+          setMeeting(await meetingsApi.get(id));
+          setRegenerating(false);
+        }
+      } catch {
+        if (n >= 45) {
+          clearInterval(iv);
+          setRegenerating(false);
+        }
+      }
+    }, 4000);
+    return () => clearInterval(iv);
+  }, [regenerating, id, setDraft]);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,6 +179,18 @@ export default function MeetingPage({
             <p className="text-xs text-muted-foreground">
               Post-processing — showing the live diart transcript. The final re-diarized transcript,
               speaker names, and summary will appear here automatically when ready.
+            </p>
+          </div>
+        ) : null}
+
+        {regenerating ? (
+          <div
+            data-testid="insights-updating"
+            className="mb-8 flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3"
+          >
+            <span className="size-2 animate-pulse rounded-full bg-blue-500" />
+            <p className="text-xs text-muted-foreground">
+              Updating insights — re-deriving the summary &amp; signals from your approved corrections…
             </p>
           </div>
         ) : null}
@@ -233,6 +274,7 @@ export default function MeetingPage({
                   sessionId={id}
                   onApproved={() => {
                     refine.getDraft(id).then(setDraft).catch(() => {});
+                    setRegenerating(true); // show "Updating insights" until the re-derive lands
                   }}
                 />
               </>
