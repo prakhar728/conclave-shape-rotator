@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { meetings as meetingsApi, refine, type V2Annotation, type V2Draft } from "@/lib/api";
@@ -46,6 +46,10 @@ export function RefineEditor({
   // (edit + tag) — so tagging is available on every word (including ones you just
   // edited), and nothing clutters the text until a word is actually selected.
   const [selected, setSelected] = useState<{ seg: number; tok: number } | null>(null);
+  const [editValue, setEditValue] = useState<string>("");
+  const [vocabHints, setVocabHints] = useState<string[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [assigning, setAssigning] = useState<number | null>(null);
   const [speakerNames, setSpeakerNames] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -121,6 +125,18 @@ export function RefineEditor({
 
   const tokenText = (seg: number, tok: number): string =>
     draft.segments.find((s) => s.segment_id === seg)?.tokens[tok] ?? "";
+
+  // Reset edit value and hints when a new token is selected.
+  // Placed after tokenText so the closure captures the current definition.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (selected) {
+      setEditValue(tokenText(selected.seg, selected.tok));
+    }
+    setVocabHints([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected]);
 
   // Commit a (possibly edited) token and optionally tag it in ONE sequential write, so
   // the tag sees the edited text and neither clobbers the other. Local-first: update
@@ -240,37 +256,72 @@ export function RefineEditor({
                     <span
                       key={i}
                       data-token-edit={i}
-                      className="mx-0.5 inline-flex items-baseline gap-1 rounded bg-accent/50 px-1 align-baseline ring-1 ring-foreground/30"
+                      className="relative mx-0.5 inline-flex items-baseline gap-1 rounded bg-accent/50 px-1 align-baseline ring-1 ring-foreground/30"
                       onBlur={(e) => {
                         // Only close/commit when focus leaves the WHOLE panel — moving
-                        // between the input and the tag menu must not dismiss it.
+                        // between the input, the tag menu, and the vocab dropdown must not dismiss it.
                         if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
-                        commitToken(
-                          seg.segment_id,
-                          i,
-                          e.currentTarget.querySelector("input")?.value ?? tok,
-                        );
+                        commitToken(seg.segment_id, i, editValue);
                       }}
                     >
                       <input
+                        ref={inputRef}
                         autoFocus
-                        defaultValue={tok}
+                        value={editValue}
                         data-token-input={i}
                         className="w-24 rounded border border-foreground px-1 text-sm"
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setEditValue(val);
+                          if (debounceRef.current) clearTimeout(debounceRef.current);
+                          if (!val) {
+                            setVocabHints([]);
+                            return;
+                          }
+                          debounceRef.current = setTimeout(() => {
+                            refine
+                              .vocabSuggestions(val)
+                              .then((r) => setVocabHints(r.vocab.slice(0, 8)))
+                              .catch(() => {});
+                          }, 150);
+                        }}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter")
-                            commitToken(seg.segment_id, i, (e.target as HTMLInputElement).value);
+                          if (e.key === "Enter") commitToken(seg.segment_id, i, editValue);
                           if (e.key === "Escape") setSelected(null);
                         }}
                       />
+                      {vocabHints.length > 0 && (
+                        <span
+                          data-testid="vocab-suggestions"
+                          className="absolute left-0 top-full z-10 mt-0.5 flex flex-col rounded border border-border bg-background shadow"
+                        >
+                          {vocabHints.map((term) => (
+                            <button
+                              key={term}
+                              data-vocab-option={term}
+                              type="button"
+                              className="px-2 py-0.5 text-left text-sm hover:bg-accent"
+                              onMouseDown={(e) => {
+                                // Prevent blur from firing before click is handled.
+                                e.preventDefault();
+                              }}
+                              onClick={() => {
+                                setEditValue(term);
+                                setVocabHints([]);
+                                inputRef.current?.focus();
+                              }}
+                            >
+                              {term}
+                            </button>
+                          ))}
+                        </span>
+                      )}
                       <select
                         data-tag={`${seg.segment_id}-${i}`}
                         defaultValue=""
                         onChange={(e) => {
                           if (!e.target.value) return;
-                          const val =
-                            e.currentTarget.parentElement?.querySelector("input")?.value ?? tok;
-                          commitToken(seg.segment_id, i, val, e.target.value);
+                          commitToken(seg.segment_id, i, editValue, e.target.value);
                         }}
                         className="rounded border border-dashed border-border text-[10px] text-muted-foreground"
                       >

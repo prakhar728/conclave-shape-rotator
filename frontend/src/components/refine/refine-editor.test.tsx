@@ -118,6 +118,75 @@ describe("RefineEditor", () => {
     expect(onChange).toHaveBeenCalled();
   });
 
+  // ── INCREMENT 1 (#6) — vocab autocomplete ────────────────────────────────
+
+  it("#6: typing in the edit input calls vocabSuggestions and shows the dropdown", async () => {
+    vi.spyOn(refine, "vocabSuggestions").mockResolvedValue({ vocab: ["Kubernetes", "Kustomize"] });
+    renderEditor();
+    // Select the "DStack" token (segment 0, token 3)
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Kub" } });
+    // After debounce + async resolution the dropdown must appear
+    await waitFor(() =>
+      expect(refine.vocabSuggestions).toHaveBeenCalledWith("Kub"),
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId("vocab-suggestions")).toBeInTheDocument(),
+    );
+    expect(document.querySelector('[data-vocab-option="Kubernetes"]')).toBeTruthy();
+    expect(document.querySelector('[data-vocab-option="Kustomize"]')).toBeTruthy();
+  });
+
+  it("#6: clicking a vocab option sets the input value to that term", async () => {
+    vi.spyOn(refine, "vocabSuggestions").mockResolvedValue({ vocab: ["Kubernetes", "Kustomize"] });
+    renderEditor();
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Kub" } });
+    await waitFor(() =>
+      expect(screen.getByTestId("vocab-suggestions")).toBeInTheDocument(),
+    );
+    fireEvent.click(document.querySelector('[data-vocab-option="Kubernetes"]')!);
+    await waitFor(() =>
+      expect((document.querySelector('[data-token-input="3"]') as HTMLInputElement).value).toBe(
+        "Kubernetes",
+      ),
+    );
+  });
+
+  it("#6: empty input does NOT call vocabSuggestions", async () => {
+    const vocabSpy = vi.spyOn(refine, "vocabSuggestions").mockResolvedValue({ vocab: [] });
+    renderEditor();
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    // Type something then clear
+    fireEvent.change(input, { target: { value: "Ku" } });
+    fireEvent.change(input, { target: { value: "" } });
+    // Give enough time for any debounce to fire
+    await new Promise((r) => setTimeout(r, 300));
+    // Only the non-empty call would have fired — here we cleared so no call expected
+    // (if the "Ku" debounce didn't fire yet it's suppressed by the clear)
+    // We assert it was NOT called with an empty string
+    expect(vocabSpy).not.toHaveBeenCalledWith("");
+  });
+
+  it("#6 regression: editing + Enter still commits via editToken", async () => {
+    const editSpy = vi
+      .spyOn(refine, "editToken")
+      .mockResolvedValue({ decision: "text", v2: makeDraft() });
+    vi.spyOn(refine, "vocabSuggestions").mockResolvedValue({ vocab: [] });
+    const { onChange } = renderEditor();
+    fireEvent.click(screen.getByText("DStack"));
+    const input = document.querySelector('[data-token-input="3"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Dstack" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(editSpy).toHaveBeenCalledWith("s1", 0, 3, "Dstack"));
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   it("surfaces a save error and re-syncs from the server when a write fails (A)", async () => {
     vi.spyOn(refine, "editToken").mockRejectedValue(new Error("500"));
     const getSpy = vi.spyOn(refine, "getDraft").mockResolvedValue(makeDraft());
