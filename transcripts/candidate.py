@@ -40,15 +40,14 @@ OOV_ZIPF_MAX = 1.0
 _NER_TYPE_MAP: dict[str, str] = {
     "PERSON": "person",
     "ORG": "affiliation",
-    "GPE": "affiliation",
-    "LOC": "affiliation",
-    "FAC": "affiliation",
-    "NORP": "affiliation",
     "PRODUCT": "tech",
     "WORK_OF_ART": "topic",
     "EVENT": "topic",
     "LAW": "topic",
-    "LANGUAGE": "topic",
+    # Intentionally NOT mapped — these surface as nonsensical entity types in meeting
+    # transcripts: NORP (nationalities/groups, e.g. "American"), LANGUAGE ("Arabic"),
+    # and the geographic labels GPE/LOC/FAC (e.g. spaCy tags "Hindi" as GPE — a place
+    # isn't an "affiliation"). Only ORG carries the affiliation type.
 }
 
 

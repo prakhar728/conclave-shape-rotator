@@ -35,6 +35,16 @@ def test_well_known_and_common_not_flagged():  # updated for NER pre-typing (#7)
     assert google_span.type == "affiliation"
 
 
+def test_geo_language_norp_not_typed():  # #7 tuning — drop LANGUAGE/NORP/GPE/LOC/FAC
+    from transcripts.candidate import spacy_pass
+    # spaCy tags American=NORP, Arabic=LANGUAGE, Hindi=GPE — all dropped from the type
+    # map. They may still be OOV-highlighted (untyped), but must carry NO entity type.
+    _, spans = spacy_pass("the American team switched from Arabic to Hindi")
+    typed = {s.surface: s.type for s in spans if s.type is not None}
+    for noise in ("American", "Arabic", "Hindi"):
+        assert noise not in typed, f"{noise} should have no entity type (got {typed.get(noise)})"
+
+
 def test_span_anchor_aligns_with_token():
     from transcripts.candidate import spacy_pass
     tokens, spans = spacy_pass("we use the DStack protocol")
