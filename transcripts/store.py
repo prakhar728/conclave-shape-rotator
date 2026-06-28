@@ -352,12 +352,22 @@ def load_v2(session_id: str) -> Optional[TranscriptV2]:
     )
 
 
-def _require_draft(session_id: str) -> TranscriptV2:
+def _editable_v2(session_id: str) -> TranscriptV2:
+    """Return the v2 in an editable state.
+
+    - Raises KeyError if no v2 exists for this session.
+    - If the v2 is approved, re-opens it to draft (status="draft",
+      approved_at=None, insights_stale=True) so the caller can edit freely;
+      the caller's subsequent _save_v2 persists the re-open.
+    - If already a draft, returns as-is.
+    """
     v2 = load_v2(session_id)
     if v2 is None:
         raise KeyError(session_id)
     if v2.status == "approved":
-        raise ValueError(f"v2 for {session_id} is approved; edits are not allowed")
+        v2.status = "draft"
+        v2.approved_at = None
+        v2.insights_stale = True
     return v2
 
 
@@ -365,8 +375,9 @@ def edit_token(
     session_id: str, segment_id: int, token_idx: int, new_text: str
 ) -> TranscriptV2:
     """Replace a single token's text (count unchanged → token indices, and thus
-    all other span anchors, stay valid). Rejected once approved."""
-    v2 = _require_draft(session_id)
+    all other span anchors, stay valid). If the v2 is approved, editing
+    re-opens it to draft (insights become stale; owner re-approves to re-derive)."""
+    v2 = _editable_v2(session_id)
     v2.segments[segment_id].tokens[token_idx] = new_text
     v2.insights_stale = True
     _save_v2(v2)
@@ -375,7 +386,7 @@ def edit_token(
 
 def add_annotation(session_id: str, annotation: CandidateAnnotation) -> TranscriptV2:
     """Append a candidate-span annotation (entity/type/new-vocab) to the draft."""
-    v2 = _require_draft(session_id)
+    v2 = _editable_v2(session_id)
     v2.annotations.append(annotation)
     v2.insights_stale = True
     _save_v2(v2)
@@ -385,7 +396,7 @@ def add_annotation(session_id: str, annotation: CandidateAnnotation) -> Transcri
 def assign_speaker(session_id: str, segment_id: int, name: Optional[str]) -> TranscriptV2:
     """Set the confirmed speaker name on a v2 segment. The raw diarizer label
     (the immutable join key) is never touched."""
-    v2 = _require_draft(session_id)
+    v2 = _editable_v2(session_id)
     v2.segments[segment_id].speaker_name = name
     v2.insights_stale = True
     _save_v2(v2)

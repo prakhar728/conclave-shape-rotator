@@ -113,10 +113,11 @@ def test_full_refine_roundtrip_over_http(client):
     print("FINAL :", final["status"], "(frozen)\n")
     assert final["status"] == "approved"
 
-    # case 8: edits after approve are blocked
-    blocked = client.post(f"/transcripts/sessions/{sid}/v2/edit-token",
-                          json={"segment_id": 0, "token_idx": 0, "new_text": "nope"})
-    assert blocked.status_code == 409, blocked.text
+    # case 8: edits after approve re-open to draft (Q3 — reverses V2-3 frozen contract)
+    reopened = client.post(f"/transcripts/sessions/{sid}/v2/edit-token",
+                           json={"segment_id": 0, "token_idx": 0, "new_text": "nope"})
+    assert reopened.status_code == 200, reopened.text
+    assert reopened.json()["v2"]["status"] == "draft"
 
     # case 6: raw transcript was never mutated
     raw = store.load_session(sid).raw_diarization[0].text

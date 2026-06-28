@@ -105,10 +105,11 @@ def test_full_smoke(client, monkeypatch):
     assert client.post(f"/transcripts/sessions/{sid}/approve").status_code == 200
     final = client.get(f"/transcripts/sessions/{sid}/v2").json()
     assert final["status"] == "approved"
-    # edit after approve is blocked
-    assert client.post(f"/transcripts/sessions/{sid}/v2/edit-token",
-                       json={"segment_id": 0, "token_idx": 0, "new_text": "no"}).status_code == 409
-    print(f"[5✓] approved + frozen (post-approve edit → 409)")
+    # edit after approve re-opens to draft (Q3 — reverses V2-3 frozen contract)
+    reopen_r = client.post(f"/transcripts/sessions/{sid}/v2/edit-token",
+                           json={"segment_id": 0, "token_idx": 0, "new_text": "no"})
+    assert reopen_r.status_code == 200
+    print(f"[5✓] approved + re-opened on edit (post-approve edit → 200 draft)")
 
     # --- 6) re-upload the SAME transcript → duplicate, not a fresh editor ---
     dup = client.post(f"/api/workspaces/{ws}/transcripts",

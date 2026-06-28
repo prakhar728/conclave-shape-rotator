@@ -884,8 +884,6 @@ def _v2_write(session_id: str, fn):
         return fn()
     except KeyError:
         raise HTTPException(status_code=404, detail="no v2 draft for this session")
-    except ValueError:
-        raise HTTPException(status_code=409, detail="v2 already approved; edits not allowed")
     except IndexError:
         raise HTTPException(status_code=400, detail="segment/token index out of range")
 

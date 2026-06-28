@@ -105,12 +105,13 @@ def test_non_owner_cannot_edit(client):
     assert r.status_code == 403
 
 
-def test_edit_after_approve_conflicts(client):
+def test_edit_after_approve_reopens(client):
     u = _login(client); ws = _wsid(client); _draft("e5", ws, u["id"])
     store.approve_v2("e5")
     r = client.post("/transcripts/sessions/e5/v2/edit-token",
                     json={"segment_id": 0, "token_idx": 0, "new_text": "x"})
-    assert r.status_code == 409
+    assert r.status_code == 200
+    assert r.json()["v2"]["status"] == "draft"
 
 
 def test_edit_missing_v2_404(client):

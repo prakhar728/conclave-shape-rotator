@@ -162,12 +162,21 @@ def test_span_anchors_survive_length_change():  # V2-9
     assert v2.segments[0].tokens[a.span.token_start] == "protocol"
 
 
-def test_edit_after_approve_rejected():  # §4 contract / V2-3
+def test_edit_after_approve_reopens_to_draft():  # §4 contract / Q3 — reverses V2-3
     _saved("v2-x")
     store.create_v2_draft("v2-x")
     store.approve_v2("v2-x")
-    with pytest.raises(ValueError):
-        store.edit_token("v2-x", 0, 0, "nope")
+    # editing an approved v2 re-opens it to draft instead of raising
+    v2 = store.edit_token("v2-x", 0, 0, "nope")
+    assert v2.status == "draft"
+    assert v2.approved_at is None
+    assert v2.insights_stale is True
+    # the edited token is persisted
+    reloaded = store.load_v2("v2-x")
+    assert reloaded.segments[0].tokens[0] == "nope"
+    # owner can re-approve after editing
+    reapproved = store.approve_v2("v2-x")
+    assert reapproved.status == "approved"
 
 
 def test_v2_cascades_on_session_delete():  # FK ON DELETE CASCADE (0015)
