@@ -3,6 +3,40 @@
 Loose threads surfaced during local testing. None block the editor working; each is
 deferred with the user's awareness. Newest first.
 
+## Short clip → separate text-attribution from voiceprint identity (OPEN — design, 2026-06-28)
+When a speaker's total speech is under FPM's `MIN_SEGMENT_SEC` (1.0s), `/v1/identify-spans`
+mints NO voiceprint → `resolved_speakers[label]` has no `voiceprint_id` → `tag-speaker`
+returns a raw **404 "no voiceprint for label"** (e.g. `speaker0` in a short test clip).
+Two problems:
+1. **UX:** the editor still offers the name+email form for that speaker, so it dead-ends in
+   a bare 404. Show a real reason ("not enough audio to identify this speaker") or
+   hide/disable the voiceprint path for voiceprint-less labels.
+2. **Product (the real ask):** DECOUPLE two things —
+   - **text attribution** (who said these lines in THIS transcript): always allowed via
+     name+email, and **the confirmation email should still go out** so the person can
+     confirm/deny attribution of what they said.
+   - **voiceprint identity** (a reusable embedding that re-recognizes them later): only
+     when the clip is long/clean enough — a short/poor clip must NOT pollute the centroid,
+     so do NOT anchor the binding to that embedding.
+   → a short-clip tag = a consented, email-confirmed text attribution + notify, but **no
+   voiceprint anchor**.
+**Decision needed:** model an attribution NOT backed by a voiceprint (name+email keyed by
+the meeting's label, email-confirmed), distinct from the voiceprint binding. Today the only
+binding path requires a voiceprint (`/v1/propose` 404s without one).
+
+## Tagging on /refine sends no confirmation email right now (NOTED — local config, not a bug)
+A name+email tag in the editor did NOT email the tagged person. Two compounding reasons,
+both from the local FPM run, NOT the code:
+1. We ran FPM with **`FPM_CONSENT_AUTOCONFIRM=1`** → `/v1/propose` takes the **confirmed**
+   branch (`FPM/main.py:373-377`) and returns immediately; the notify call lives only in
+   the **pending** branch (`:378-385`), so autoconfirm skips it. (A **self-tag** —
+   proposed_email == your login email — also auto-confirms, same skip.)
+2. Even on the pending path, `notify_identification` is **log-only by default**:
+   `FPM_NOTIFY_EMAIL` is off + no SMTP configured (`FPM/notify.py:34-36`) → it logs, no send.
+**To send a real mail locally:** `FPM_CONSENT_AUTOCONFIRM=0` + `FPM_NOTIFY_EMAIL=1` +
+`FPM_SMTP_HOST`/`FPM_NOTIFY_FROM`/`FPM_SMTP_USER`/`FPM_SMTP_PASS`, and tag SOMEONE ELSE (not
+a self-tag). The email IS the consent step — ties into the attribution item above.
+
 ## B — DB setup footguns (PARKED 2026-06-22)
 Two traps that only bite a **fresh or custom-path** DB (not the default DB):
 1. **Two env vars for the same DB.** `alembic/env.py:19` reads **`CONCLAVE_DB_URL`**;
