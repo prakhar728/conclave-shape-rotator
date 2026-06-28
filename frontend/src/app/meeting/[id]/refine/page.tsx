@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
@@ -17,7 +17,7 @@ import { RefineActions } from "@/components/refine/refine-actions";
 import { RefineDebugPanel } from "@/components/refine/refine-debug-panel";
 import { RefineEditor } from "@/components/refine/refine-editor";
 import { useRefineDraft } from "@/components/refine/use-refine-draft";
-import { refine } from "@/lib/api";
+import { meetings, refine, type MeetingView } from "@/lib/api";
 
 export default function RefinePage({
   params,
@@ -29,6 +29,12 @@ export default function RefinePage({
   const debug = searchParams.get("debug") === "1";
   const { me, draft, setDraft, error, preparing } = useRefineDraft(id);
   const [refreshKey, setRefreshKey] = useState(0);
+  // Meeting context for owner-only speaker tagging (workspace + ownership +
+  // already-resolved identities). Best-effort: tagging just stays hidden if it fails.
+  const [meeting, setMeeting] = useState<MeetingView | null>(null);
+  useEffect(() => {
+    meetings.get(id).then(setMeeting).catch(() => {});
+  }, [id]);
 
   if (error) {
     return (
@@ -57,6 +63,9 @@ export default function RefinePage({
         <RefineEditor
           draft={draft}
           sessionId={id}
+          workspaceId={meeting?.workspace_id ?? null}
+          canTag={Boolean(meeting?.is_owner)}
+          resolvedSpeakers={meeting?.resolved_speakers}
           onDraftChange={(d) => {
             setDraft(d);
             setRefreshKey((k) => k + 1); // nudge the debug panel to re-read the server

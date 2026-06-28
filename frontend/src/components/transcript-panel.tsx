@@ -24,6 +24,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { ApiError, meetings as meetingsApi, type TranscriptSegment } from "@/lib/api";
 
 type LoadState =
@@ -214,7 +215,7 @@ function Body({
               ) : null}
             </p>
             {taggable && openIdx === idx ? (
-              <TagForm
+              <SpeakerTagForm
                 label={seg.speaker}
                 busy={busy}
                 err={err}
@@ -227,59 +228,6 @@ function Body({
         );
       })}
     </ol>
-  );
-}
-
-function TagForm({
-  label,
-  busy,
-  err,
-  onCancel,
-  onSubmit,
-}: {
-  label: string;
-  busy: boolean;
-  err: string | null;
-  onCancel: () => void;
-  onSubmit: (label: string, name: string, email: string) => void;
-}) {
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const ready = name.trim() !== "" && email.trim() !== "";
-  return (
-    <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border p-2">
-      <span className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">
-        Who is {label}?
-      </span>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="Full name"
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
-      />
-      <input
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="email@company.com"
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
-      />
-      <button
-        type="button"
-        disabled={!ready || busy}
-        onClick={() => onSubmit(label, name.trim(), email.trim())}
-        className="rounded bg-foreground px-3 py-1 text-xs font-semibold text-background disabled:opacity-40"
-      >
-        {busy ? "Tagging…" : "Tag"}
-      </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="rounded border border-border px-3 py-1 text-xs"
-      >
-        Cancel
-      </button>
-      {err ? <span className="text-[0.7rem] text-destructive">{err}</span> : null}
-    </div>
   );
 }
 

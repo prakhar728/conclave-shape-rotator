@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-import { refine, type V2Annotation, type V2Draft } from "@/lib/api";
+import { SpeakerTagForm } from "@/components/speaker-tag-form";
+import { meetings as meetingsApi, refine, type V2Annotation, type V2Draft } from "@/lib/api";
 
 import { tokenTint } from "./token-tints";
 
@@ -25,9 +26,22 @@ type Props = {
   draft: V2Draft;
   sessionId: string;
   onDraftChange: (d: V2Draft) => void;
+  // Owner + workspace → enables the VFTE name+email speaker tagging (same consent
+  // path as the meeting transcript page). `resolvedSpeakers` seeds the label→name
+  // overlay so already-confirmed identities render in the editor.
+  workspaceId?: string | null;
+  canTag?: boolean;
+  resolvedSpeakers?: Record<string, unknown>;
 };
 
-export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
+export function RefineEditor({
+  draft,
+  sessionId,
+  onDraftChange,
+  workspaceId = null,
+  canTag = false,
+  resolvedSpeakers,
+}: Props) {
   // The single SELECTED token. Clicking ANY word selects it and opens an inline panel
   // (edit + tag) — so tagging is available on every word (including ones you just
   // edited), and nothing clutters the text until a word is actually selected.
@@ -35,6 +49,17 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
   const [assigning, setAssigning] = useState<number | null>(null);
   const [speakerNames, setSpeakerNames] = useState<string[]>([]);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // VFTE speaker tagging: label→identity overlay (seeded from the meeting), the
+  // awaiting-confirm map, and the tag form's busy/error — mirrors transcript-panel.
+  const [resolved, setResolved] = useState<Record<string, unknown>>(resolvedSpeakers ?? {});
+  const [pending, setPending] = useState<Record<string, string>>({});
+  const [tagBusy, setTagBusy] = useState(false);
+  const [tagErr, setTagErr] = useState<string | null>(null);
+  const taggable = Boolean(canTag && workspaceId);
+
+  useEffect(() => {
+    if (resolvedSpeakers) setResolved(resolvedSpeakers);
+  }, [resolvedSpeakers]);
 
   useEffect(() => {
     let cancelled = false;
@@ -59,6 +84,40 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
     );
     refine.getDraft(sessionId).then(onDraftChange).catch(() => {});
   };
+
+  // Display name precedence: a manual v2 assignment wins; else the VFTE-resolved
+  // identity for this label; else the raw diarizer label.
+  const displayName = (seg: V2Draft["segments"][number]): string =>
+    seg.speaker_name ??
+    (resolved[seg.speaker_label] as { name?: string } | undefined)?.name ??
+    seg.speaker_label;
+
+  // Tag a whole speaker (by label) with name+email → VFTE consent binding. Confirmed
+  // self/dev tags flip the name in place; tagging someone else is "pending" until they
+  // confirm on their consent dashboard — identical to the meeting transcript page.
+  async function submitTag(label: string, name: string, email: string) {
+    if (!workspaceId) return;
+    setTagBusy(true);
+    setTagErr(null);
+    try {
+      const res = await meetingsApi.tagSpeaker(workspaceId, sessionId, { label, name, email });
+      setAssigning(null);
+      if (res.status === "confirmed") {
+        setResolved((r) => ({ ...r, [label]: { ...(r[label] as object), name: res.name ?? name } }));
+        setPending((p) => {
+          const next = { ...p };
+          delete next[label];
+          return next;
+        });
+      } else {
+        setPending((p) => ({ ...p, [label]: name }));
+      }
+    } catch (e) {
+      setTagErr(e instanceof Error ? e.message : "Tag failed");
+    } finally {
+      setTagBusy(false);
+    }
+  }
 
   const tokenText = (seg: number, tok: number): string =>
     draft.segments.find((s) => s.segment_id === seg)?.tokens[tok] ?? "";
@@ -127,30 +186,48 @@ export function RefineEditor({ draft, sessionId, onDraftChange }: Props) {
         const states = statesForSegment(draft.annotations, seg.segment_id);
         return (
           <div key={seg.segment_id} className="rounded-md border border-border p-3">
-            <button
-              data-speaker={seg.segment_id}
-              onClick={() => setAssigning(assigning === seg.segment_id ? null : seg.segment_id)}
-              className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground underline-offset-2 hover:underline"
-            >
-              {seg.speaker_name ?? seg.speaker_label}
-            </button>
+            <div className="mb-1 flex items-center gap-2">
+              <button
+                data-speaker={seg.segment_id}
+                onClick={() => setAssigning(assigning === seg.segment_id ? null : seg.segment_id)}
+                className="text-xs font-bold uppercase tracking-wide text-muted-foreground underline-offset-2 hover:underline"
+              >
+                {displayName(seg)}
+              </button>
+              {pending[seg.speaker_label] ? (
+                <span className="rounded-full border border-amber-500/60 px-2 py-0.5 text-[0.65rem] text-amber-600">
+                  pending: {pending[seg.speaker_label]}
+                </span>
+              ) : null}
+            </div>
 
             {assigning === seg.segment_id && (
-              <div data-testid={`speaker-assign-${seg.segment_id}`} className="mb-2 flex flex-wrap gap-1">
-                {speakerNames.length === 0 ? (
-                  <span className="text-xs text-muted-foreground">No suggestions yet</span>
-                ) : (
-                  speakerNames.map((name) => (
-                    <button
-                      key={name}
-                      data-speaker-chip={name}
-                      onClick={() => assignSpeaker(seg.segment_id, name)}
-                      className="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent"
-                    >
-                      {name}
-                    </button>
-                  ))
-                )}
+              <div data-testid={`speaker-assign-${seg.segment_id}`} className="mb-2 space-y-2">
+                <div className="flex flex-wrap gap-1">
+                  {speakerNames.length === 0 ? (
+                    <span className="text-xs text-muted-foreground">No suggestions yet</span>
+                  ) : (
+                    speakerNames.map((name) => (
+                      <button
+                        key={name}
+                        data-speaker-chip={name}
+                        onClick={() => assignSpeaker(seg.segment_id, name)}
+                        className="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                      >
+                        {name}
+                      </button>
+                    ))
+                  )}
+                </div>
+                {taggable ? (
+                  <SpeakerTagForm
+                    label={seg.speaker_label}
+                    busy={tagBusy}
+                    err={tagErr}
+                    onCancel={() => setAssigning(null)}
+                    onSubmit={submitTag}
+                  />
+                ) : null}
               </div>
             )}
 
