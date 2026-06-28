@@ -147,7 +147,7 @@ describe("MeetingPage — editor vs transcript panel", () => {
     vi.spyOn(meetings, "get").mockResolvedValue(
       baseMeeting({ is_owner: true }) as never
     );
-    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "not found"));
+    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "not found", "not found"));
     mockUseRefineDraft.mockReturnValue({
       draft: null,
       setDraft: vi.fn(),
