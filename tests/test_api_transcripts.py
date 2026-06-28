@@ -31,9 +31,23 @@ from transcripts.prompts import ENRICH_PROMPT_VERSION
 
 @pytest.fixture()
 def tmp_db(tmp_path, monkeypatch):
-    monkeypatch.setattr(sqlite, "_DB_PATH", str(tmp_path / "t.db"))
+    db_path = str(tmp_path / "t.db")
+    monkeypatch.setattr(sqlite, "_DB_PATH", db_path)
     monkeypatch.setattr(sqlite, "_conn", None)
     sqlite.init_db()
+    # Run Alembic migrations so transcript_v2 and other Phase-1 tables exist.
+    try:
+        import os as _os
+        from alembic.config import Config as _AlembicConfig
+        from alembic import command as _alembic_command
+        import pathlib
+        _cfg = _AlembicConfig(str(pathlib.Path(__file__).parent.parent / "alembic.ini"))
+        monkeypatch.setenv("CONCLAVE_DB_URL", f"sqlite:///{db_path}")
+        _alembic_command.upgrade(_cfg, "head")
+        # Alembic opens its own connection; reset so subsequent calls use our patched path.
+        monkeypatch.setattr(sqlite, "_conn", None)
+    except Exception:
+        pass  # alembic optional; tests not needing v2 still pass
     yield
     monkeypatch.setattr(sqlite, "_conn", None)
 
@@ -284,7 +298,7 @@ def test_to_card_and_to_view_helpers_omit_raw_directly():
         assert _SECRET_RAW_TEXT not in blob
 
 
-def test_to_transcript_helper_deliberately_carries_raw():
+def test_to_transcript_helper_deliberately_carries_raw(tmp_db):
     """Counterpart to the guard above: the transcript projection is the ONE
     shape that intentionally serves verbatim text. The endpoint gates WHO
     reaches it (see test_can_see_transcript.py); this just pins the shape."""
@@ -301,6 +315,7 @@ def test_to_transcript_helper_deliberately_carries_raw():
         ),
         derived=Derived(summary="ok"),
     )
+    store.save_session(sess)
     payload = to_transcript(sess)
     assert payload["segment_count"] == 1
     seg = payload["segments"][0]
@@ -308,7 +323,7 @@ def test_to_transcript_helper_deliberately_carries_raw():
     assert seg["speaker_name"] == "Shaw Walters"  # resolved from metadata
 
 
-def test_transcript_projects_voiceprint_name_without_rewriting_label():
+def test_transcript_projects_voiceprint_name_without_rewriting_label(tmp_db):
     """Branch B (P2): a C3 resolved_speakers entry {voiceprint_id, name,
     confidence} projects its name at read time, while the display label stays
     the immutable join key on both the raw segment and Signal.said_by."""
@@ -330,6 +345,7 @@ def test_transcript_projects_voiceprint_name_without_rewriting_label():
             signals=[Signal(kind="action_item", text="ship", said_by=["Speaker 3"])],
         ),
     )
+    store.save_session(sess)
     seg = to_transcript(sess)["segments"][0]
     assert seg["speaker"] == "Speaker 3"        # immutable join key — never rewritten
     assert seg["speaker_name"] == "Carla"       # voiceprint_id → name, projected at read time
@@ -338,6 +354,43 @@ def test_transcript_projects_voiceprint_name_without_rewriting_label():
     view = to_view(sess)
     assert view["signals"][0]["said_by"] == ["Speaker 3"]
     assert sess.derived.signals[0].said_by == ["Speaker 3"]
+
+
+def test_transcript_serves_approved_v2_not_raw(tmp_db):
+    """An APPROVED v2 draft → GET /transcript returns corrected v2 text, not raw."""
+    from api.transcripts_routes import to_transcript
+    from transcripts.store import _save_v2, approve_v2
+    from transcripts.models import TranscriptV2, V2Segment
+
+    sess = Session(
+        session_id="v2test",
+        raw_diarization=[
+            RawSegment(speaker="Shaw", text=_SECRET_RAW_TEXT, start=1.0, end=2.0)
+        ],
+        metadata=SessionMetadata(date="2026-05-20", source="otter"),
+        derived=Derived(summary="ok"),
+    )
+    store.save_session(sess)
+
+    v2 = TranscriptV2(
+        session_id="v2test",
+        segments=[
+            V2Segment(
+                segment_id=0,
+                speaker_label="Shaw",
+                speaker_name="Shaw Walters",
+                tokens=["CORRECTED-V2-TEXT"],
+            )
+        ],
+    )
+    _save_v2(v2)
+    approve_v2("v2test")
+
+    payload = to_transcript(sess)
+    assert payload["segment_count"] == 1
+    seg = payload["segments"][0]
+    assert seg["text"] == "CORRECTED-V2-TEXT"
+    assert _SECRET_RAW_TEXT not in seg["text"]
 
 
 def test_transcript_endpoint_requires_auth(client):

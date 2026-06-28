@@ -319,13 +319,18 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
 
 
 def to_transcript(session: Session) -> dict:
-    """Raw-transcript projection — the ONLY shape that carries verbatim text.
+    """Raw-transcript projection — serves approved v2 when present, else raw.
 
     Served exclusively by `GET /sessions/{id}/transcript`, behind
     `can_see_transcript`. Each segment maps the diarizer's anonymous label to a
     resolved display name when speaker resolution ran, so the UI can show real
     names without the caller re-joining `resolved_speakers`.
+
+    When an approved v2 draft exists, the corrected tokens + speaker names are
+    returned instead of the immutable raw diarization — so an editor-approved
+    transcript immediately surfaces on the meeting page without a re-upload.
     """
+    from transcripts import store as _tstore
     speakers = session.metadata.resolved_speakers or {}
 
     def _name_for(label: str) -> Optional[str]:
@@ -334,15 +339,16 @@ def to_transcript(session: Session) -> dict:
             return meta.get("name")
         return None
 
+    raw_segs = _tstore.v2_segments_or_raw(session.session_id)
     segments = [
         {
-            "speaker": seg.speaker,
-            "speaker_name": _name_for(seg.speaker),
-            "text": seg.text,
-            "start": seg.start,
-            "end": seg.end,
+            "speaker": seg["speaker"],
+            "speaker_name": _name_for(seg["speaker"]),
+            "text": seg["text"],
+            "start": seg.get("start"),
+            "end": seg.get("end"),
         }
-        for seg in (session.raw_diarization or [])
+        for seg in raw_segs
     ]
     return {
         "session_id": session.session_id,

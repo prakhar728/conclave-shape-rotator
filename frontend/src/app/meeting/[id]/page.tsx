@@ -25,13 +25,16 @@ import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
 import { InsightsPlaceholder } from "@/components/refine/insights-placeholder";
-import { RefineLink } from "@/components/refine/refine-link";
+import { RefineActions } from "@/components/refine/refine-actions";
+import { RefineEditor } from "@/components/refine/refine-editor";
+import { useRefineDraft } from "@/components/refine/use-refine-draft";
 import { RetentionControl } from "@/components/retention-control";
 import { TranscriptPanel } from "@/components/transcript-panel";
 import {
   ApiError,
   auth,
   meetings as meetingsApi,
+  refine,
   type MeResponse,
   type MeetingView,
   type Signal,
@@ -48,6 +51,7 @@ export default function MeetingPage({
   const [meeting, setMeeting] = useState<MeetingView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const { draft, setDraft, preparing } = useRefineDraft(id);
 
   // A freshly-recorded in-person meeting lands here while the background finalize runs (DiariZen
   // authoritative re-diarization → VFTE names → enrichment). The diart transcript is shown immediately;
@@ -137,11 +141,7 @@ export default function MeetingPage({
           <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
           </p>
-          {meeting.is_owner ? (
-            <div className="mt-5">
-              <RefineLink sessionId={meeting.session_id} />
-            </div>
-          ) : null}
+
         </div>
 
         {processing ? (
@@ -216,13 +216,35 @@ export default function MeetingPage({
 
         {meeting.can_view_transcript !== undefined ? (
           <div className="mt-10 border-t border-border pt-8">
-            <TranscriptPanel
-              sessionId={meeting.session_id}
-              canView={meeting.can_view_transcript}
-              workspaceId={meeting.workspace_id ?? null}
-              canTag={Boolean(meeting.is_owner)}
-              reloadKey={reloadKey}
-            />
+            {meeting.is_owner && draft && !preparing ? (
+              <>
+                <RefineEditor
+                  draft={draft}
+                  sessionId={id}
+                  workspaceId={meeting.workspace_id ?? null}
+                  canTag={Boolean(meeting.is_owner)}
+                  resolvedSpeakers={meeting.resolved_speakers}
+                  onDraftChange={(d) => {
+                    setDraft(d);
+                  }}
+                />
+                <RefineActions
+                  draft={draft}
+                  sessionId={id}
+                  onApproved={() => {
+                    refine.getDraft(id).then(setDraft).catch(() => {});
+                  }}
+                />
+              </>
+            ) : (
+              <TranscriptPanel
+                sessionId={meeting.session_id}
+                canView={meeting.can_view_transcript}
+                workspaceId={meeting.workspace_id ?? null}
+                canTag={Boolean(meeting.is_owner)}
+                reloadKey={reloadKey}
+              />
+            )}
           </div>
         ) : null}
       </main>
