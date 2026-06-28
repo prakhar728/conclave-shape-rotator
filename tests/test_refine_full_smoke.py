@@ -71,10 +71,18 @@ def test_full_smoke(client, monkeypatch):
     # --- 3) ASSERT the spec: truly-novel terms tagged oov; well-known/common NOT ---
     for novel in ("Recato", "DStack"):  # zipf==0 → flagged
         assert novel in surfaces, f"expected '{novel}' flagged"
-    for skip in ("Google", "roadmap", "protocol", "Friday", "Sounds", "good", "meeting"):
-        assert skip not in surfaces, f"'{skip}' should NOT be flagged (well-known/common)"
-    assert all(state == "oov" for _, state in anns)
-    print(f"[3✓] OOV-only: flagged={sorted(surfaces)} — Google/roadmap/Friday/common NOT flagged")
+    # Common, non-entity words stay UNflagged. (Friday = DATE, not in the #7 NER
+    # type map → also unflagged.)
+    for skip in ("roadmap", "protocol", "Friday", "Sounds", "good", "meeting"):
+        assert skip not in surfaces, f"'{skip}' should NOT be flagged (common, non-entity)"
+    # #7 NER pre-typing: well-known ENTITIES are now flagged WITH a type even though
+    # they're not OOV (Google → affiliation, source=nlp). Novel OOV terms keep state=oov;
+    # NER-only entities are state=candidate.
+    assert "Google" in surfaces, "Google should be NER-flagged as an entity"
+    google = next(a for a in v2["annotations"] if a["surface"] == "Google")
+    assert google["type"] == "affiliation" and google["source"] == "nlp"
+    assert all(state == "oov" for surf, state in anns if surf in ("Recato", "DStack"))
+    print(f"[3✓] OOV (Recato/DStack) + NER-typed (Google→affiliation); common words NOT flagged")
     # Surfaced finding: pure OOV (zipf==0) is VERY conservative — rare tech acronyms
     # that DO appear in corpora are skipped (a tuning decision for the user).
     print(f"[3!] 'TDX' flagged? {'TDX' in surfaces}  (zipf=1.22 → pure-OOV skips it)")
@@ -109,7 +117,10 @@ def test_full_smoke(client, monkeypatch):
     reopen_r = client.post(f"/transcripts/sessions/{sid}/v2/edit-token",
                            json={"segment_id": 0, "token_idx": 0, "new_text": "no"})
     assert reopen_r.status_code == 200
-    print(f"[5✓] approved + re-opened on edit (post-approve edit → 200 draft)")
+    assert client.get(f"/transcripts/sessions/{sid}/v2").json()["status"] == "draft"  # re-opened
+    # re-approve to close the Q3 cycle (and so the duplicate check below sees approved)
+    assert client.post(f"/transcripts/sessions/{sid}/approve").status_code == 200
+    print(f"[5✓] post-approve edit → 200 re-opened to draft, then re-approved (Q3 cycle)")
 
     # --- 6) re-upload the SAME transcript → duplicate, not a fresh editor ---
     dup = client.post(f"/api/workspaces/{ws}/transcripts",
