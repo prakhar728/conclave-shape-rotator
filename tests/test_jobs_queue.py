@@ -116,3 +116,27 @@ def test_unknown_job_type_is_skipped_and_acked(r):
     assert result == "skipped"
     assert r.xpending(STREAM, GROUP)["pending"] == 0
     assert queue.get_job(job_id, client=r)["status"] == "done"
+
+
+# ── read_new blocking semantics: BLOCK 0 must mean non-blocking, NOT block-forever ──────────────
+# fakeredis can't model real Redis's "BLOCK 0 = wait forever", so the route-level 204 test can't
+# catch a regression here. Assert the contract directly against the redis-py call: block_ms<=0 → None.
+class _SpyClient:
+    def __init__(self):
+        self.kwargs = None
+
+    def xreadgroup(self, group, consumer, streams, count=None, block=None):
+        self.kwargs = {"count": count, "block": block}
+        return []
+
+
+def test_read_new_nonblocking_when_block_ms_zero():
+    spy = _SpyClient()
+    queue.read_new("s", "g", "c", client=spy, count=4, block_ms=0)
+    assert spy.kwargs["block"] is None, "BLOCK 0 would hang the sync claim route forever"
+
+
+def test_read_new_passes_through_positive_block_ms():
+    spy = _SpyClient()
+    queue.read_new("s", "g", "c", client=spy, count=4, block_ms=2000)
+    assert spy.kwargs["block"] == 2000
