@@ -841,8 +841,11 @@ async def approve_session_v2(session_id: str, request: Request) -> dict:
     # large transcript / LLM call blocks the response and the editor shows a false
     # "Couldn't approve" even though the approval already persisted.
     if _approve_v2_now(session_id):
-        import asyncio
-        asyncio.create_task(asyncio.to_thread(_post_approve_build, session_id))
+        # Task #16: the heavy re-derive + KB build runs as a durable `regen` job when the queue is on
+        # (so #9's post-approve re-derive — and #13's tag-regen — ride a restart-proof substrate),
+        # else the same in-process background task as before.
+        from connectors.jobs import enqueue
+        enqueue.regen(session_id)
     return {"session_id": session_id, "status": "approved"}
 
 
@@ -995,6 +998,24 @@ def _build_kb(session_id: str) -> None:
 
     # Phase 3.5b — KB extraction is itself behind ENABLE_KB_PIPELINE (default
     # off): extract_session() is a no-op unless the flag is set.
+    try:
+        from transcripts.kb_extract import extract_session
+        extract_session(session_id)
+    except Exception:
+        logger.exception("kb extraction failed for session %s", session_id)
+
+
+def _kb_index_only(session_id: str) -> None:
+    """KB index stage in isolation — the `kb_index` job handler (Task #16). Failure-swallowing."""
+    try:
+        from transcripts.kb_pipeline import index_session
+        index_session(session_id)
+    except Exception:
+        logger.exception("kb indexing failed for session %s", session_id)
+
+
+def _kb_extract_only(session_id: str) -> None:
+    """KB extract stage in isolation — the `kb_extract` job handler (Task #16). Failure-swallowing."""
     try:
         from transcripts.kb_extract import extract_session
         extract_session(session_id)
@@ -1356,7 +1377,9 @@ async def ingest_transcript(
     session = _build_and_save_session(payload.model_dump())
 
     # ── 4. Kick async enrichment, return 202 immediately ──────────────────
-    asyncio.create_task(asyncio.to_thread(_enrich_in_background, session.session_id))
+    # Durable via the job queue when on (Task #16), else the same in-process background task.
+    from connectors.jobs import enqueue
+    enqueue.enrich(session.session_id)
 
     return {"session_id": session.session_id, "status": "accepted"}
 

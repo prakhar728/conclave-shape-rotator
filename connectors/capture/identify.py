@@ -41,23 +41,16 @@ def _assemble_audio(native_meeting_id: str) -> bytes:
     return b"".join(p.read_bytes() for p in chunks)
 
 
-def _overlapping_identity(start, end, fpm_segs: list[dict]) -> dict | None:
-    """The FPM segment with the most time-overlap that carries a voiceprint_id."""
-    best, best_overlap = None, 0.0
-    s0, e0 = float(start or 0), float(end or 0)
-    for fs in fpm_segs:
-        if not fs.get("voiceprint_id"):
-            continue
-        overlap = min(e0, float(fs.get("end") or 0)) - max(s0, float(fs.get("start") or 0))
-        if overlap > best_overlap:
-            best_overlap, best = overlap, fs
-    return best
+async def identify_meeting(session_id: str, native_meeting_id: str,
+                           workspace_id: str | None) -> bool:
+    """Run post-meeting identity and merge it onto the transcript's resolved_speakers.
 
-
-async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id: str | None) -> None:
-    """Run post-meeting identity and merge it onto the transcript's resolved_speakers."""
+    Returns True iff identity was DEFERRED to a durable diarize job (Task #16, queue mode): the
+    caller must then NOT run enrichment inline — the result callback chains it after reconcile.
+    Returns False when identity ran inline (blocking/legacy) or there was nothing to do.
+    """
     if not workspace_id:
-        return
+        return False
     from infra import fpm_consent
     from transcripts import store
 
@@ -68,14 +61,29 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
     # workspace, or tagging looks in a different VFTE workspace and never finds the voiceprint.
     vfte_ws = settings.fpm_workspace_for(workspace_id)
 
+    # Task #16: queue mode — instead of the blocking diarize_recording call below, SUBMIT a durable
+    # diarize job and return. A DiariZen worker fetches the audio by reference, runs the engine, and
+    # POSTs /api/diarize/result, where identify-spans + reconcile run (the exact logic below, shared via
+    # connectors.capture.reconcile). Audio-by-reference, so we don't assemble bytes here. Falls through
+    # to the blocking path if the submit can't be made (no Redis / unconfigured) — never lose a finalize.
+    if settings.inperson_via_capture and settings.diarize_jobs == "queue":
+        from connectors.capture.diarize_jobs import submit_diarize_job
+        try:
+            if submit_diarize_job(session_id=session_id, native_meeting_id=native_meeting_id,
+                                  workspace_id=workspace_id):
+                return True
+        except Exception:  # noqa: BLE001 — never block finalize on a queue hiccup
+            logger.exception("identify_meeting: diarize job submit failed for %s — running inline",
+                             session_id)
+
     audio = _assemble_audio(native_meeting_id)
     if not audio:
         logger.info("identify_meeting: no stored audio for %s — skipping", native_meeting_id)
-        return
+        return False
 
     session = store.load_session(session_id)
     if session is None:
-        return
+        return False
 
     try:
         if settings.inperson_via_capture:
@@ -94,64 +102,20 @@ async def identify_meeting(session_id: str, native_meeting_id: str, workspace_id
                 src = "diart(raw_diarization)"
             if not spans:
                 logger.info("identify_meeting: no %s spans for %s — skipping", src, native_meeting_id)
-                return
+                return False
             fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, spans, tag="offline")
         else:
             # Legacy rollback path: FPM re-diarizes + identifies the recording.
             fpm_segs = await fpm_consent.diarize_audio(vfte_ws, audio, tag="offline")
     except Exception as e:  # noqa: BLE001 — best-effort, never block finalize
         logger.warning("identify_meeting: identity for %s failed: %s", session_id, e)
-        return
+        return False
     if not fpm_segs:
-        return
+        return False
 
-    # AUTHORITATIVE path (DiariZen): the live diart transcript was a preview; now re-attribute each ASR
-    # text segment to DiariZen's overlapping speaker and OVERWRITE the stored transcript (the one
-    # sanctioned write-once exception). resolved_speakers is keyed by DiariZen's labels.
-    if settings.inperson_via_capture and settings.diarize_url:
-        from transcripts.models import RawSegment
-        new_raw = []
-        for seg in session.raw_diarization:                # diart's ASR text + timestamps
-            ident = _overlapping_identity(seg.start, seg.end, fpm_segs)
-            label = (ident or {}).get("local_speaker") or seg.speaker   # DiariZen label (fallback diart)
-            new_raw.append(RawSegment(speaker=label, text=seg.text, start=seg.start, end=seg.end))
-        resolved = dict(session.metadata.resolved_speakers or {})
-        for fs in fpm_segs:                                # names keyed by DiariZen label
-            ls = fs.get("local_speaker")
-            if ls and fs.get("voiceprint_id"):
-                entry = dict(resolved.get(ls) or {})
-                entry["voiceprint_id"] = fs["voiceprint_id"]
-                if fs.get("name") and not entry.get("name"):  # don't clobber a manual tag
-                    entry["name"] = fs["name"]
-                resolved[ls] = entry
-        store.set_raw_diarization(session_id, [s.model_dump() for s in new_raw])
-        md = session.metadata.model_copy(update={"resolved_speakers": resolved})
-        store.set_metadata(session_id, md)
-        logger.info("identify_meeting: %s — AUTHORITATIVE DiariZen overwrite (%d segs, %d speakers)",
-                    session_id, len(new_raw), len(resolved))
-        return
-
-    # FALLBACK (diart-only / legacy): vote identity onto the existing diart labels; do NOT overwrite raw.
-    votes: dict[str, dict[str, tuple[int, str | None]]] = {}
-    for seg in session.raw_diarization:
-        ident = _overlapping_identity(seg.start, seg.end, fpm_segs)
-        if not ident:
-            continue
-        vp = ident["voiceprint_id"]
-        per_label = votes.setdefault(seg.speaker, {})
-        count, _name = per_label.get(vp, (0, ident.get("name")))
-        per_label[vp] = (count + 1, ident.get("name"))
-    if not votes:
-        return
-
-    resolved = dict(session.metadata.resolved_speakers or {})
-    for label, vmap in votes.items():
-        vp, (_count, name) = max(vmap.items(), key=lambda kv: kv[1][0])
-        entry = dict(resolved.get(label) or {})
-        entry["voiceprint_id"] = vp
-        if name and not entry.get("name"):  # don't clobber a manual tag
-            entry["name"] = name
-        resolved[label] = entry
-    md = session.metadata.model_copy(update={"resolved_speakers": resolved})
-    store.set_metadata(session_id, md)
-    logger.info("identify_meeting: %s — identified %d label(s)", session_id, len(votes))
+    # The two-branch merge (authoritative overwrite vs diart-fallback vote) moved UNCHANGED into
+    # connectors.capture.reconcile so the durable job-queue result callback shares the exact logic.
+    from connectors.capture.reconcile import reconcile_identity
+    authoritative = bool(settings.inperson_via_capture and settings.diarize_url)
+    reconcile_identity(session_id, session, fpm_segs, authoritative=authoritative)
+    return False

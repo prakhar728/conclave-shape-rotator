@@ -195,11 +195,17 @@ async def on_meeting_completed(
         ws_for_identity = (inv["workspace_id"] if inv else None) or meeting.get("workspace_id")
 
         async def _identify_then_enrich():
+            # Task #16: identify_meeting SUBMITS a durable diarize job when the queue is on and returns
+            # True ("deferred") — a DiariZen worker runs the engine and POSTs /api/diarize/result, which
+            # reconciles identity THEN chains enrichment (preserving the identity-before-enrich order).
+            # When it runs inline (blocking/legacy path) it returns False and we enrich here as before.
+            deferred = False
             try:
-                await identify_meeting(session_id, native_id, ws_for_identity)
+                deferred = await identify_meeting(session_id, native_id, ws_for_identity)
             except Exception:  # noqa: BLE001 — identity is best-effort
                 logger.exception("post-meeting identity failed for %s", session_id)
-            await asyncio.to_thread(_enrich_in_background, session_id)
+            if not deferred:
+                await asyncio.to_thread(_enrich_in_background, session_id)
 
         asyncio.create_task(_identify_then_enrich())
 

@@ -272,7 +272,7 @@ def _ingest_from_capture_now(
     flushing its final segments. Without retries, we'd fetch an empty
     transcript and bail. Empirical: takes ~3-6 seconds post-stop for the
     transcript to be complete on Recato's side."""
-    import os, threading, time
+    import os, time
 
     from connectors.capture.translator import to_canonical
     from transcripts import store as transcripts_store
@@ -311,7 +311,7 @@ def _ingest_from_capture_now(
 
     existing = transcripts_store.load_session(canonical["meeting"]["external_id"])
     if existing is None:
-        from api.transcripts_routes import _build_and_save_session, _enrich_in_background
+        from api.transcripts_routes import _build_and_save_session
         sess = _build_and_save_session(canonical)
         stored_session_id = sess.session_id
         transcripts_store.set_workspace(
@@ -330,12 +330,11 @@ def _ingest_from_capture_now(
         except Exception:  # noqa: BLE001 — intent is optional grounding
             logger.exception("post-stop ingest: set raw_intent failed for %s", sess.session_id)
         logger.info("post-stop ingest: saved + bound %s, kicking enrichment", sess.session_id)
-        # Sync context (the route isn't async), so use a plain thread.
-        # _enrich_in_background is itself sync; the webhook handler wraps it
-        # in asyncio.to_thread only because that handler is async.
-        threading.Thread(
-            target=_enrich_in_background, args=(sess.session_id,), daemon=True
-        ).start()
+        # Durable via the job queue when on (Task #16), else a daemon thread (sync context — the
+        # route isn't async). enqueue.enrich is the single gated choke point all ingest paths funnel
+        # through; it routes to _enrich_in_background either in-process or via the conclave_jobs worker.
+        from connectors.jobs import enqueue
+        enqueue.enrich(sess.session_id)
     else:
         # Already exists (e.g. webhook beat us). Just ensure workspace bind.
         stored_session_id = existing.session_id

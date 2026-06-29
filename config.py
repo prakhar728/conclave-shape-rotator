@@ -111,6 +111,24 @@ class Settings(BaseSettings):
     diarize_url: str = ""                  # env CONCLAVE_DIARIZE_URL (e.g. http://localhost:8086)
     diarize_token: str = ""                # env CONCLAVE_DIARIZE_TOKEN (the service's bearer)
 
+    # ── Task #16: durable job queue ──────────────────────────────────────────────────────────
+    # Finalize-time diarization delivery: "blocking" (default, legacy in-process call — instant
+    # rollback) vs "queue" (submit a durable Redis-Streams job; a DiariZen worker pulls it, runs
+    # the engine, and POSTs the result back to /api/diarize/result). Submit needs a Redis (REDIS_URL).
+    diarize_jobs: str = "blocking"         # env CONCLAVE_DIARIZE_JOBS (queue | blocking)
+    # Where the DiariZen worker POSTs `{job_id, segments}` (Conclave's own externally-reachable URL).
+    diarize_result_callback_url: str = ""  # env CONCLAVE_DIARIZE_RESULT_CALLBACK_URL
+    # Optional bearer the worker presents to POST /api/diarize/result (best-effort auth, like the webhook).
+    diarize_result_token: str = ""         # env CONCLAVE_DIARIZE_RESULT_TOKEN
+    # Audio-by-reference: base URL the worker GETs the recording from (audio_ref = base + native_id),
+    # served by GET /api/diarize/audio/{native_id} over CONCLAVE_AUDIO_DIR, gated by audio_fetch_token.
+    audio_fetch_url: str = ""              # env CONCLAVE_AUDIO_FETCH_URL
+    audio_fetch_token: str = ""            # env CONCLAVE_AUDIO_FETCH_TOKEN (service token for workers)
+    # Master switch for the Conclave-internal job queue (enrich / regen / KB index+extract).
+    # Off (default) → those run in-process as before; on → submitted to `conclave_jobs`, drained by
+    # the in-process worker (durable across restarts). Needs REDIS_URL.
+    jobs_queue: bool = False               # env CONCLAVE_JOBS_QUEUE
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
 
     def record_meeting_enabled(self) -> bool:

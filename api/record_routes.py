@@ -340,9 +340,10 @@ async def record_meeting(
         visibility="owner-only",
     )
 
-    from api.transcripts_routes import _enrich_in_background
+    # Durable via the job queue when on (Task #16), else the same in-process background task.
+    from connectors.jobs import enqueue
 
-    asyncio.create_task(asyncio.to_thread(_enrich_in_background, session.session_id))
+    enqueue.enrich(session.session_id)
 
     return {"session_id": session.session_id, "is_processing": True,
             "speakers": sorted({m["speaker"] for m in merged}), "status": "accepted"}

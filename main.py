@@ -19,6 +19,7 @@ import storage
 from api.routes import router
 from infra import scheduler
 from connectors.capture import consumer as capture_consumer
+from connectors.jobs import worker as jobs_worker
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +55,11 @@ _apply_migrations()
 async def lifespan(app: FastAPI):
     await scheduler.start_all()
     capture_consumer.start()   # P1: consume the capture segment stream (no-op if REDIS_URL unset)
+    jobs_worker.start()        # Task #16: drain the conclave_jobs queue (no-op if REDIS_URL unset)
     try:
         yield
     finally:
+        await jobs_worker.stop()
         await capture_consumer.stop()
         await scheduler.stop_all()
 
@@ -135,6 +138,10 @@ app.include_router(users_router)
 # translate → bind → enrich). The bot POSTs `meeting-completed` here.
 from api.webhooks_capture import router as capture_webhook_router
 app.include_router(capture_webhook_router)
+
+# Task #16: diarization job-queue surface — worker audio fetch + result callback + job status.
+from api.diarize_result_routes import router as diarize_result_router
+app.include_router(diarize_result_router)
 
 # Phase 2.10: magic-link lookup + consume (public; no auth required to
 # resolve the token, but the meeting itself is still permission-gated).

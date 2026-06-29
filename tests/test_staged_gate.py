@@ -110,8 +110,12 @@ def test_all_ingest_paths_route_through_choke_point():  # G-10 / N1
         "webhooks_capture.py", "upload_routes.py", "record_routes.py", "bot_routes.py",
     ):
         text = (api_dir / fname).read_text()
-        assert "_enrich_in_background" in text, (
-            f"{fname} must funnel through the gated choke point"
+        # The gated choke point. Task #16 introduced `enqueue.enrich` as a durable seam in FRONT of
+        # `_enrich_in_background` (it routes to the SAME function — in-process or via the conclave_jobs
+        # worker — so the refinement gate inside `_enrich_in_background` is still honored in both modes).
+        # Either marker counts; what must NOT happen is bypassing the gate by calling the build stages.
+        assert ("_enrich_in_background" in text) or ("enqueue.enrich" in text), (
+            f"{fname} must funnel through the gated choke point (_enrich_in_background / enqueue.enrich)"
         )
         # ...and must NOT call the gated build stages directly (would bypass the
         # gate while keeping the choke-point call). Audit-strengthened G-10.

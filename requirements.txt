@@ -29,7 +29,8 @@ sqlite-vec>=0.1.0  # vector ext loaded by storage/vec.py; required by migrations
 SQLAlchemy>=2.0
 email-validator>=2.0
 resend>=2.4
-redis>=5.0  # capture-segment stream consumer (P1 streaming ingest)
+redis>=5.0  # capture-segment stream consumer (P1 streaming ingest) + durable job queue (Task #16)
+fakeredis>=2.20  # in-memory Redis for the GPU-independent job-queue tests (Task #16)
 # Transcript-refine candidate detection — OOV word-highlighting + tag dropdowns.
 # Were dev-only; must be in the image or detection silently no-ops in the container.
 spacy>=3.8,<3.9

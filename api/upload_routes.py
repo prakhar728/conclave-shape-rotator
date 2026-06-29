@@ -148,10 +148,11 @@ async def upload_transcript(
     )
 
     # Same background chain as the webhook: enrichment → magic links →
-    # KB indexing → flagged extraction. Internals untouched.
-    from api.transcripts_routes import _enrich_in_background
+    # KB indexing → flagged extraction. Durable via the job queue when on (Task #16),
+    # else the same in-process background task as before.
+    from connectors.jobs import enqueue
 
-    asyncio.create_task(asyncio.to_thread(_enrich_in_background, session.session_id))
+    enqueue.enrich(session.session_id)
 
     return {"session_id": session.session_id, "is_processing": True,
             "status": "accepted"}
