@@ -254,6 +254,10 @@ export type MeetingView = {
   // Why insights may be empty: "ok" (ran), "skipped" (no LLM / disabled),
   // "failed" (LLM unreachable), "pending" (still processing).
   enrichment_status?: string;
+  // Provenance: non-null iff a per-meeting intent (calendar description or
+  // manual focus) was compiled into the insights' <meeting_intent> grounding.
+  // Surfaced so a silent break in calendar → insights is visible to the user.
+  meeting_intent_version?: string | null;
   entities: Entity[];
   // Phase 2.12 — present only when the viewer is authenticated AND the
   // session has a workspace_id. Lets the frontend gate owner controls

@@ -178,3 +178,36 @@ describe("MeetingPage — editor vs transcript panel", () => {
     expect(screen.queryByTestId("refine-editor")).toBeNull();
   });
 });
+
+describe("MeetingPage — agenda-grounded provenance signal", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    pushMock.mockReset();
+    mockUseRefineDraft.mockReset();
+    mockUseRefineDraft.mockReturnValue({
+      draft: baseDraft(),
+      setDraft: vi.fn(),
+      preparing: false,
+    });
+    vi.spyOn(auth, "me").mockResolvedValue(ME as never);
+    vi.spyOn(refine, "getDraft").mockResolvedValue(baseDraft() as never);
+  });
+
+  it("shows the agenda-grounded badge when meeting_intent_version is set", async () => {
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: false, meeting_intent_version: "a1b2c3d4" }) as never
+    );
+    renderPage();
+    const badge = await screen.findByTestId("agenda-grounded");
+    expect(badge).toHaveAttribute("title", "meeting_intent_version: a1b2c3d4");
+  });
+
+  it("hides the badge when meeting_intent_version is null (no grounding)", async () => {
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: false, meeting_intent_version: null }) as never
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/Meeting summary/)).toBeInTheDocument());
+    expect(screen.queryByTestId("agenda-grounded")).toBeNull();
+  });
+});

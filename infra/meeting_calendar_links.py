@@ -111,6 +111,13 @@ def link_completed_meeting(
             if sess is not None and not (sess.metadata.raw_intent or "").strip():
                 sess.metadata.raw_intent = desc
                 _store.set_metadata(session_id, sess.metadata)
+                # Observable signal: makes a silent break in the calendar →
+                # intent → insights chain visible in the logs (the desc was
+                # found AND applied as grounding for this session).
+                logger.info(
+                    "link: applied calendar description as meeting intent for %s "
+                    "(meet=%s, %d chars)", session_id, meet_code, len(desc),
+                )
         except Exception:  # noqa: BLE001 — intent is optional grounding
             logger.exception("link: failed to set raw_intent for %s", session_id)
 

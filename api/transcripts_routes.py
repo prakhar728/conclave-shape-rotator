@@ -219,6 +219,10 @@ def to_card(session: Session) -> dict:
         "model_id": m.model_id,
         "enrich_prompt_version": m.enrich_prompt_version,
         "team_context_version": m.team_context_version,
+        # Provenance: non-null iff a per-meeting intent (calendar description or
+        # manual focus) was compiled into the <meeting_intent> grounding block.
+        # Surfaced so a silent break in calendar → insights is visible on the UI.
+        "meeting_intent_version": m.meeting_intent_version,
         "resolved_speakers": dict(m.resolved_speakers or {}),
         "topics": list(d.topics or []),
         "participants": list(participants) if participants else None,

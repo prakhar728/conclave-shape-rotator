@@ -171,6 +171,17 @@ export default function MeetingPage({
             {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
           </p>
 
+          {meeting.meeting_intent_version ? (
+            <p
+              data-testid="agenda-grounded"
+              title={`meeting_intent_version: ${meeting.meeting_intent_version}`}
+              className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary"
+            >
+              <span className="size-1.5 rounded-full bg-primary" />
+              Agenda-grounded insights
+            </p>
+          ) : null}
+
         </div>
 
         {processing ? (
