@@ -93,13 +93,42 @@ services:
       # the dstack-sdk DstackClient (dstack-os 0.5.x).
       - /var/run/dstack.sock:/var/run/dstack.sock
 
-  # Task #16 — co-located Redis (durable job queue). Private to this CVM's compose network; NO
-  # published port (Conclave is the only client; the remote GPU worker reaches the queue over the
-  # HTTP-fronted claim endpoints, not Redis). In-RAM only: jobs are short-lived + re-submittable, and
-  # the recording (the only thing that matters) is on the conclave-data volume, not in Redis.
+  # Task #16 — co-located Redis (durable job queue + the in-person live-segment stream). Private to
+  # this CVM's compose network; NO published port. Two clients reach it over the compose net (conclave
+  # + capture-diart below); the REMOTE GPU DiariZen worker reaches the queue over the HTTP-fronted claim
+  # endpoints, not Redis. In-RAM only: jobs are short-lived + re-submittable, and the recording (the
+  # only durable artifact) lives on the conclave-data volume, not in Redis.
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: always
+
+  # In-person LIVE diarization (the WS the browser Record button streams to). CO-LOCATED here because
+  # it publishes segments straight onto the SAME Redis Conclave consumes (`transcription_segments`) —
+  # a separate CVM couldn't reach this CVM's private Redis. It diarizes live (diart) + ASRs each span
+  # (NEAR Whisper) and uploads the recording + fires the finalize webhook back to conclave over the
+  # compose net. Its WS port is published so the browser can reach it over WSS via the Phala gateway.
+  # NOTE: diart loads gated pyannote/segmentation-3.0 → it needs HF_TOKEN at RUNTIME (unlike DiariZen).
+  capture-diart:
+    image: prakharojha/capture-diarize-diart:${CAPTURE_DIART_TAG:-v1}
+    command: ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8086"]
+    ports:
+      - "8087:8086"        # browser → wss://<conclave-app-id>-8087.dstack-pha-prod5.phala.network/inperson
+    depends_on:
+      - redis
+    environment:
+      CAPTURE_DIARIZER: diart
+      CAPTURE_DIARIZE_TOKEN: ${CAPTURE_DIARIZE_TOKEN:-}                 # == browser NEXT_PUBLIC_CAPTURE_DIARIZE_TOKEN
+      HF_TOKEN: ${HF_TOKEN:-}                                          # REQUIRED: gated pyannote/segmentation-3.0
+      CAPTURE_REDIS_URL: ${CAPTURE_REDIS_URL:-redis://redis:6379/0}     # publish onto the stream conclave consumes
+      CAPTURE_SEGMENT_STREAM: ${CAPTURE_SEGMENT_STREAM:-transcription_segments}
+      CAPTURE_CONCLAVE_AUDIO_CHUNK_URL: ${CAPTURE_CONCLAVE_AUDIO_CHUNK_URL:-http://conclave:8000/api/capture/audio-chunk}
+      CAPTURE_CONCLAVE_WEBHOOK_URL: ${CAPTURE_CONCLAVE_WEBHOOK_URL:-http://conclave:8000/api/webhooks/capture/meeting-completed}
+      CAPTURE_TRANSCRIPTION_SERVICE_URL: ${CONCLAVE_TRANSCRIPTION_SERVICE_URL:-}
+      CAPTURE_TRANSCRIPTION_SERVICE_TOKEN: ${CONCLAVE_TRANSCRIPTION_SERVICE_TOKEN:-}
+      CAPTURE_TRANSCRIPTION_MODEL: ${CONCLAVE_TRANSCRIPTION_MODEL:-openai/whisper-large-v3}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
     restart: always
 
 volumes:
