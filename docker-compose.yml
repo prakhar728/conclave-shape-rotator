@@ -42,6 +42,9 @@ services:
       CONCLAVE_LLM_BACKEND: ${CONCLAVE_LLM_BACKEND:-}
       CONCLAVE_REDPILL_API_KEY: ${CONCLAVE_REDPILL_API_KEY:-}
       CONCLAVE_REDPILL_MODEL: ${CONCLAVE_REDPILL_MODEL:-}
+      # Live RedPill host is api.redpill.ai (NO hyphen). Default in code is now correct, but keep the
+      # override wired so a host move is a one-line env change, not an image rebuild.
+      CONCLAVE_REDPILL_BASE_URL: ${CONCLAVE_REDPILL_BASE_URL:-}
       CONCLAVE_DISABLE_SCHEDULER: ${CONCLAVE_DISABLE_SCHEDULER:-}
       # Capture integration
       CONCLAVE_INGEST_SECRET_CAPTURE: ${CONCLAVE_INGEST_SECRET_CAPTURE:-}
@@ -63,12 +66,41 @@ services:
       CONCLAVE_TRANSCRIPTION_SERVICE_URL: ${CONCLAVE_TRANSCRIPTION_SERVICE_URL:-}
       CONCLAVE_TRANSCRIPTION_SERVICE_TOKEN: ${CONCLAVE_TRANSCRIPTION_SERVICE_TOKEN:-}
       CONCLAVE_TRANSCRIPTION_MODEL: ${CONCLAVE_TRANSCRIPTION_MODEL:-}
+      # ── Task #16: durable job queue + HTTP-fronted diarize claim (Option A) ──────────────────
+      # Redis is CO-LOCATED below (private to this CVM's compose network). Both the in-process
+      # conclave_jobs worker and the diarize submit/claim path use it. Default points at that service.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      # "queue" → finalize submits a durable diarize job (remote DiariZen worker pulls it over HTTPS);
+      # "blocking" → legacy in-process call. ON for the live #16 round.
+      CONCLAVE_DIARIZE_JOBS: ${CONCLAVE_DIARIZE_JOBS:-blocking}
+      # Master switch for the Conclave-internal queue (enrich/regen/KB) → retry + dead-letter durability.
+      CONCLAVE_JOBS_QUEUE: ${CONCLAVE_JOBS_QUEUE:-}
+      # Where the remote worker POSTs the diarization result (this CVM's own PUBLIC gateway URL).
+      CONCLAVE_DIARIZE_RESULT_CALLBACK_URL: ${CONCLAVE_DIARIZE_RESULT_CALLBACK_URL:-}
+      # Worker service token — gates /result AND the /jobs/claim + /jobs/{id}/heartbeat endpoints.
+      CONCLAVE_DIARIZE_RESULT_TOKEN: ${CONCLAVE_DIARIZE_RESULT_TOKEN:-}
+      # Audio-by-reference: base URL the worker GETs the recording from (this CVM's public gateway).
+      CONCLAVE_AUDIO_FETCH_URL: ${CONCLAVE_AUDIO_FETCH_URL:-}
+      CONCLAVE_AUDIO_FETCH_TOKEN: ${CONCLAVE_AUDIO_FETCH_TOKEN:-}
+      # Where assembled recordings live (on the persistent conclave-data volume) — served to the worker.
+      CONCLAVE_AUDIO_DIR: ${CONCLAVE_AUDIO_DIR:-/app/data/audio}
+    depends_on:
+      - redis
     volumes:
       # Persist SQLite + mock fixtures across CVM restarts.
       - conclave-data:/app/data
       # dstack agent socket — required for real TDX attestation quotes via
       # the dstack-sdk DstackClient (dstack-os 0.5.x).
       - /var/run/dstack.sock:/var/run/dstack.sock
+
+  # Task #16 — co-located Redis (durable job queue). Private to this CVM's compose network; NO
+  # published port (Conclave is the only client; the remote GPU worker reaches the queue over the
+  # HTTP-fronted claim endpoints, not Redis). In-RAM only: jobs are short-lived + re-submittable, and
+  # the recording (the only thing that matters) is on the conclave-data volume, not in Redis.
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    restart: always
 
 volumes:
   conclave-data:

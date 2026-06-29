@@ -156,8 +156,14 @@ def _flatten(resp) -> list[tuple[str, dict]]:
 
 def read_new(stream: str, group: str, consumer: str, *, client, count: int = 16,
              block_ms: int = 2000) -> list[tuple[str, dict]]:
-    """Claim never-before-delivered entries (``>``). Blocks up to ``block_ms``."""
-    resp = client.xreadgroup(group, consumer, {stream: ">"}, count=count, block=block_ms)
+    """Claim never-before-delivered entries (``>``). Blocks up to ``block_ms``.
+
+    ``block_ms <= 0`` (or None) → a NON-blocking read (``block=None``). This matters: Redis treats
+    ``BLOCK 0`` as "block forever", so a synchronous caller (the HTTP claim route) must pass 0 to
+    mean "return immediately if empty", never an infinite wait.
+    """
+    block = None if not block_ms or block_ms <= 0 else block_ms
+    resp = client.xreadgroup(group, consumer, {stream: ">"}, count=count, block=block)
     return _flatten(resp)
 
 
@@ -178,6 +184,17 @@ def reclaim_stale(stream: str, group: str, consumer: str, *, client, count: int 
 
 def ack(stream: str, group: str, msg_id: str, *, client) -> None:
     client.xack(stream, group, msg_id)
+
+
+def touch(stream: str, group: str, consumer: str, msg_id: str, *, client) -> None:
+    """Re-assert ownership of a pending entry, resetting its idle clock (lease keep-alive).
+
+    Used by the HTTP-fronted claim queue (Option A): a remote worker has no Redis, so it can't
+    keep its own claim warm. Its periodic ``POST /jobs/{id}/heartbeat`` lands here → ``XCLAIM``
+    with ``JUSTID`` and ``min_idle_time=0`` re-asserts the entry to ``consumer`` and resets the
+    idle timer, so the server-side reclaimer won't re-offer a job that's still running.
+    """
+    client.xclaim(stream, group, consumer, 0, [msg_id], justid=True)
 
 
 def dead_letter(stream: str, group: str, msg_id: str, fields: dict, job_id: str, *,

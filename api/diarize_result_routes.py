@@ -1,25 +1,39 @@
 """Diarization job-queue HTTP surface (Task #16) — worker↔Conclave seam.
 
-Three routes, mounted under ``/api/diarize``:
+Routes mounted under ``/api/diarize``:
 
   GET  /api/diarize/audio/{native_meeting_id}   audio-by-reference: the worker GETs the meeting's
                                                 recording here (service-token gated, over
                                                 CONCLAVE_AUDIO_DIR). Distinct from #30's user-facing
                                                 signed-URL serving — this is an internal worker fetch.
+  POST /api/diarize/jobs/claim                  HTTP-fronted queue (Option A): a remote worker with no
+                                                Redis claims the next job over :443. Server-side
+                                                reclaim→read, attempt-bump + dead-letter, and stashes
+                                                ``msg_id`` on the job hash so /result can ack it.
+                                                Returns the job or 204 when the queue is empty.
+  POST /api/diarize/jobs/{job_id}/heartbeat     lease keep-alive for a long (~6-min) run — re-asserts
+                                                the pending entry so the reclaimer won't re-offer it.
   POST /api/diarize/result                      the worker POSTs ``{job_id, segments}``; we run VFTE
                                                 identify-spans + the SAME two-branch reconcile that
                                                 `identify_meeting` used (moved unchanged into
-                                                `connectors.capture.reconcile`), then chain enrichment.
-                                                Idempotent — safe to receive more than once.
+                                                `connectors.capture.reconcile`), then chain enrichment,
+                                                then ack the stream entry. Idempotent — safe to receive
+                                                more than once.
   GET  /api/diarize/jobs/{job_id}               status/observability (reads the `jobs:{id}` hash).
+
+The claim/heartbeat pair is what lets the DiariZen worker live on the intermittent GPU box with only
+outbound :443 (no SSH into the CVM, no exposed Redis): Redis stays private on the Conclave CVM, the
+worker is a pure HTTPS client. Both endpoints share the worker service token (``diarize_result_token``).
 
 Best-effort everywhere: a reconcile failure logs and returns; it must never wedge the worker.
 """
 from __future__ import annotations
 
+import json
 import logging
 
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from config import settings
@@ -106,6 +120,16 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
     # Mark reconciled BEFORE chaining enrich so a duplicate callback can't double-enqueue enrichment.
     queue.set_status(job_id, "done", client=client, reconciled="1")
 
+    # HTTP-fronted queue (Option A): the remote worker has no Redis, so the SERVER acks the stream
+    # entry here once the result is in. `msg_id` is stashed on the hash by /jobs/claim; in the
+    # direct-Redis path it's absent (the worker acks itself) → this is a no-op there.
+    msg_id = job.get("msg_id")
+    if msg_id:
+        try:
+            queue.ack(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, msg_id, client=client)
+        except Exception:  # noqa: BLE001 — ack is best-effort; reconcile already succeeded
+            logger.exception("diarize result: ack for job %s (msg %s) failed", job_id, msg_id)
+
     # Identity is now on resolved_speakers → run enrichment (queued or in-process). This preserves the
     # old ordering (identity before enrich) that the in-process `_identify_then_enrich` guaranteed.
     from connectors.jobs import enqueue
@@ -128,6 +152,80 @@ async def post_diarize_result(body: _DiarizeResult,
     status_label = await _reconcile_result(body.job_id, body.segments, body.authoritative,
                                            client=client)
     return {"job_id": body.job_id, "status": status_label}
+
+
+class _ClaimRequest(BaseModel):
+    consumer: str | None = None  # worker-supplied consumer name (for XAUTOCLAIM ownership)
+
+
+# Single server-side consumer name for the HTTP-claim path. Remote workers don't own a Redis
+# identity; the server claims on their behalf under this consumer, and the reclaimer re-offers
+# anything that goes idle (a worker that died mid-job / stopped heart-beating).
+_HTTP_CLAIM_CONSUMER = "http-claim"
+
+
+@router.post("/jobs/claim")
+def claim_diarize_job(body: _ClaimRequest | None = None,
+                      authorization: str | None = Header(default=None)):
+    """Hand the next diarize job to a remote worker over HTTPS (Option A). 204 when empty.
+
+    Order: reclaim a stale pending entry first (a prior claim whose lease expired — crashed or
+    silent worker), else read a brand-new one. Bump attempts and dead-letter past the cap so a
+    poison job can't cycle forever. Stash ``msg_id``+``consumer`` on the job hash so /result can ack.
+    """
+    if not _check_service_token(authorization, settings.diarize_result_token):
+        raise HTTPException(status_code=401, detail="invalid or missing service token")
+    client = queue.get_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="job queue not configured (REDIS_URL unset)")
+
+    consumer = (body.consumer if body else None) or _HTTP_CLAIM_CONSUMER
+    queue.ensure_group(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, client=client)
+
+    batch = queue.reclaim_stale(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, consumer, client=client,
+                                count=1)
+    if not batch:
+        batch = queue.read_new(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, consumer, client=client,
+                               count=1, block_ms=0)
+
+    for msg_id, fields in batch:
+        job_id = fields.get("job_id")
+        if not job_id:  # tombstone / malformed entry — drop it and move on
+            queue.ack(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, msg_id, client=client)
+            continue
+        attempts = queue.incr_attempts(job_id, client=client)
+        if attempts > queue.max_attempts():
+            logger.warning("diarize claim: job %s exceeded %d attempts — dead-lettering",
+                           job_id, queue.max_attempts())
+            queue.dead_letter(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, msg_id, fields, job_id,
+                              client=client, error="max attempts exceeded")
+            continue
+        queue.set_status(job_id, "processing", client=client, msg_id=msg_id, consumer=consumer)
+        try:
+            payload = json.loads(fields.get("payload") or "{}")
+        except ValueError:
+            payload = {}
+        return {"job_id": job_id, "msg_id": msg_id, "type": fields.get("type", "diarize"),
+                "payload": payload}
+    return Response(status_code=204)
+
+
+@router.post("/jobs/{job_id}/heartbeat")
+def heartbeat_diarize_job(job_id: str, authorization: str | None = Header(default=None)) -> dict:
+    """Keep a claimed job's lease warm during a long run (re-asserts the pending entry)."""
+    if not _check_service_token(authorization, settings.diarize_result_token):
+        raise HTTPException(status_code=401, detail="invalid or missing service token")
+    client = queue.get_client()
+    if client is None:
+        raise HTTPException(status_code=503, detail="job queue not configured (REDIS_URL unset)")
+    job = queue.get_job(job_id, client=client)
+    if job is None:
+        raise HTTPException(status_code=404, detail="unknown job")
+    msg_id = job.get("msg_id")
+    consumer = job.get("consumer") or _HTTP_CLAIM_CONSUMER
+    if msg_id:
+        queue.touch(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP, consumer, msg_id, client=client)
+    return {"job_id": job_id, "status": job.get("status"), "ok": bool(msg_id)}
 
 
 @router.get("/jobs/{job_id}")
