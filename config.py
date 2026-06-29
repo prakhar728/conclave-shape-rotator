@@ -129,6 +129,23 @@ class Settings(BaseSettings):
     # the in-process worker (durable across restarts). Needs REDIS_URL.
     jobs_queue: bool = False               # env CONCLAVE_JOBS_QUEUE
 
+    # ── Task #20: contribute a meeting to Shape Rotator OS ───────────────────────────────────────
+    # Arm 1 (LIVE): POST the host-approved v2 transcript to Shape OS's public anon
+    # `context_submissions` inbox. The project URL + anon key are PUBLIC by design — Shape OS is a
+    # public repo that ships the anon key, and RLS (INSERT-only, no read-back) is the boundary. We
+    # default them to the committed prod values; override via env for a test/stub Supabase.
+    # (Arm 2 — distilled readout → PR — is intentionally NOT wired: upstream moved all transcript
+    # content off the public repo, so a readout PR is a no-op diff. See TASK-20 (2026-06-29 finding).)
+    shapeos_supabase_url: str = "https://txjntzwksiluvqcpccpc.supabase.co"
+    shapeos_anon_key: str = (
+        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR4am50endrc2ls"
+        "dXZxY3BjY3BjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNzA1NzEsImV4cCI6MjA5Njk0NjU3MX0."
+        "XjXEUnw3jq1E7PwIOvhr7a3OpO2lyZv6S_Hn3JqogBA"
+    )
+    # Safety valve for dev: when True the contribute endpoint validates + builds the payload but
+    # NEVER hits the network — it returns a simulated success. Keeps dev from posting at real Shape OS.
+    shapeos_contrib_dry_run: bool = False  # env CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
 
     def record_meeting_enabled(self) -> bool:

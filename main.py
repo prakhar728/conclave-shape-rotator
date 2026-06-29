@@ -153,6 +153,11 @@ app.include_router(magic_link_router)
 from api.calendar_routes import router as calendar_router
 app.include_router(calendar_router)
 
+# Task #20: host-triggered contribution of a meeting to Shape Rotator OS
+# (Arm 1: approved v2 transcript → their anon context_submissions inbox).
+from api.shape_contrib_routes import router as shape_contrib_router
+app.include_router(shape_contrib_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles

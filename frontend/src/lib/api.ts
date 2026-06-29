@@ -701,3 +701,24 @@ export const refine = {
 
   debug: (sessionId: string) => apiFetch<V2Debug>(`${sess(sessionId)}/debug`),
 };
+
+// --- Task #20: contribute a meeting to Shape Rotator OS ----------------------
+
+export type ShapeContribResult = {
+  inbox: {
+    ok: boolean;
+    status: "ok" | "dry_run" | "unconfigured" | "network" | "forbidden" | "rejected";
+    parts: number;
+    http_statuses: number[];
+    detail?: string;
+  };
+};
+
+export const shapeContrib = {
+  // Host-only; runs Arm 1 (approved v2 → Shape OS context_submissions inbox).
+  contribute: (sessionId: string) =>
+    apiFetch<ShapeContribResult>(
+      `/api/meetings/${encodeURIComponent(sessionId)}/contribute-shapeos`,
+      { method: "POST" },
+    ),
+};

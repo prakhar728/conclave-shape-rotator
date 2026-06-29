@@ -24,6 +24,7 @@ import { use, useEffect, useState } from "react";
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
 import { PageError, PageLoading } from "@/components/page-state";
+import { ContributeShapeOS } from "@/components/refine/contribute-shapeos";
 import { InsightsPlaceholder } from "@/components/refine/insights-placeholder";
 import { RefineActions } from "@/components/refine/refine-actions";
 import { RefineEditor } from "@/components/refine/refine-editor";
@@ -288,6 +289,8 @@ export default function MeetingPage({
                     setRegenerating(true); // show "Updating insights" until the re-derive lands
                   }}
                 />
+                {/* Task #20 — host-only contribution, enabled only post-v2-approval. */}
+                <ContributeShapeOS sessionId={id} approved={draft.status === "approved"} />
               </>
             ) : (
               <TranscriptPanel
