@@ -335,9 +335,13 @@ aren't lost). The two *decisions* live in §12 (#6 personal memory, #7 auto-user
 - **N6 — pin how Part 2 consumes vocab.** The §11 contract says Part 2 reads the
   per-user vocab; specify *how* (extraction priors / seed known-entities) so the
   seam can't drift. Part 2 implements it, but the contract names the shape.
-- **N7 — verify the calendar→insight-seed link.** Cold-start (§6, test CS-2)
-  assumes calendar event text lands in `metadata.raw_intent`. Confirm calendar
-  events actually populate that field before relying on it as the only seed.
+- **N7 — verify the calendar→insight-seed link. ✅ VERIFIED (Task #11, 2026-06-28).**
+  Cold-start (§6, test CS-2) assumes calendar event text lands in `metadata.raw_intent`.
+  Confirmed: `infra/meeting_calendar_links.py:link_completed_meeting` sets `raw_intent` from
+  `event["description"]` (auto-record only, manual-intent-wins) → `enrich.py` compiles the
+  `<meeting_intent>` block + stamps `meeting_intent_version`. Guarded by
+  `tests/test_calendar_intent_link.py` (5 tests) + an "Agenda-grounded insights" badge on the
+  meeting page as the observable signal.
 
 ## 17. Build increments (commit-level)
 
