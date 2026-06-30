@@ -85,6 +85,17 @@ class Settings(BaseSettings):
     # operator-blind invariant the rest of the codebase enforces.
     token_enc_key: str = ""
 
+    # ── Task #30: audio storage at rest (AES-256, TEE-sealed key) ────────────────────────────────
+    # Master key for at-rest audio encryption (infra/audio_crypto). Resolution order (see
+    # audio_crypto.get_or_create_key): (1) the dstack-SEALED key in a TEE — production; (2) this env
+    # var (64 hex chars / 32 bytes, or base64) — explicit override / non-TEE; (3) a 0600 dev keyfile
+    # under CONCLAVE_AUDIO_DIR. New captures are written encrypted; legacy plaintext files still read
+    # via the MAGIC-header fallback (encrypt new-meetings-only — no retro-encryption).
+    audio_enc_key: str = ""                # env CONCLAVE_AUDIO_ENC_KEY
+    # Optional TTL for stored audio (days). Unset/0 = keep while the meeting exists (deletion-driven
+    # only). The reaper is a later add — this is just the config seam.
+    audio_retention_days: int = 0          # env CONCLAVE_AUDIO_RETENTION_DAYS
+
     # In-person Record ingress (Conclave ingress mode 3: bot · upload · record).
     # Server-side orchestration of the consent plane: a recorded clip is sent to
     # FPM (diarize + identify) and the NEAR Whisper transcription-service (ASR) —

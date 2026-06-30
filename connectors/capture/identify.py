@@ -33,12 +33,24 @@ def _safe(value: str) -> str:
 
 
 def _assemble_audio(native_meeting_id: str) -> bytes:
-    """Concatenate a meeting's stored audio chunks. ⚠️ raw concat (assumption #1)."""
+    """Concatenate a meeting's stored audio chunks, decrypting each (Task #30).
+
+    Each chunk is encrypted independently (MAGIC || IV || MAC || ct). We decrypt
+    chunk-by-chunk before concatenating, with a per-chunk plaintext fallback so legacy
+    pre-#30 files (no MAGIC) still assemble — the encrypt-new-meetings-only invariant.
+    ⚠️ raw concat of the decrypted bytes (assumption #1). Sidecar `.sha256` hashes (the
+    V1 attestation seam) are not chunk audio, so they're skipped.
+    """
+    from infra import audio_crypto
+
     audio_dir = Path(os.environ.get("CONCLAVE_AUDIO_DIR", "data/audio")) / _safe(native_meeting_id)
     if not audio_dir.is_dir():
         return b""
-    chunks = sorted((p for p in audio_dir.iterdir() if p.is_file()), key=lambda p: p.name)
-    return b"".join(p.read_bytes() for p in chunks)
+    chunks = sorted(
+        (p for p in audio_dir.iterdir() if p.is_file() and p.suffix != ".sha256"),
+        key=lambda p: p.name,
+    )
+    return b"".join(audio_crypto.decrypt_if_encrypted(p.read_bytes()) for p in chunks)
 
 
 async def identify_meeting(session_id: str, native_meeting_id: str,

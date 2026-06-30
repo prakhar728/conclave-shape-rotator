@@ -793,6 +793,29 @@ def delete_transcript_session(session_id: str) -> None:
     )
 
 
+def _safe_audio_segment(value: str) -> str:
+    """Filesystem-safe audio-dir segment (no traversal) — matches capture_routes."""
+    return "".join(c for c in str(value) if c.isalnum() or c in "-_") or "unknown"
+
+
+def cleanup_session_audio(session_id: str) -> bool:
+    """Remove a meeting's stored (encrypted) audio + sha256 sidecars from disk (Task #30).
+
+    The audio directory is keyed by the capture native_meeting_id, which equals the
+    session_id for capture meetings (see webhooks_capture finalize). Returns True iff a
+    directory was removed. This is the shared primitive behind the meeting-page "delete
+    audio" control and meeting deletion; #1/#3 reuse it so clips die with their source.
+    """
+    import shutil
+
+    audio_root = os.environ.get("CONCLAVE_AUDIO_DIR", "data/audio")
+    audio_dir = os.path.join(audio_root, _safe_audio_segment(session_id))
+    if os.path.isdir(audio_dir):
+        shutil.rmtree(audio_dir, ignore_errors=True)
+        return True
+    return False
+
+
 # --- Transcript v2 (Part 1 correction layer) ---
 
 def save_transcript_v2(

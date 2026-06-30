@@ -23,6 +23,7 @@ import { use, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
+import { MeetingAudioPlayer } from "@/components/meeting-audio-player";
 import { PageError, PageLoading } from "@/components/page-state";
 import { ContributeShapeOS } from "@/components/refine/contribute-shapeos";
 import { InsightsPlaceholder } from "@/components/refine/insights-placeholder";
@@ -269,6 +270,14 @@ export default function MeetingPage({
 
         {meeting.can_view_transcript !== undefined ? (
           <div className="mt-10 border-t border-border pt-8">
+            {/* Task #30 — audio player; self-hides when no audio was stored. */}
+            <div className="mb-6">
+              <MeetingAudioPlayer
+                sessionId={meeting.session_id}
+                isOwner={Boolean(meeting.is_owner)}
+                storeAudio={meeting.store_audio}
+              />
+            </div>
             {meeting.is_owner && draft && !preparing ? (
               <>
                 <RefineEditor

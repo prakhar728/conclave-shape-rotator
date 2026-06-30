@@ -223,6 +223,9 @@ def to_card(session: Session) -> dict:
         # manual focus) was compiled into the <meeting_intent> grounding block.
         # Surfaced so a silent break in calendar → insights is visible on the UI.
         "meeting_intent_version": m.meeting_intent_version,
+        # Task #30: whether this meeting's (encrypted) audio was stored — drives the
+        # meeting-page audio player. None = unknown/legacy (the UI may probe).
+        "store_audio": m.store_audio,
         "resolved_speakers": dict(m.resolved_speakers or {}),
         "topics": list(d.topics or []),
         "participants": list(participants) if participants else None,
@@ -524,6 +527,129 @@ def get_session_transcript(session_id: str, request: Request) -> dict:
     # P4: refresh names from FPM's live consent decision before projecting (cached, fail-open).
     _apply_consent_backstop(session, ws_row["workspace_id"])
     return to_transcript(session)
+
+
+# ---------------------------------------------------------------------------
+# Audio playback — Task #30. Decrypt-on-read serving of the stored meeting
+# recording (full, or a `?start=&end=` segment clip). Never writes plaintext
+# back to disk. This is the BASE endpoint #3 extends to also accept an
+# FPM-signed capability; #31 adds the dedicated `audio` share flag.
+# ---------------------------------------------------------------------------
+
+
+def _slice_wav(data: bytes, start: Optional[float], end: Optional[float]) -> bytes:
+    """Return the [start, end)-second slice of a WAV blob (seconds → frames).
+
+    Non-WAV blobs (e.g. a gMeet webm) can't be sliced frame-accurately, so the
+    whole blob is returned — full playback still works, only clipping is WAV-only.
+    """
+    import io
+    import wave
+
+    try:
+        with wave.open(io.BytesIO(data), "rb") as w:
+            sr = w.getframerate()
+            nframes = w.getnframes()
+            sampwidth = w.getsampwidth()
+            channels = w.getnchannels()
+            s = int(max(0.0, start or 0.0) * sr)
+            e = int((end if end is not None else nframes / sr) * sr)
+            s = min(s, nframes)
+            e = min(max(e, s), nframes)
+            w.setpos(s)
+            frames = w.readframes(e - s)
+        out = io.BytesIO()
+        with wave.open(out, "wb") as ww:
+            ww.setnchannels(channels)
+            ww.setsampwidth(sampwidth)
+            ww.setframerate(sr)
+            ww.writeframes(frames)
+        return out.getvalue()
+    except wave.Error:
+        return data
+
+
+@router.get("/sessions/{session_id}/audio")
+def get_session_audio(
+    session_id: str,
+    request: Request,
+    start: Optional[float] = None,
+    end: Optional[float] = None,
+):
+    """Decrypt + serve a meeting's stored audio (full, or a segment clip).
+
+    Same gate as the raw transcript (`can_see_transcript`: owner + full workspace
+    members + 'summary_and_transcript' recipients) — audio is at least as sensitive.
+    Legacy cohort sessions never exposed audio, so they 403. Decryption happens in
+    memory (`_assemble_audio`); plaintext is never re-written to disk.
+
+    Note: for capture meetings `session_id == native_meeting_id` (the audio-dir key),
+    so the directory resolves directly — see webhooks_capture finalize.
+    """
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    try:
+        ws_row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001 — defensive vs schema drift in test DBs
+        ws_row = None
+    if not ws_row or not ws_row.get("workspace_id"):
+        raise HTTPException(status_code=403, detail="not allowed")
+    row = {"session_id": session_id, **ws_row}
+    if not can_see_transcript(user, row):
+        raise HTTPException(status_code=403, detail="not allowed")
+
+    from connectors.capture.identify import _assemble_audio
+    audio = _assemble_audio(session_id)
+    if not audio:
+        raise HTTPException(status_code=404, detail="no stored audio for this meeting")
+    if start is not None or end is not None:
+        audio = _slice_wav(audio, start, end)
+
+    from fastapi.responses import Response
+    return Response(content=audio, media_type="audio/wav")
+
+
+@router.delete("/sessions/{session_id}/audio")
+def delete_session_audio(session_id: str, request: Request) -> dict:
+    """Delete a meeting's stored audio from the meeting page (Task #30 §3.4).
+
+    Owner-gated. Removes the encrypted files + sha256 sidecars and flips the
+    read-side `store_audio` metadata to False so the player disappears. The
+    transcript/insights are untouched — only the recording is forgotten. This is
+    the shared deletion seam #1/#3 reuse (clips die with their source audio).
+    """
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    try:
+        ws_row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001
+        ws_row = None
+    owner_id = (ws_row or {}).get("owner_user_id")
+    if not owner_id or owner_id != user.get("id"):
+        raise HTTPException(status_code=403, detail="only the owner can delete audio")
+
+    from storage import sqlite as _sqlite
+    removed = _sqlite.cleanup_session_audio(session_id)
+    try:
+        session.metadata.store_audio = False
+        store.set_metadata(session_id, session.metadata)
+    except Exception:  # noqa: BLE001 — metadata flip is a UI nicety, not the deletion itself
+        logger.exception("delete_session_audio: store_audio flip failed for %s", session_id)
+    return {"deleted": removed, "session_id": session_id}
 
 
 # ---------------------------------------------------------------------------

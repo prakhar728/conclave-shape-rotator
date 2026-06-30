@@ -273,6 +273,9 @@ export type MeetingView = {
   // Transcript Saving — whether THIS viewer may load the raw transcript.
   // Drives the transcript panel's state (show vs. "not shared with you").
   can_view_transcript?: boolean;
+  // Task #30 — whether this meeting's audio was stored (encrypted at rest).
+  // Drives the meeting-page audio player. null/undefined = unknown/legacy.
+  store_audio?: boolean | null;
   // Retention (owner-relevant): whether the raw transcript was auto-deleted,
   // and the per-meeting override (null=inherit | 'keep_forever' | '<int>' days).
   raw_transcript_deleted?: boolean;
@@ -320,6 +323,22 @@ export const meetings = {
         sessionId,
       )}/tag-speaker`,
       { method: "POST", body: JSON.stringify(body) },
+    ),
+  // Task #30: the decrypt-on-read audio endpoint. Cookie auth is same-origin, so the
+  // returned path can be used directly as an <audio src> — the browser sends the session
+  // cookie and the backend decrypts in memory (no plaintext ever written back to disk).
+  // Pass start/end (seconds) for a segment clip.
+  audioUrl: (sessionId: string, opts?: { start?: number; end?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.start != null) q.set("start", String(opts.start));
+    if (opts?.end != null) q.set("end", String(opts.end));
+    const qs = q.toString();
+    return `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/audio${qs ? `?${qs}` : ""}`;
+  },
+  deleteAudio: (sessionId: string) =>
+    apiFetch<{ deleted: boolean; session_id: string }>(
+      `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/audio`,
+      { method: "DELETE" },
     ),
 };
 

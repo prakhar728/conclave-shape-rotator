@@ -56,6 +56,29 @@ def get_workspace(workspace_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def get_audio_store_default(workspace_id: str) -> bool:
+    """Workspace-level store-audio default (Task #30).
+
+    The gMeet invite path falls back to this when no per-meeting choice is made.
+    Defaults to True (keep) for any workspace predating the column / missing a row.
+    """
+    row = _get_conn().execute(
+        "SELECT audio_store_default FROM workspaces WHERE id = ?",
+        (workspace_id,),
+    ).fetchone()
+    if row is None or row["audio_store_default"] is None:
+        return True
+    return bool(row["audio_store_default"])
+
+
+def set_audio_store_default(workspace_id: str, enabled: bool) -> None:
+    """Set the workspace-level store-audio default."""
+    _get_conn().execute(
+        "UPDATE workspaces SET audio_store_default = ?, updated_at = ? WHERE id = ?",
+        (int(enabled), _now(), workspace_id),
+    )
+
+
 def list_user_workspaces(user_id: str) -> list[dict]:
     rows = _get_conn().execute(
         "SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at, m.role "

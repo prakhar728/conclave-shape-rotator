@@ -41,6 +41,35 @@ def _get_client():
     return _client
 
 
+def get_sealed_key(path: str = "conclave/audio-store",
+                   subject: str = "audio-store-encryption") -> bytes | None:
+    """Derive a 32-byte master from the CVM's hardware-bound key, or None.
+
+    Mirrors FPM's `enclave.get_sealed_key` (the voiceprint-store seal): inside a
+    Phala CVM the dstack agent's `get_key(path, subject)` returns a key bound to
+    this app's identity — never written to disk, unreadable by the operator. A
+    distinct `path` derives an INDEPENDENT key (same CVM, different path ⇒ a
+    different, unrelated key), so the audio-store key is cryptographically
+    separate from any other sealed secret.
+
+    Returns None when not in a TEE or the agent is unreachable, so the caller
+    falls back to the env/keyfile path. The raw dstack key is SHA-256'd to a
+    fixed 32 bytes regardless of the SDK's raw width.
+    """
+    if not IN_TEE:
+        return None
+    client = _get_client()
+    if client is None:
+        return None
+    try:
+        resp = client.get_key(path, subject)
+        raw = resp.decode_key()
+        return hashlib.sha256(raw).digest()
+    except Exception as e:  # noqa: BLE001 — any SDK/socket error → fall back to keyfile
+        logger.warning("dstack get_key failed (%s) — falling back to env/keyfile", e)
+        return None
+
+
 def _normalize_report_data(nonce: str) -> bytes:
     """Pack a string nonce into ≤64 bytes for TDX report_data. SDK rejects
     empty input, so default empty nonces to a fixed 32-byte zero buffer."""

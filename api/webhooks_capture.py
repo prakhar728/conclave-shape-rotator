@@ -54,6 +54,21 @@ def _verify(body: bytes, header: Optional[str], secret: str) -> bool:
     return hmac.compare_digest(f"sha256={expected}", header)
 
 
+def _set_store_audio_meta(session_id: str, store_audio: bool) -> None:
+    """Record the per-meeting store-audio decision on the session metadata (Task #30).
+
+    Read-side signal only — the actual store/no-store enforcement happened at the
+    audio-chunk write. Best-effort: a metadata write hiccup must not block finalize."""
+    from transcripts import store as transcripts_store
+    try:
+        sess = transcripts_store.load_session(session_id)
+        if sess is not None:
+            sess.metadata.store_audio = store_audio
+            transcripts_store.set_metadata(session_id, sess.metadata)
+    except Exception:  # noqa: BLE001
+        logger.exception("webhook: set store_audio failed for %s", session_id)
+
+
 @router.post("/meeting-completed", status_code=status.HTTP_202_ACCEPTED)
 async def on_meeting_completed(
     request: Request,
@@ -142,6 +157,11 @@ async def on_meeting_completed(
                     transcripts_store.set_metadata(session_id, sess.metadata)
             except Exception:  # noqa: BLE001 — intent is optional grounding
                 logger.exception("webhook: set raw_intent failed for %s", session_id)
+        # Task #30: record the gMeet store-audio decision on the session so the UI
+        # knows whether a player should appear. Enforcement already happened at the
+        # write; this is the read-side signal.
+        if status_label == "accepted" and inv.get("store_audio") is not None:
+            _set_store_audio_meta(session_id, bool(inv["store_audio"]))
     else:
         # In-person meetings have no bot_invitation, but capture sends the workspace in the payload —
         # bind the session to it so the transcript is visible in the workspace + identity can resolve.
@@ -169,6 +189,10 @@ async def on_meeting_completed(
                 "no bot_invitation and no payload workspace for %s/%s — session lands unbound",
                 platform, native_id,
             )
+        # Task #30: in-person store-audio decision rides the webhook payload (capture
+        # forwards the WS-connect toggle). Record it for the read-side UI signal.
+        if status_label == "accepted" and meeting.get("store_audio") is not None:
+            _set_store_audio_meta(session_id, bool(meeting.get("store_audio")))
 
     # 6b. Calendar enrichment (best-effort): if this Meet was auto-recorded
     # from a calendar event, link the transcript to the event and auto-share

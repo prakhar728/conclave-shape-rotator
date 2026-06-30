@@ -120,6 +120,7 @@ export function TranscriptPanel({
         Transcript
       </h2>
       <Body
+        sessionId={sessionId}
         state={state}
         canView={canView}
         taggable={taggable}
@@ -135,6 +136,7 @@ export function TranscriptPanel({
 }
 
 function Body({
+  sessionId,
   state,
   canView,
   taggable,
@@ -145,6 +147,7 @@ function Body({
   busy,
   err,
 }: {
+  sessionId: string;
   state: LoadState;
   canView: boolean;
   taggable: boolean;
@@ -224,10 +227,54 @@ function Body({
               />
             ) : null}
             <p className="mt-1 text-sm leading-relaxed">{seg.text}</p>
+            {seg.start != null && seg.end != null ? (
+              <AudioSegmentPlayer sessionId={sessionId} start={seg.start} end={seg.end} />
+            ) : null}
           </li>
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * Per-segment clip player (Task #30). Lazily reveals an <audio> element pointed at the
+ * decrypt-on-read `?start=&end=` clip endpoint — preload="none" so nothing is fetched
+ * until the user plays. Cookie auth is same-origin. This is the component #3 reuses in
+ * the "Is this you?" box. Only rendered when the segment has a start AND end time.
+ */
+function AudioSegmentPlayer({
+  sessionId,
+  start,
+  end,
+}: {
+  sessionId: string;
+  start: number;
+  end: number;
+}) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-2 inline-flex items-center gap-1 text-[0.7rem] text-muted-foreground transition hover:text-foreground"
+        title="Play this segment"
+      >
+        ▶ Play clip
+      </button>
+    );
+  }
+  return (
+    <audio
+      controls
+      autoPlay
+      preload="none"
+      src={meetingsApi.audioUrl(sessionId, { start, end })}
+      className="mt-2 h-8 w-full max-w-xs"
+    >
+      Your browser does not support audio playback.
+    </audio>
   );
 }
 

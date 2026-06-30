@@ -83,6 +83,11 @@ class SessionMetadata(BaseModel):
     #: ``raw_diarization`` (an undercount when audience members never spoke).
     #: Listeners per signal = (participants or members) − said_by.
     participants: Optional[list[str]] = None
+    #: Task #30 — whether this meeting's audio was stored (encrypted at rest).
+    #: Set at finalize from the in-person WS toggle / gMeet invite decision. Drives
+    #: the meeting-page audio player (show only when True). None = unknown/legacy
+    #: (player falls back to probing the serving endpoint). JSON metadata, no migration.
+    store_audio: Optional[bool] = None
 
 
 class Signal(BaseModel):

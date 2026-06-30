@@ -40,6 +40,9 @@ class InviteBotBody(BaseModel):
     # Optional freeform "focus / what to capture" — grounds enrichment
     # (transcripts/compile_intent.py) for meetings with no calendar event.
     intent: Optional[str] = Field(default=None, max_length=4000)
+    # Task #30: per-meeting store-audio override. None ⇒ fall back to the
+    # workspace `audio_store_default` (resolved at invite time, below).
+    store_audio: Optional[bool] = None
 
 
 def _require_workspace_member(workspace_id: str, user_id: str) -> dict:
@@ -75,6 +78,15 @@ def invite_bot(
     except dispatcher.CapacityError as e:
         raise HTTPException(status_code=429, detail=str(e))
 
+    # Task #30: resolve the per-meeting store-audio decision now — explicit
+    # override if given, else the workspace default — and bake it onto the row
+    # so the audio-chunk write path can enforce it later (single choke point).
+    store_audio = (
+        body.store_audio
+        if body.store_audio is not None
+        else workspaces.get_audio_store_default(body.workspace_id)
+    )
+
     # Create the invitation row BEFORE launching so even a failed launch
     # leaves an audit trail the user can see in /bot-status.
     invitation = bot_invitations.create_invitation(
@@ -86,6 +98,7 @@ def invite_bot(
         status="requested",
         intent=body.intent,
         assigned_account_id=account_id,
+        store_audio=store_audio,
     )
 
     # Per-meeting webhook URL points at our 2.4 receiver. Preferred over

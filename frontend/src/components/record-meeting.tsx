@@ -101,6 +101,9 @@ function RecordModal({
   const [status, setStatus] = useState("Tap the mic to start");
   const [error, setError] = useState<string | null>(null);
   const [segs, setSegs] = useState<LiveSeg[]>([]);
+  // Task #30: store the audio recording (encrypted at rest) for later playback.
+  // In-person defaults ON; one tap turns it off before you start.
+  const [storeAudio, setStoreAudio] = useState(true);
 
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
@@ -127,7 +130,8 @@ function RecordModal({
     const url =
       `${CAPTURE_WS_BASE.replace(/\/$/, "")}/v1/inperson/stream` +
       `?uid=${encodeURIComponent(uid)}&workspace=${encodeURIComponent(workspaceId)}` +
-      `&token=${encodeURIComponent(CAPTURE_TOKEN)}`;
+      `&token=${encodeURIComponent(CAPTURE_TOKEN)}` +
+      `&store_audio=${storeAudio ? "true" : "false"}`;
     try {
       setStatus("Requesting mic…");
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
@@ -179,7 +183,7 @@ function RecordModal({
       teardown();
       setRecording(false);
     }
-  }, [workspaceId, router, teardown, ending]);
+  }, [workspaceId, router, teardown, ending, storeAudio]);
 
   const stop = useCallback(() => {
     const sock = sockRef.current;
@@ -263,6 +267,24 @@ function RecordModal({
           </div>
           <p className="text-[11px] text-muted-foreground">{status}</p>
         </div>
+
+        {/* Store-audio toggle (Task #30) — in-person default ON; locked once recording starts. */}
+        {!recording && !ending ? (
+          <label className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-background/60 px-4 py-3">
+            <input
+              type="checkbox"
+              checked={storeAudio}
+              onChange={(e) => setStoreAudio(e.target.checked)}
+              className="size-4 accent-primary"
+            />
+            <span className="text-xs text-foreground">
+              Store the audio recording
+              <span className="ml-1 text-muted-foreground">
+                — encrypted in the enclave, replayable later. Off = transcript only, no audio kept.
+              </span>
+            </span>
+          </label>
+        ) : null}
 
         {/* Live diart transcript (the transcription PROCESS runs in capture; this just displays it). */}
         {segs.length > 0 ? (
