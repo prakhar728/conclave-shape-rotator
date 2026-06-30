@@ -19,9 +19,11 @@ import {
   Calendar,
   Check,
   ChevronsUpDown,
+  Inbox,
   LayoutGrid,
   ListChecks,
   LogOut,
+  MessageSquare,
   Plus,
   Search,
   Settings,
@@ -120,6 +122,32 @@ export function AppShell({
         </div>
 
         <div className="mt-auto space-y-3 border-t border-border pt-4">
+          <Link
+            href={`/feedback?from=${encodeURIComponent(pathname)}`}
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+              pathname.startsWith("/feedback")
+                ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
+                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
+            )}
+          >
+            <MessageSquare className="size-3.5" aria-hidden />
+            Feedback
+          </Link>
+          {user.is_admin ? (
+            <Link
+              href="/admin/feedback"
+              className={cn(
+                "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
+                pathname.startsWith("/admin/feedback")
+                  ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
+                  : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
+              )}
+            >
+              <Inbox className="size-3.5" aria-hidden />
+              Feedback inbox
+            </Link>
+          ) : null}
           <Link
             href="/settings"
             className={cn(

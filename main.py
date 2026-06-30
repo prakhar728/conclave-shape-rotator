@@ -158,6 +158,10 @@ app.include_router(calendar_router)
 from api.shape_contrib_routes import router as shape_contrib_router
 app.include_router(shape_contrib_router)
 
+# Task #19: in-app user feedback page → feedback table + best-effort team email.
+from api.feedback_routes import router as feedback_router
+app.include_router(feedback_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles

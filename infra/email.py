@@ -20,7 +20,7 @@ import logging
 import os
 from typing import Optional
 
-from infra.email_templates import magic_link_email, welcome_email
+from infra.email_templates import feedback_email, magic_link_email, welcome_email
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +87,29 @@ def send_magic_link(
         magic_link_url=magic_link_url,
         meeting_title=meeting_title,
         inviter_email=inviter_email,
+    )
+    return _send(to=recipient_email, subject=subject, html=html)
+
+
+def send_feedback_notification(
+    *,
+    recipient_email: str,
+    category: str,
+    body: str,
+    submitter_email: str,
+    page_context: Optional[str] = None,
+) -> dict:
+    """Notify the team that a user submitted in-app feedback (Task #19).
+
+    Callers wrap this in best-effort try/except — a failed send must never block
+    the feedback submission. Stub-mode (no RESEND_API_KEY) just logs.
+    """
+    subject = f"Conclave feedback ({category}) from {submitter_email}"
+    html = feedback_email(
+        category=category,
+        body=body,
+        submitter_email=submitter_email,
+        page_context=page_context,
     )
     return _send(to=recipient_email, subject=subject, html=html)
 

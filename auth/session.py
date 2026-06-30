@@ -25,6 +25,7 @@ from typing import Optional
 
 from fastapi import HTTPException, Request, Response
 
+from config import settings
 from infra import identity
 from storage.sqlite import _get_conn
 
@@ -134,6 +135,19 @@ def require_current_user(request: Request) -> dict:
     user = try_current_user(request)
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+
+def require_admin(request: Request) -> dict:
+    """FastAPI dependency for admin-only routes.
+
+    Admin identity is config-pinned (CONCLAVE_ADMIN_EMAILS), not a DB role —
+    the allowlist is evaluated inside the enclave against the logged-in session
+    email. 401 if unauthenticated, 403 if authenticated but not an admin.
+    """
+    user = require_current_user(request)
+    if not settings.is_admin(user.get("email")):
+        raise HTTPException(status_code=403, detail="admin access required")
     return user
 
 

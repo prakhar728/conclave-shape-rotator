@@ -20,6 +20,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 
 from auth import session as auth_session
+from config import settings
 from infra import identity, workspaces
 from infra.supabase_auth import send_otp as _supabase_send_otp
 from infra.supabase_auth import supabase_enabled
@@ -57,6 +58,10 @@ def _user_to_public(u: dict) -> dict:
         "email": u["email"],
         "display_name": u.get("display_name"),
         "created_at": u["created_at"],
+        # Config-pinned admin allowlist (CONCLAVE_ADMIN_EMAILS) — lets the client
+        # reveal admin surfaces (e.g. the feedback inbox). The server re-checks on
+        # every admin route; this flag is UI-only, not an authorization boundary.
+        "is_admin": settings.is_admin(u["email"]),
     }
 
 

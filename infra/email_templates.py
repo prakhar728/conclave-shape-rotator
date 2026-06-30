@@ -107,6 +107,41 @@ def magic_link_email(
     return _shell(body_html=body_html, footer_html=footer_html)
 
 
+def feedback_email(
+    *,
+    category: str,
+    body: str,
+    submitter_email: str,
+    page_context: Optional[str],
+) -> str:
+    """Team notification for one /feedback submission (Task #19).
+
+    Body is user-supplied free text, so it's HTML-escaped before interpolation.
+    """
+    import html
+
+    safe_body = html.escape(body).replace("\n", "<br>")
+    safe_category = html.escape(category)
+    safe_submitter = html.escape(submitter_email)
+    context_line = (
+        f"<p style='margin:0 0 16px 0;font-size:13px;color:{_MUTED};'>"
+        f"From page: <code>{html.escape(page_context)}</code></p>"
+        if page_context
+        else ""
+    )
+    body_html = (
+        f"<h1 style='margin:0 0 16px 0;font-size:18px;font-weight:600;color:{_FG};'>"
+        f"New feedback: {safe_category}</h1>"
+        f"<p style='margin:0 0 16px 0;font-size:14px;color:{_MUTED};'>"
+        f"From {safe_submitter}</p>"
+        + context_line
+        + f"<div style='margin:0;padding:16px;background:{_BG};border:1px solid {_BORDER};"
+        f"border-radius:8px;font-size:14px;line-height:1.5;color:{_FG};'>{safe_body}</div>"
+    )
+    footer_html = "Sent by Conclave when a user submits in-app feedback."
+    return _shell(body_html=body_html, footer_html=footer_html)
+
+
 def welcome_email(*, recipient_email: str) -> str:
     body_html = (
         f"<h1 style='margin:0 0 16px 0;font-size:18px;font-weight:600;color:{_FG};'>"

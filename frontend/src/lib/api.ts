@@ -89,6 +89,9 @@ export type User = {
   email: string;
   display_name: string | null;
   created_at: string;
+  // Config-pinned admin allowlist (CONCLAVE_ADMIN_EMAILS). UI-only hint to reveal
+  // admin surfaces; the server re-checks on every admin route.
+  is_admin?: boolean;
 };
 
 export type Workspace = {
@@ -721,4 +724,49 @@ export const shapeContrib = {
       `/api/meetings/${encodeURIComponent(sessionId)}/contribute-shapeos`,
       { method: "POST" },
     ),
+};
+
+// --- Feedback (Task #19) ----------------------------------------------------
+
+export type FeedbackCategory = "feature" | "bug" | "other";
+
+export type FeedbackInput = {
+  category: FeedbackCategory;
+  body: string;
+  page_context?: string | null;
+  workspace_id?: string | null;
+};
+
+export type FeedbackItem = {
+  id: string;
+  user_id: string | null;
+  user_email: string;
+  workspace_id: string | null;
+  category: FeedbackCategory;
+  body: string;
+  page_context: string | null;
+  created_at: string;
+};
+
+export type FeedbackList = {
+  items: FeedbackItem[];
+  total: number;
+  limit: number;
+  offset: number;
+};
+
+export const feedback = {
+  submit: (input: FeedbackInput) =>
+    apiFetch<{ id: string; created_at: string }>("/api/feedback", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  // Admin-only (server-gated by CONCLAVE_ADMIN_EMAILS).
+  list: (params?: { limit?: number; offset?: number }) => {
+    const q = new URLSearchParams();
+    if (params?.limit != null) q.set("limit", String(params.limit));
+    if (params?.offset != null) q.set("offset", String(params.offset));
+    const qs = q.toString();
+    return apiFetch<FeedbackList>(`/api/feedback${qs ? `?${qs}` : ""}`);
+  },
 };

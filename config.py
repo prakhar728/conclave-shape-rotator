@@ -148,7 +148,27 @@ class Settings(BaseSettings):
     # NEVER hits the network — it returns a simulated success. Keeps dev from posting at real Shape OS.
     shapeos_contrib_dry_run: bool = False  # env CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN
 
+    # ── Task #19: in-app feedback page ───────────────────────────────────────────────────────────
+    # On each /feedback submission we best-effort email the team. Unset → no email is attempted
+    # (the row is still written; submit never blocks on email). Reuses infra/email.py (Resend),
+    # which itself stub-logs when RESEND_API_KEY is absent. Set CONCLAVE_FEEDBACK_NOTIFY_EMAIL.
+    feedback_notify_email: str = ""
+
+    # Admin allowlist (comma-separated emails) — the operator-blind-correct way to grant a few
+    # accounts read access to in-enclave admin surfaces (e.g. GET /api/feedback). There is no admin
+    # ROLE in the DB; admin identity is pinned by deploy config and checked INSIDE the TEE against the
+    # logged-in session email. Empty → nobody is admin. Set CONCLAVE_ADMIN_EMAILS.
+    admin_emails: str = ""
+
     model_config = {"env_prefix": "CONCLAVE_", "env_file": ".env", "extra": "ignore"}
+
+    def admin_email_set(self) -> set:
+        """Normalised set of admin emails (lower-cased, trimmed). Empty when unset."""
+        return {e.strip().lower() for e in self.admin_emails.split(",") if e.strip()}
+
+    def is_admin(self, email) -> bool:
+        """True when `email` is in the configured admin allowlist (case-insensitive)."""
+        return bool(email) and email.strip().lower() in self.admin_email_set()
 
     def record_meeting_enabled(self) -> bool:
         """True when both FPM and the transcription service are configured."""
