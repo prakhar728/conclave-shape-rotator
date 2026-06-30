@@ -120,6 +120,65 @@ def reresolve_voiceprint(
     return updated
 
 
+# ---------------------------------------------------------------------------
+# Task #13 — speaker-name stamp + projection (heal-on-open after deferred consent)
+# ---------------------------------------------------------------------------
+
+def _speaker_name_map(session: Session) -> dict[str, Optional[str]]:
+    """Canonical basis for the stamp: ``raw_label -> resolved name or None``.
+
+    Built from the **labels present in the immutable raw_diarization** joined
+    to their currently-resolved name (``resolved_speakers[label]["name"]``), or
+    ``None`` when still anonymous/pending. Pending tags never land in
+    ``resolved_speakers``, so they don't appear here — "confirmed-only" by
+    construction. ``raw_diarization`` is read, never mutated.
+    """
+    labels = {s.speaker for s in session.raw_diarization}
+    resolved = session.metadata.resolved_speakers or {}
+    out: dict[str, Optional[str]] = {}
+    for label in labels:
+        entry = resolved.get(label)
+        name = entry.get("name") if isinstance(entry, dict) else None
+        out[label] = name or None
+    return out
+
+
+def speakers_version(session: Session, *, length: int = 16) -> str:
+    """Deterministic fingerprint of the resolved speaker-name set (Task #13 §3.1).
+
+    ``sha256(canonical_json(sorted {raw_label → resolved_name_or_null}))[:length]``.
+    Stable across processes (sorted keys, compact separators). At first enrich
+    most labels are ``null`` → stamps the "all anonymous" state.
+    """
+    import hashlib
+    mapping = _speaker_name_map(session)
+    canonical = json.dumps(mapping, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:length]
+
+
+def has_confirmed_speaker(session: Session) -> bool:
+    """True iff ≥1 raw label now resolves to a non-null name (the §3.2 guard)."""
+    return any(v for v in _speaker_name_map(session).values())
+
+
+def resolved_name_map(session: Session) -> dict[str, str]:
+    """``raw_label -> confirmed name`` (non-null only), for projecting real names
+    into the LLM text at enrich time (Task #13 §3.3). Labels still anonymous are
+    omitted, so the projection keeps ``Speaker N`` for them."""
+    return {k: v for k, v in _speaker_name_map(session).items() if v}
+
+
+def mark_insights_stale(session_id: str) -> None:
+    """Flip the v2 ``insights_stale`` flag on (idempotent). Reuses #9's badge +
+    serves as the heal-in-flight dedup lock (Task #13 §3.5). Preserves status /
+    approved_at — never re-opens an approved v2 to draft (unlike ``_editable_v2``).
+    No-op when no v2 draft exists yet."""
+    v2 = load_v2(session_id)
+    if v2 is not None and not v2.insights_stale:
+        v2.insights_stale = True
+        _save_v2(v2)
+
+
 def replace_session(session: Session) -> None:
     """Hard-replace a session row (delete + save). Use only for `--force` ingest;
     the default ingest path is `save_session` (raw-write-once)."""

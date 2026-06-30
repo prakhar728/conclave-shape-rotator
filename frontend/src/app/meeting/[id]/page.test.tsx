@@ -211,3 +211,57 @@ describe("MeetingPage — agenda-grounded provenance signal", () => {
     expect(screen.queryByTestId("agenda-grounded")).toBeNull();
   });
 });
+
+describe("MeetingPage — Task #13 heal-on-open badge", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    pushMock.mockReset();
+    mockUseRefineDraft.mockReset();
+    mockUseRefineDraft.mockReturnValue({
+      draft: baseDraft(),
+      setDraft: vi.fn(),
+      preparing: false,
+    });
+    vi.spyOn(auth, "me").mockResolvedValue(ME as never);
+    vi.spyOn(refine, "getDraft").mockResolvedValue(baseDraft() as never);
+  });
+
+  it("shows the 'updating insights' badge when insights_regenerating is true", async () => {
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: false, insights_regenerating: true }) as never
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByTestId("insights-updating")).toBeInTheDocument());
+  });
+
+  it("hides the badge when insights_regenerating is absent/false", async () => {
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: false }) as never
+    );
+    renderPage();
+    await waitFor(() => expect(screen.getByText(/Meeting summary/)).toBeInTheDocument());
+    expect(screen.queryByTestId("insights-updating")).toBeNull();
+  });
+
+  it("clears the badge once insights_regenerating flips false — even when the draft 404s (no v2)", async () => {
+    // The lingering-badge fix: the poll must clear on the meeting's authoritative
+    // `insights_regenerating`, not only the draft's `insights_stale`. Here getDraft
+    // 404s (no v2), so the OLD draft-only poll would ride its ~3min timeout.
+    const getMock = vi
+      .spyOn(meetings, "get")
+      .mockResolvedValueOnce(baseMeeting({ is_owner: false, insights_regenerating: true }) as never)
+      .mockResolvedValue(baseMeeting({ is_owner: false, insights_regenerating: false }) as never);
+    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "no v2", "no v2"));
+
+    renderPage();
+    // Badge shows on the initial (regenerating) load.
+    await waitFor(() => expect(screen.getByTestId("insights-updating")).toBeInTheDocument());
+
+    // The 4s poll re-fetches the meeting (now regenerating=false) and clears the badge.
+    await waitFor(
+      () => expect(screen.queryByTestId("insights-updating")).toBeNull(),
+      { timeout: 8000 }
+    );
+    expect(getMock.mock.calls.length).toBeGreaterThan(1); // initial load + ≥1 poll tick
+  }, 12000);
+});

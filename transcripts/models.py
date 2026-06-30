@@ -77,6 +77,15 @@ class SessionMetadata(BaseModel):
     #: SHA-256 prefix (first 8 chars) of the raw_intent compiled at enrich
     #: time — the intent analogue of team_context_version (A/B + provenance).
     meeting_intent_version: Optional[str] = None
+    #: Task #13 — fingerprint of the speaker-name set the summary was built
+    #: with: sha256(canonical_json(sorted {raw_label → resolved_name_or_null}))[:16].
+    #: Stamped on every enrich (initial, #9 approve-regen, #13 heal). On read,
+    #: the heal-on-open compare recomputes this against the *currently-resolved*
+    #: names; a difference (a deferred consent confirmed a name out-of-band)
+    #: triggers a background re-enrich so the summary heals with the real name.
+    #: None on sessions enriched before this feature — the ≥1-non-null-name
+    #: guard keeps those from spuriously re-enriching on their first open.
+    enrich_speakers_version: Optional[str] = None
     #: Explicit attendance roster when known (Google Meet / Zoom / calendar
     #: connector, future v1.1 work). When None, callers fall back to
     #: deriving "who was in the room" from distinct speaker labels in

@@ -301,6 +301,10 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
     that happened without a re-tag surfaces on next load, and revoked consent withholds the name
     at read time. Fail-open: if FPM is unreachable, the stored names stand. Rewrites only
     `resolved_speakers[label]["name"]` — never the label key or `raw_diarization` (C3).
+
+    Pure name-refresh: the Task #13 heal-on-open is a SEPARATE step (`_maybe_heal_on_open`),
+    invoked only from the meeting-detail open path so the transcript read never spawns a
+    background re-enrich.
     """
     speakers = session.metadata.resolved_speakers or {}
     vids = sorted({m["voiceprint_id"] for m in speakers.values()
@@ -323,6 +327,41 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
     if changed:
         from transcripts import store as _store
         _store.set_metadata(session.session_id, session.metadata)
+
+
+def _maybe_heal_on_open(session: Session) -> bool:
+    """Task #13 — lazy heal-on-open after a deferred speaker-name confirm.
+
+    Call AFTER `_apply_consent_backstop` has refreshed the names (so `session`'s resolved set
+    is as fresh as FPM's consent decision). Compares the currently-resolved speaker-name set
+    against the stamp the summary was built with (`metadata.enrich_speakers_version`). On a
+    real difference WITH ≥1 confirmed name (a name appeared / was corrected / a wrong tag was
+    fixed out-of-band), enqueues a background re-enrich so the summary regenerates with the
+    real name — **this meeting only**. Returns whether a heal is needed/in-flight (for the
+    badge).
+
+    Guards:
+      - `current == stamp` → no-op (free reads stay free; idempotent — the re-enrich re-stamps
+        to `current`, so the next unchanged open is a no-op: self-converging, no loop).
+      - no confirmed name (all anonymous, incl. unstamped legacy) → no-op (no spurious regen on
+        the all-anonymous first open).
+      - in-flight dedup: two concurrent opens both see the difference, but the first marks the
+        v2 `insights_stale` lock + enqueues; the second sees the lock and reports the badge
+        without re-enqueueing → exactly one regen.
+    """
+    from transcripts import store as _store
+
+    current = _store.speakers_version(session)
+    if current == session.metadata.enrich_speakers_version:
+        return False
+    if not _store.has_confirmed_speaker(session):
+        return False
+    v2 = _store.load_v2(session.session_id)
+    if v2 is None or not v2.insights_stale:
+        _store.mark_insights_stale(session.session_id)
+        from connectors.jobs import enqueue
+        enqueue.enrich(session.session_id)
+    return True
 
 
 def to_transcript(session: Session) -> dict:
@@ -451,7 +490,13 @@ def get_session(
     if user is not None and row is not None:
         if not can_user_see(user, row):
             raise HTTPException(status_code=403, detail="not allowed")
+        # Task #13 — refresh names from FPM consent (cached, fail-open), then heal the
+        # summary on open if a deferred confirm changed the resolved name set since the
+        # last enrich. `regenerating` drives the meeting page's "updating insights" badge.
+        _apply_consent_backstop(session, row["workspace_id"])
+        regenerating = _maybe_heal_on_open(session)
         view = to_view(session)
+        view["insights_regenerating"] = regenerating
         # Decorate with workspace-side metadata the frontend needs to render
         # owner controls (visibility toggle, add-attendee form) and the
         # typed visibility value (separate from the legacy JSON one).
@@ -1174,6 +1219,12 @@ def _rederive_insights_from_v2(session_id: str) -> None:
         })
         enrich_session(corrected)
         store.set_derived(session_id, corrected.derived)
+        # Task #13 — re-stamp `enrich_speakers_version` from the ORIGINAL session's
+        # immutable-raw labels (corrected.raw_diarization carries v2 *names*, so its own
+        # stamp would use the wrong basis and the meeting would immediately re-heal on
+        # open). Persisting metadata here is what makes #9's approve path re-stamp.
+        corrected.metadata.enrich_speakers_version = store.speakers_version(session)
+        store.set_metadata(session_id, corrected.metadata)
         store.clear_insights_stale(session_id)
     except Exception:
         logger.exception("insight re-derive failed for session %s", session_id)
@@ -1345,8 +1396,11 @@ def _enrich_in_background(session_id: str) -> None:
     # The editable v2 draft (spaCy candidate detection) needs NOTHING from the LLM, so
     # build it FIRST — it's fast (~1-2s) and unblocks /refine immediately, independent
     # of (and surviving) the slow LLM enrichment that follows. Isolated try/except.
+    # Task #13: build it ONCE — a re-enrich (heal-on-open) must NOT rebuild it, or it
+    # would clobber an approved v2 / the owner's corrections (save_transcript_v2 upserts).
     try:
-        store.create_v2_draft(session_id)
+        if store.load_v2(session_id) is None:
+            store.create_v2_draft(session_id)
     except Exception:
         logger.exception("v2 draft creation failed for session %s", session_id)
 
@@ -1356,6 +1410,10 @@ def _enrich_in_background(session_id: str) -> None:
     if _should_skip_enrich():
         session.metadata.enrichment_status = "skipped"
         store.set_metadata(session_id, session.metadata)
+        # Task #13 (H4): release the heal-in-flight lock even when enrich is skipped —
+        # the stamp is NOT advanced, so a later open re-fires the heal once an LLM is
+        # configured. Holding the lock would stick the badge AND block retry forever.
+        store.clear_insights_stale(session_id)
         logger.info("enrich skipped for %s (no LLM configured / CONCLAVE_SKIP_ENRICH)", session_id)
     else:
         try:
@@ -1364,10 +1422,21 @@ def _enrich_in_background(session_id: str) -> None:
             session.metadata.enrichment_status = "ok"
             store.set_derived(session_id, session.derived)
             store.set_metadata(session_id, session.metadata)
+            # Task #13: enrich_session re-stamped `enrich_speakers_version` to the
+            # current resolved-name set; clear the heal-in-flight lock so the next
+            # open with unchanged names is a no-op (self-converging, no loop). Initial
+            # enrich: a no-op (flag already clear).
+            store.clear_insights_stale(session_id)
         except Exception:
             logger.exception("background enrich failed for session %s", session_id)
             session.metadata.enrichment_status = "failed"
             store.set_metadata(session_id, session.metadata)
+            # Task #13 (H4): a FAILED re-enrich (e.g. LLM down) must still release the
+            # in-flight lock. enrich_session threw BEFORE stamping, so
+            # `enrich_speakers_version` is unchanged (stays diverged) → the next open
+            # re-fires the heal and retries once the LLM recovers. Without this the lock
+            # (which doubles as the heal dedup key) never releases → stuck badge + no retry.
+            store.clear_insights_stale(session_id)
 
     # Phase 2.8 — post-enrichment magic-link blast. Wrapped in its own
     # try/except so an email-send failure never poisons the enrichment

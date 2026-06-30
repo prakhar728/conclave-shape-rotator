@@ -79,21 +79,31 @@ export default function MeetingPage({
     return () => clearInterval(iv);
   }, [processing, id]);
 
-  // After approve, the summary + signals re-derive from the corrected v2 in the
-  // background. Poll the draft until its `insights_stale` clears (the re-derive's
-  // done-signal), then pull the fresh meeting signals — surfacing an "Updating
-  // insights" sign throughout.
+  // While insights regenerate in the background — either #9's post-approve
+  // re-derive (signalled by the draft's `insights_stale`) or #13's heal-on-open
+  // after a deferred speaker-name confirm (signalled by the meeting's
+  // `insights_regenerating`, a stamp-derived flag that flips false the moment the
+  // re-enrich re-stamps) — keep the "Updating insights" badge up and poll both
+  // signals. Clearing on BOTH (not just the draft) is what stops the badge
+  // lingering for meetings whose draft is absent/already-settled at heal time:
+  // `getDraft` may 404 (no v2) or already read `insights_stale=false`, in which
+  // case `insights_regenerating` is the authoritative done-signal.
   useEffect(() => {
     if (!regenerating) return;
     let n = 0;
     const iv = setInterval(async () => {
       n += 1;
       try {
-        const d = await refine.getDraft(id);
-        setDraft(d);
-        if (!d.insights_stale || n >= 45) {
+        const [m, d] = await Promise.all([
+          meetingsApi.get(id),
+          refine.getDraft(id).catch(() => null), // 404 / no v2 → treat as "not re-deriving"
+        ]);
+        setMeeting(m);
+        if (d) setDraft(d);
+        const healing = m.insights_regenerating === true; // #13 stamp divergence in flight
+        const rederiving = d?.insights_stale === true; // #9 post-approve re-derive in flight
+        if ((!healing && !rederiving) || n >= 45) {
           clearInterval(iv);
-          setMeeting(await meetingsApi.get(id));
           setRegenerating(false);
         }
       } catch {
@@ -117,6 +127,10 @@ export default function MeetingPage({
         if (cancelled) return;
         setMe(meResp);
         setMeeting(mResp);
+        // Task #13 — a deferred speaker-name confirm is healing this summary in the
+        // background on open. Reuse #9's "Updating insights" flow: show the badge and
+        // poll the draft until the re-enrich clears `insights_stale`.
+        if (mResp.insights_regenerating) setRegenerating(true);
       } catch (err) {
         if (cancelled) return;
         if (err instanceof ApiError) {
@@ -203,7 +217,7 @@ export default function MeetingPage({
           >
             <span className="size-2 animate-pulse rounded-full bg-blue-500" />
             <p className="text-xs text-muted-foreground">
-              Updating insights — re-deriving the summary &amp; signals from your approved corrections…
+              Updating insights — re-deriving the summary &amp; signals with the latest speaker names…
             </p>
           </div>
         ) : null}
@@ -345,7 +359,7 @@ function SignalGroup({
   return (
     <section className="mb-8">
       <h2 className="mb-4 flex items-center gap-2 font-heading text-xs font-bold uppercase tracking-widest text-foreground">
-        <span className={`size-2 rounded-none ${dot}`} aria-hiddenBytes />
+        <span className={`size-2 rounded-none ${dot}`} aria-hidden />
         {title}
       </h2>
       <ul className="flex flex-col gap-3">

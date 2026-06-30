@@ -280,6 +280,10 @@ export type MeetingView = {
   // and the per-meeting override (null=inherit | 'keep_forever' | '<int>' days).
   raw_transcript_deleted?: boolean;
   retention_override?: string | null;
+  // Task #13 — true when a deferred speaker-name confirm diverged the resolved
+  // names from the summary's stamp, so a background re-enrich is healing the
+  // summary on this open. Drives the reused "Updating insights" badge.
+  insights_regenerating?: boolean;
 };
 
 // --- Raw transcript (gated surface — Transcript Saving feature) -----------

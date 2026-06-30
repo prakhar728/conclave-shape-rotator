@@ -80,8 +80,13 @@ _VALID_ENTITY_TYPES = {"person", "project", "technology", "concept", "org"}
 # ---------------------------------------------------------------------------
 
 def transcript_text(session: Session) -> str:
-    """Render the diarization as ``[speaker] text`` lines for the prompt."""
-    return _segments_to_text(session.raw_diarization)
+    """Render the diarization as ``[speaker] text`` lines for the prompt.
+
+    Task #13: confirmed speaker names are projected over the anonymous labels
+    (``Speaker 2`` → ``Andrew``) where a name has been resolved; ``raw_diarization``
+    is untouched (projection only on the text handed to the model).
+    """
+    return _segments_to_text(session.raw_diarization, store.resolved_name_map(session))
 
 
 def enrich_session(
@@ -106,6 +111,11 @@ def enrich_session(
     chunks = chunk_segments(session.raw_diarization, **chunker_kwargs)
     chunk_count = max(1, len(chunks))
 
+    # Task #13 — project confirmed speaker names over the anonymous labels in the
+    # text fed to the model. Built from resolved_speakers; empty until a name is
+    # confirmed (so the first enrich runs against `Speaker N` as before).
+    name_map = store.resolved_name_map(session)
+
     # v2: team-context priming is spliced into the system prompt before the
     # chunk. Loaded once per process; absent/malformed → empty fragment +
     # no version stamp (no grounding, but extraction still runs).
@@ -126,7 +136,7 @@ def enrich_session(
 
     if len(chunks) <= 1:
         derived = _enrich_single(
-            _segments_to_text(chunks[0] if chunks else session.raw_diarization),
+            _segments_to_text(chunks[0] if chunks else session.raw_diarization, name_map),
             llm=llm,
             model=model,
             team_context_fragment=tc_fragment,
@@ -135,7 +145,7 @@ def enrich_session(
     else:
         partials = [
             _enrich_chunk(
-                _segments_to_text(c), index=i, total=len(chunks),
+                _segments_to_text(c, name_map), index=i, total=len(chunks),
                 llm=llm, model=model, team_context_fragment=tc_fragment,
                 meeting_intent_fragment=mi_fragment,
             )
@@ -149,6 +159,11 @@ def enrich_session(
     session.metadata.chunk_count = chunk_count
     session.metadata.team_context_version = tc_version
     session.metadata.meeting_intent_version = mi_version
+    # Task #13 — stamp the speaker-name set this summary was built with, so the
+    # heal-on-open compare can detect a later (deferred-consent) name confirm.
+    # Computed from the immutable raw labels joined to the currently-resolved
+    # names — the same basis the read-path compare recomputes.
+    session.metadata.enrich_speakers_version = store.speakers_version(session)
     return session
 
 
@@ -564,8 +579,18 @@ def _stamp_cohort_status(entities: list[Entity]) -> list[Entity]:
 # Misc
 # ---------------------------------------------------------------------------
 
-def _segments_to_text(segs: list[RawSegment]) -> str:
-    return "\n".join(f"[{s.speaker}] {s.text}" for s in segs)
+def _segments_to_text(
+    segs: list[RawSegment], name_map: Optional[dict[str, str]] = None
+) -> str:
+    """Render ``[speaker] text`` lines for the prompt.
+
+    ``name_map`` (Task #13 §3.3) projects ``raw_label → confirmed name`` so the
+    LLM sees ``[Andrew] …`` instead of ``[Speaker 2] …`` once the name is
+    resolved; labels absent from the map keep their anonymous form. The raw
+    segments are never mutated.
+    """
+    name_map = name_map or {}
+    return "\n".join(f"[{name_map.get(s.speaker) or s.speaker}] {s.text}" for s in segs)
 
 
 def _model_id(llm: Any, model_override: Optional[str]) -> str:
