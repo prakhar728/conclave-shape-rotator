@@ -231,6 +231,50 @@ def test_share_to_specific_member_only(client):
     assert client.get("/transcripts/sessions/m-mem").status_code == 403
 
 
+def test_member_share_grants_full_even_with_restricted_config(client):
+    """Decision B: a workspace MEMBER granted via a per-recipient share sees FULL
+    artifacts even if the share's config withholds some (a plain restricted share on
+    a NON-member would gate per-artifact — this pins the member-full branch)."""
+    ws_id, owner, member = _seed_owner_and_member(client)
+    _seed_meeting(ws_id, owner["id"], "m-restrict")
+    # Owner shares to the member via the general /shares endpoint with audio OFF.
+    _login(client, "owner3@x.com")
+    r = client.post("/api/meetings/m-restrict/shares",
+                    json={"email": "member3@x.com",
+                          "transcript": True, "insights": True, "audio": False})
+    assert r.status_code == 201
+    # The member still sees audio — because they're a member (decision B), not the flags.
+    _login(client, "member3@x.com")
+    v = client.get("/transcripts/sessions/m-restrict").json()
+    assert v["can_view_audio"] is True
+
+
+def test_inperson_webhook_defaults_owner_private(client, monkeypatch):
+    """The in-person finalize webhook binds a walk-up meeting as OWNER-PRIVATE (§0b-D):
+    a bare workspace member does NOT auto-see it (guards the webhook-level default)."""
+    monkeypatch.delenv("CAPTURE_WEBHOOK_SECRET", raising=False)
+    ws_id, owner, member = _seed_owner_and_member(client)
+    native = "inperson-wh-1"
+    # Seed the live buffer so finalize materializes an "accepted" session (in-person has
+    # no bot_invitation → the webhook binds via the payload workspace_id).
+    _sqlite.append_live_segment(native, 0,
+                                {"start": 0.0, "end": 1.0, "text": "hello", "speaker": "S1"})
+    body = {
+        "event_id": "evt_wh_1", "event_type": "meeting.completed", "api_version": "v1",
+        "created_at": "2026-07-01T10:00:00Z",
+        "data": {"meeting": {"id": 1, "platform": "in_person",
+                             "native_meeting_id": native, "status": "completed",
+                             "workspace_id": ws_id}},
+    }
+    r = client.post("/api/webhooks/capture/meeting-completed", json=body)
+    assert r.status_code == 202 and r.json()["status"] == "accepted", r.text
+    # Owner sees it; the bare member does NOT (owner-private default).
+    _login(client, "owner3@x.com")
+    assert client.get(f"/transcripts/sessions/{native}").status_code == 200
+    _login(client, "member3@x.com")
+    assert client.get(f"/transcripts/sessions/{native}").status_code == 403
+
+
 def test_owner_only_lock_blocks_workspace_share(client):
     ws_id, owner, member = _seed_owner_and_member(client)
     _seed_meeting(ws_id, owner["id"], "m-lock")
