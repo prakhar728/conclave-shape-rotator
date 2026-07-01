@@ -101,6 +101,59 @@ describe("RefineEditor — VFTE speaker tagging", () => {
     expect(await screen.findByText("pending: Bob")).toBeInTheDocument();
   });
 
+  it("the email-transcript toggle threads email_transcript through tagSpeaker (Task #15)", async () => {
+    const spy = vi.spyOn(meetings, "tagSpeaker").mockResolvedValue({
+      label: "speaker_1",
+      voiceprint_id: "vp1",
+      status: "pending",
+      name: null,
+      proposal_id: "p1",
+    });
+    renderEditor();
+    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Bob" } });
+    fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
+      target: { value: "bob@x.com" },
+    });
+    // Opt in to also emailing the transcript link.
+    fireEvent.click(screen.getByRole("checkbox"));
+    fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("ws_1", "s1", {
+        label: "speaker_1",
+        name: "Bob",
+        email: "bob@x.com",
+        email_transcript: true,
+      }),
+    );
+  });
+
+  it("without checking the toggle, tagSpeaker omits email_transcript", async () => {
+    const spy = vi.spyOn(meetings, "tagSpeaker").mockResolvedValue({
+      label: "speaker_1",
+      voiceprint_id: "vp1",
+      status: "pending",
+      name: null,
+      proposal_id: "p1",
+    });
+    renderEditor();
+    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Bob" } });
+    fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
+      target: { value: "bob@x.com" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Tag" }));
+
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith("ws_1", "s1", {
+        label: "speaker_1",
+        name: "Bob",
+        email: "bob@x.com",
+      }),
+    );
+  });
+
   it("renders an already-resolved identity from resolvedSpeakers", () => {
     renderEditor({ resolvedSpeakers: { speaker_2: { name: "Carol" } } });
     expect(screen.getByText("Carol")).toBeInTheDocument();

@@ -1582,6 +1582,30 @@ def _send_attendee_magic_links(session_id: str) -> None:
       - the owner's own email (they already have direct access)
       - recipients who already received a magic link for this session
         (post-enrichment can fire on re-enrichment; we don't re-spam)
+
+    Delegates the per-recipient work to :func:`_send_one_attendee_magic_link`,
+    which the Task #15 tag "email transcript" toggle reuses for a single person.
+    """
+    fields = store.get_workspace_fields(session_id)
+    if not fields or not fields.get("workspace_id"):
+        return
+    if fields.get("visibility") != "shared":
+        return
+
+    from infra.workspaces import list_meeting_shares
+
+    for share in list_meeting_shares(session_id):
+        _send_one_attendee_magic_link(session_id, share["user_email"])
+
+
+def _send_one_attendee_magic_link(session_id: str, recipient: str) -> None:
+    """Issue + send ONE magic link for `recipient` on a shared session.
+
+    The per-recipient half of :func:`_send_attendee_magic_links`, exposed so the
+    Task #15 tag toggle can notify a single person immediately on tag. Same
+    guards as the blast: no-op unless the session is workspace-bound and
+    ``shared``; never mails the owner; never re-mails someone already sent a link
+    for this session (idempotent). Link-only — never transcript content.
     """
     fields = store.get_workspace_fields(session_id)
     if not fields or not fields.get("workspace_id"):
@@ -1591,51 +1615,36 @@ def _send_attendee_magic_links(session_id: str) -> None:
 
     from infra import email as email_mod
     from infra import identity, magic_links
-    from infra.workspaces import list_meeting_shares
     from storage.sqlite import _get_conn
-
-    shares = list_meeting_shares(session_id)
-    if not shares:
-        return
 
     owner = identity.get_user(fields["owner_user_id"]) if fields.get("owner_user_id") else None
     owner_email = owner["email"] if owner else None
+    if owner_email and recipient == owner_email:
+        return
 
-    # Skip recipients we've already mailed for this session.
-    sent_emails = {
-        row["user_email"]
-        for row in _get_conn().execute(
-            "SELECT user_email FROM magic_links WHERE meeting_session_id = ?",
-            (session_id,),
-        ).fetchall()
-    }
+    already = _get_conn().execute(
+        "SELECT 1 FROM magic_links WHERE meeting_session_id = ? AND user_email = ?",
+        (session_id, recipient),
+    ).fetchone()
+    if already is not None:
+        return
 
     session = store.load_session(session_id)
     title = session.derived.summary[:80] if session and session.derived and session.derived.summary else None
-
-    for share in shares:
-        recipient = share["user_email"]
-        if owner_email and recipient == owner_email:
-            continue
-        if recipient in sent_emails:
-            continue
-        token = magic_links.issue(
-            user_email=recipient,
-            meeting_session_id=session_id,
+    token = magic_links.issue(user_email=recipient, meeting_session_id=session_id)
+    try:
+        email_mod.send_magic_link(
+            recipient_email=recipient,
+            magic_link_url=magic_links.url_for(token),
+            meeting_title=title,
+            inviter_email=owner_email,
         )
-        try:
-            email_mod.send_magic_link(
-                recipient_email=recipient,
-                magic_link_url=magic_links.url_for(token),
-                meeting_title=title,
-                inviter_email=owner_email,
-            )
-        except Exception:
-            logger.exception(
-                "magic-link send failed for %s/%s — token issued but email may not arrive",
-                recipient,
-                session_id,
-            )
+    except Exception:
+        logger.exception(
+            "magic-link send failed for %s/%s — token issued but email may not arrive",
+            recipient,
+            session_id,
+        )
 
 
 @router.post(

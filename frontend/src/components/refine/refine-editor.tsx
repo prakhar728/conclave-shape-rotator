@@ -99,12 +99,19 @@ export function RefineEditor({
   // Tag a whole speaker (by label) with name+email → VFTE consent binding. Confirmed
   // self/dev tags flip the name in place; tagging someone else is "pending" until they
   // confirm on their consent dashboard — identical to the meeting transcript page.
-  async function submitTag(label: string, name: string, email: string) {
+  async function submitTag(label: string, name: string, email: string, emailTranscript: boolean) {
     if (!workspaceId) return;
     setTagBusy(true);
     setTagErr(null);
     try {
-      const res = await meetingsApi.tagSpeaker(workspaceId, sessionId, { label, name, email });
+      const res = await meetingsApi.tagSpeaker(workspaceId, sessionId, {
+        label,
+        name,
+        email,
+        // Task #15 — only send the toggle when the host opted in, so the
+        // default payload (and existing callers) stay { label, name, email }.
+        ...(emailTranscript ? { email_transcript: true } : {}),
+      });
       setAssigning(null);
       if (res.status === "confirmed") {
         setResolved((r) => ({ ...r, [label]: { ...(r[label] as object), name: res.name ?? name } }));
@@ -240,6 +247,7 @@ export function RefineEditor({
                     label={seg.speaker_label}
                     busy={tagBusy}
                     err={tagErr}
+                    showEmailTranscript
                     onCancel={() => setAssigning(null)}
                     onSubmit={submitTag}
                   />

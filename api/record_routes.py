@@ -397,6 +397,11 @@ class TagSpeakerBody(BaseModel):
     label: str
     name: str
     email: str
+    #: Task #15 — the host's "also email them the transcript" toggle. When true,
+    #: tagging this speaker ALSO grants `email` a transcript+insights share, flips
+    #: the meeting to `shared`, and sends a link-only magic-link email in the same
+    #: request. Opt-in per tag; independent of voiceprint consent (see #3).
+    email_transcript: bool = False
 
 
 @router.post("/{workspace_id}/meetings/{session_id}/tag-speaker")
@@ -442,6 +447,49 @@ async def tag_speaker(
     if result.get("status") == "confirmed":
         store.reresolve_voiceprint(voiceprint_id, result.get("name") or body.name,
                                    workspace_id=workspace_id)
+    # Task #15: if the host flipped the "also email them the transcript" toggle,
+    # grant + share + email in this same request — regardless of the binding's
+    # confirm status (sharing is the host's call, not the subject's voice consent).
+    shared = False
+    if body.email_transcript:
+        shared = _email_transcript_on_tag(session_id, body.email, granted_by=user["id"])
     return {"label": body.label, "voiceprint_id": voiceprint_id,
             "status": result.get("status"), "name": result.get("name"),
-            "proposal_id": result.get("proposal_id")}
+            "proposal_id": result.get("proposal_id"), "shared": shared}
+
+
+def _email_transcript_on_tag(session_id: str, recipient_email: str, *, granted_by: str) -> bool:
+    """Task #15 — one host action fans out to grant + visibility + notify.
+
+    Given a `shared`-eligible workspace meeting, (1) grant `recipient_email` a
+    transcript+insights share (#31 ``ShareConfig``, audio off — host can narrow
+    later via the share UI), (2) flip the meeting to ``shared`` so the grant is
+    live, and (3) send a LINK-ONLY magic-link email immediately (reusing the
+    single-recipient half of the post-enrich blast). Never emails transcript
+    content — ``email_templates`` policy is authenticate-then-view.
+
+    Returns True when the share was created. No-op (False) for a session with no
+    workspace binding (nothing to share).
+    """
+    from transcripts import store
+    from infra.workspaces import ShareConfig, add_meeting_share
+
+    fields = store.get_workspace_fields(session_id)
+    if not fields or not fields.get("workspace_id"):
+        return False
+    add_meeting_share(
+        session_id, recipient_email, granted_by,
+        ShareConfig(transcript=True, insights=True, audio=False),
+    )
+    if fields.get("visibility") != "shared":
+        store.set_workspace(
+            session_id=session_id,
+            workspace_id=fields["workspace_id"],
+            owner_user_id=fields.get("owner_user_id"),
+            visibility="shared",
+        )
+    # Lazy import avoids a module-load cycle (transcripts_routes imports nothing
+    # from record_routes; the reverse is safe at call time).
+    from api.transcripts_routes import _send_one_attendee_magic_link
+    _send_one_attendee_magic_link(session_id, recipient_email)
+    return True

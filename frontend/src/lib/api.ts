@@ -340,7 +340,9 @@ export const meetings = {
   tagSpeaker: (
     workspaceId: string,
     sessionId: string,
-    body: { label: string; name: string; email: string },
+    // Task #15 — `email_transcript` (opt-in) also shares the transcript+insights
+    // and emails a magic link to `email` in the same request.
+    body: { label: string; name: string; email: string; email_transcript?: boolean },
   ) =>
     apiFetch<TagSpeakerResult>(
       `/api/workspaces/${encodeURIComponent(workspaceId)}/meetings/${encodeURIComponent(

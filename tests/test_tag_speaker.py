@@ -136,6 +136,101 @@ def test_unauthenticated_401(client):
     assert r.status_code == 401
 
 
+@pytest.fixture
+def email_spy(monkeypatch):
+    """Spy on the magic-link send (Resend is in stub mode; we observe calls)."""
+    calls: list[dict] = []
+    import infra.email as email_mod
+
+    def _spy(**kwargs):
+        calls.append(kwargs)
+        return {"stub": True, **kwargs}
+
+    monkeypatch.setattr(email_mod, "send_magic_link", _spy)
+    return calls
+
+
+def _share_flags(session_id, email):
+    from infra.workspaces import get_meeting_share_scope
+    return get_meeting_share_scope(session_id, email)
+
+
+def test_email_transcript_toggle_shares_and_mails(client, monkeypatch, email_spy):
+    """Task #15 — tagging with email_transcript=true grants a transcript+insights
+    share, flips the meeting to `shared`, and emails a link-only magic link."""
+    user = _login(client)
+    wsid = _wsid(client)
+    _make_session("mshare", wsid, user["id"],
+                  {"Speaker 1": {"voiceprint_id": "vp_x", "name": None, "confidence": 0.6}})
+    # Tagging someone else → pending; the share fires regardless of consent status.
+    _stub_propose(monkeypatch, {"proposal_id": "p_share", "status": "pending",
+                                "auto_confirmed": False, "voiceprint_id": "vp_x",
+                                "name": None, "owner_email": None})
+
+    r = client.post(f"/api/workspaces/{wsid}/meetings/mshare/tag-speaker",
+                    json={"label": "Speaker 1", "name": "Bob", "email": "bob@example.com",
+                          "email_transcript": True})
+    assert r.status_code == 200, r.text
+    assert r.json()["shared"] is True
+
+    # (1) share row exists at transcript+insights, audio off.
+    cfg = _share_flags("mshare", "bob@example.com")
+    assert cfg is not None
+    assert (cfg.transcript, cfg.insights, cfg.audio) == (True, True, False)
+
+    # (2) meeting flipped to `shared`.
+    assert store.get_workspace_fields("mshare")["visibility"] == "shared"
+
+    # (3) a link-only magic link was emailed to the recipient.
+    assert [c["recipient_email"] for c in email_spy] == ["bob@example.com"]
+    assert "/m/" in email_spy[0]["magic_link_url"]
+
+
+def test_email_transcript_toggle_off_shares_nothing(client, monkeypatch, email_spy):
+    """Regression guard: without the toggle, tagging shares nothing and mails no one."""
+    user = _login(client)
+    wsid = _wsid(client)
+    _make_session("mnoshare", wsid, user["id"],
+                  {"Speaker 1": {"voiceprint_id": "vp_y", "name": None, "confidence": 0.6}})
+    _stub_propose(monkeypatch, {"proposal_id": "p_noshare", "status": "pending",
+                                "auto_confirmed": False, "voiceprint_id": "vp_y",
+                                "name": None, "owner_email": None})
+
+    r = client.post(f"/api/workspaces/{wsid}/meetings/mnoshare/tag-speaker",
+                    json={"label": "Speaker 1", "name": "Bob", "email": "bob@example.com"})
+    assert r.status_code == 200, r.text
+    assert r.json()["shared"] is False
+
+    assert _share_flags("mnoshare", "bob@example.com") is None
+    assert store.get_workspace_fields("mnoshare")["visibility"] == "owner-only"
+    assert email_spy == []
+
+
+def test_email_transcript_link_resolves_to_meeting(client, monkeypatch, email_spy):
+    """The emailed /m/{token} link resolves back to the tagged meeting."""
+    user = _login(client)
+    wsid = _wsid(client)
+    _make_session("mlink", wsid, user["id"],
+                  {"Speaker 1": {"voiceprint_id": "vp_z", "name": None, "confidence": 0.6}})
+    _stub_propose(monkeypatch, {"proposal_id": "p_link", "status": "pending",
+                                "auto_confirmed": False, "voiceprint_id": "vp_z",
+                                "name": None, "owner_email": None})
+
+    client.post(f"/api/workspaces/{wsid}/meetings/mlink/tag-speaker",
+                json={"label": "Speaker 1", "name": "Bob", "email": "bob@example.com",
+                      "email_transcript": True})
+
+    from storage.sqlite import _get_conn
+    row = _get_conn().execute(
+        "SELECT token FROM magic_links WHERE meeting_session_id = ? AND user_email = ?",
+        ("mlink", "bob@example.com"),
+    ).fetchone()
+    assert row is not None
+    resolved = client.get(f"/api/magic-links/{row['token']}")
+    assert resolved.status_code == 200
+    assert resolved.json()["meeting_session_id"] == "mlink"
+
+
 def test_session_detail_exposes_workspace_id(client):
     """The meeting view carries workspace_id so the UI knows where to POST tags."""
     user = _login(client)
