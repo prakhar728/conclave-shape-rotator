@@ -360,6 +360,21 @@ export const meetings = {
     ),
 };
 
+// --- Live transcription (SSE) ---------------------------------------------
+
+/**
+ * Task #14: the backend live tail (`api/live_routes.py`). SSE stream of each new
+ * `live_segments` row (the diart live preview) as it lands. Same-origin, so the
+ * session cookie rides along and the URL works directly as an `EventSource` src.
+ * The `/recording/[id]` page reads this as its refresh-survivable, second-viewer
+ * data source when it does NOT own the low-latency capture WebSocket.
+ */
+export const live = {
+  streamUrl: (nativeId: string) =>
+    `/api/meetings/${encodeURIComponent(nativeId)}/live`,
+  open: (nativeId: string) => new EventSource(live.streamUrl(nativeId)),
+};
+
 // --- Magic links ----------------------------------------------------------
 
 export type MagicLinkLookup = {

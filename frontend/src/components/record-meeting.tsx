@@ -1,65 +1,31 @@
 /**
- * In-person Record — orange pill CTA + modal (Vantage language, sibling of
- * UploadTranscriptButton).
+ * In-person Record — orange pill CTA + a small pre-flight config dialog.
  *
- * MIGRATED (live capture): instead of MediaRecorder→upload→/api/workspaces/{id}/record (where Conclave
- * itself transcribed + diarized), this now STREAMS the room mic to the capture microservice over a
- * WebSocket. capture diarizes live (diart) + transcribes each span (NEAR Whisper) and publishes
- * `[local_speaker] text` to Redis, which Conclave ingests — so the transcription PROCESS lives in capture;
- * Conclave only displays. The modal shows the diart live transcript as it streams. On Stop, capture
- * uploads the recording + fires Conclave's meeting-completed webhook (finalize → DiariZen authoritative +
- * VFTE identity), then we navigate to /meeting/[id] where the diart transcript shows immediately and
- * swaps to the authoritative version once post-processing completes.
+ * Task #14: the live capture session (mic / AudioWorklet / capture WebSocket) no
+ * longer lives in this modal — it moved to the global `RecordingProvider` so a
+ * recording survives navigation. This component is now just the trigger + a
+ * lightweight pre-flight dialog to collect the two pre-recording settings that
+ * must be locked before the stream opens:
+ *   - Task #12 agenda/focus (stashed by uid → grounds the summary)
+ *   - Task #30 store-audio toggle (in-person default ON)
+ * On Start it calls `start()` (which creates the `inperson-…` id, stashes the
+ * agenda, requests the mic + opens the WS) and navigates to `/recording/{id}` —
+ * the dedicated live page. Mic-permission / WS-1008 failures surface THERE, not
+ * here.
  *
- * The legacy POST /api/workspaces/{id}/record endpoint still exists server-side (API/upload), but the UI
- * no longer uses it. This is Conclave ingress mode 3 (bot · upload · record).
+ * capture diarizes live (diart) + transcribes each span and publishes
+ * `[local_speaker] text`; after Stop it re-diarizes with DiariZen (authoritative)
+ * + names consented speakers, then the recording page redirects to /meeting/[id].
+ * This is Conclave ingress mode 3 (bot · upload · record).
  */
 "use client";
 
-import { Mic, Square, X } from "lucide-react";
+import { Mic, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useState } from "react";
 
-import { workspaces } from "@/lib/api";
+import { useRecording } from "@/components/recording-provider";
 import { cn } from "@/lib/utils";
-
-// capture's in-person WebSocket base (e.g. ws://localhost:8087) + the engine token. Public env so the
-// browser can reach capture directly; in production this is capture's edge URL + a per-session token.
-const CAPTURE_WS_BASE =
-  process.env.NEXT_PUBLIC_CAPTURE_INPERSON_WS_URL || "ws://localhost:8087";
-const CAPTURE_TOKEN = process.env.NEXT_PUBLIC_CAPTURE_DIARIZE_TOKEN || "dev-diarize-token";
-
-// AudioWorklet that emits 16 kHz mono int16 frames (8000 samples ≈ 0.5 s) — same as capture's reference
-// inperson_mic.html so the wire format matches the /v1/inperson/stream contract exactly.
-const WORKLET = `
-class PCMEmitter extends AudioWorkletProcessor {
-  constructor() { super(); this.buf = new Int16Array(8000); this.i = 0; }
-  process(inputs) {
-    const ch = inputs[0][0];
-    if (!ch) return true;
-    for (let k = 0; k < ch.length; k++) {
-      let s = Math.max(-1, Math.min(1, ch[k]));
-      this.buf[this.i++] = s < 0 ? s * 0x8000 : s * 0x7FFF;
-      if (this.i === this.buf.length) { this.port.postMessage(this.buf.slice().buffer); this.i = 0; }
-    }
-    return true;
-  }
-}
-registerProcessor('pcm-emitter', PCMEmitter);
-`;
-
-type LiveSeg = { start: number; end: number; speaker: string; text?: string };
-
-function fmt(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-function newMeetingId(): string {
-  const rand = Math.random().toString(36).slice(2, 8);
-  return `inperson-${Date.now()}-${rand}`;
-}
 
 export function RecordMeetingButton({
   workspaceId,
@@ -82,13 +48,13 @@ export function RecordMeetingButton({
         Record meeting
       </button>
       {open ? (
-        <RecordModal workspaceId={workspaceId} onClose={() => setOpen(false)} />
+        <RecordDialog workspaceId={workspaceId} onClose={() => setOpen(false)} />
       ) : null}
     </>
   );
 }
 
-function RecordModal({
+function RecordDialog({
   workspaceId,
   onClose,
 }: {
@@ -96,142 +62,28 @@ function RecordModal({
   onClose: () => void;
 }) {
   const router = useRouter();
-  const [recording, setRecording] = useState(false);
-  const [ending, setEnding] = useState(false);
-  const [seconds, setSeconds] = useState(0);
-  const [status, setStatus] = useState("Tap the mic to start");
-  const [error, setError] = useState<string | null>(null);
-  const [segs, setSegs] = useState<LiveSeg[]>([]);
-  // Task #30: store the audio recording (encrypted at rest) for later playback.
-  // In-person defaults ON; one tap turns it off before you start.
+  const { start } = useRecording();
+  // Task #30: store the audio recording (encrypted at rest). In-person defaults ON.
   const [storeAudio, setStoreAudio] = useState(true);
-  // Task #12: optional agenda/focus typed before Start. Stashed by uid, then read
-  // by the finalize webhook → session.metadata.raw_intent → grounds the summary.
+  // Task #12: optional agenda/focus, locked once recording starts.
   const [agenda, setAgenda] = useState("");
 
-  const ctxRef = useRef<AudioContext | null>(null);
-  const nodeRef = useRef<AudioWorkletNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const sockRef = useRef<WebSocket | null>(null);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const meetingIdRef = useRef<string>("");
-
-  const teardown = useCallback(() => {
-    try { nodeRef.current?.disconnect(); } catch {}
-    try { ctxRef.current?.close(); } catch {}
-    try { streamRef.current?.getTracks().forEach((t) => t.stop()); } catch {}
-    if (tickRef.current) clearInterval(tickRef.current);
-    nodeRef.current = null;
-    ctxRef.current = null;
-    streamRef.current = null;
-  }, []);
-
-  const start = useCallback(async () => {
-    setError(null);
-    setSegs([]);
-    const uid = newMeetingId();
-    meetingIdRef.current = uid;
-    // Task #12: stash the agenda BEFORE the stream starts so it's persisted by the
-    // time the finalize webhook fires (on Stop). Best-effort — a stash failure must
-    // not block the recording; the meeting just runs ungrounded (prior behavior).
-    if (agenda.trim()) {
-      try {
-        await workspaces.recordAgenda(workspaceId, { uid, agenda: agenda.trim() });
-      } catch {
-        /* non-fatal: proceed without agenda grounding */
-      }
-    }
-    const url =
-      `${CAPTURE_WS_BASE.replace(/\/$/, "")}/v1/inperson/stream` +
-      `?uid=${encodeURIComponent(uid)}&workspace=${encodeURIComponent(workspaceId)}` +
-      `&token=${encodeURIComponent(CAPTURE_TOKEN)}` +
-      `&store_audio=${storeAudio ? "true" : "false"}`;
-    try {
-      setStatus("Requesting mic…");
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1 } });
-      streamRef.current = stream;
-      const ctx = new AudioContext({ sampleRate: 16000 });
-      ctxRef.current = ctx;
-      await ctx.audioWorklet.addModule(
-        URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })),
-      );
-      const node = new AudioWorkletNode(ctx, "pcm-emitter");
-      nodeRef.current = node;
-      const sink = ctx.createGain();
-      sink.gain.value = 0;
-      ctx.createMediaStreamSource(stream).connect(node);
-      node.connect(sink).connect(ctx.destination);
-
-      const sock = new WebSocket(url);
-      sock.binaryType = "arraybuffer";
-      sockRef.current = sock;
-      sock.onopen = () => {
-        node.port.onmessage = (e) => {
-          if (sock.readyState === 1) sock.send(e.data as ArrayBuffer);
-        };
-        setRecording(true);
-        setSeconds(0);
-        setStatus("Recording — listening to the room");
-        tickRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-      };
-      sock.onmessage = (e) => {
-        const m = JSON.parse(e.data as string);
-        if (m.type === "done") {
-          // capture has uploaded the recording + fired Conclave's finalize webhook → safe to navigate.
-          teardown();
-          router.push(`/meeting/${meetingIdRef.current}`);
-          return;
-        }
-        setSegs((prev) => [...prev, m as LiveSeg]);
-      };
-      sock.onerror = () => setError("Connection to the capture service failed (token / service up?).");
-      sock.onclose = (ev) => {
-        if (ev.code === 1008) setError("Rejected — bad or missing capture token.");
-        if (!ending) {
-          setRecording(false);
-          if (tickRef.current) clearInterval(tickRef.current);
-        }
-      };
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start recording");
-      teardown();
-      setRecording(false);
-    }
-  }, [workspaceId, router, teardown, ending, storeAudio, agenda]);
-
-  const stop = useCallback(() => {
-    const sock = sockRef.current;
-    if (sock && sock.readyState === 1) {
-      setEnding(true);
-      setRecording(false);
-      setStatus("Ending meeting — post-processing…");
-      if (tickRef.current) clearInterval(tickRef.current);
-      sock.send(new ArrayBuffer(0)); // empty frame = meeting-end (capture uploads + fires the webhook)
-    } else {
-      teardown();
-      onClose();
-    }
-  }, [teardown, onClose]);
-
-  function close() {
-    if (recording || ending) {
-      const sock = sockRef.current;
-      if (sock && sock.readyState === 1) sock.send(new ArrayBuffer(0));
-    }
-    teardown();
+  function begin() {
+    const id = start(workspaceId, { agenda, storeAudio });
     onClose();
+    router.push(`/recording/${id}`);
   }
 
   return (
     <div
       className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
-      onClick={close}
+      onClick={onClose}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Record meeting"
-        className="flex max-h-[88vh] w-full max-w-lg flex-col rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        className="flex w-full max-w-lg flex-col rounded-3xl border border-border bg-card p-6 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between">
@@ -245,7 +97,7 @@ function RecordModal({
             </p>
           </div>
           <button
-            onClick={close}
+            onClick={onClose}
             className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition hover:text-foreground"
             aria-label="Close"
           >
@@ -253,102 +105,57 @@ function RecordModal({
           </button>
         </div>
 
-        {/* Record control */}
-        <div className="flex flex-col items-center justify-center gap-4 rounded-2xl border-2 border-dashed border-input bg-secondary/50 p-6 text-center">
-          {!recording ? (
-            <button
-              onClick={start}
-              disabled={ending}
-              className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 active:scale-95 disabled:opacity-50"
-              aria-label="Start recording"
-            >
-              <Mic className="size-7" />
-            </button>
-          ) : (
-            <button
-              onClick={stop}
-              className="flex size-16 items-center justify-center rounded-full bg-destructive text-white shadow-lg transition hover:opacity-90 active:scale-95"
-              aria-label="Stop recording"
-            >
-              <Square className="size-6 fill-current" />
-            </button>
-          )}
-          <div className="flex items-center gap-2 font-mono text-sm tabular-nums text-muted-foreground">
-            {recording ? (
-              <span className="size-2 animate-pulse rounded-full bg-destructive" />
-            ) : null}
-            {fmt(seconds)}
-          </div>
-          <p className="text-[11px] text-muted-foreground">{status}</p>
+        {/* Agenda / focus (Task #12) — optional; grounds the summary. */}
+        <div>
+          <label
+            htmlFor="record-agenda"
+            className="mb-1.5 block text-xs font-medium text-foreground"
+          >
+            Agenda or focus{" "}
+            <span className="font-normal text-muted-foreground">— optional</span>
+          </label>
+          <textarea
+            id="record-agenda"
+            value={agenda}
+            onChange={(e) => setAgenda(e.target.value)}
+            rows={2}
+            placeholder="What's this meeting about? e.g. decide Q3 pricing; focus on the launch date."
+            className="w-full resize-none rounded-2xl border border-border bg-background/60 px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+          />
+          <p className="mt-1 text-[11px] text-muted-foreground">
+            Steers the summary and insights toward what matters to you.
+          </p>
         </div>
 
-        {/* Agenda / focus (Task #12) — optional; grounds the summary. Locked once recording starts. */}
-        {!recording && !ending ? (
-          <div className="mt-4">
-            <label
-              htmlFor="record-agenda"
-              className="mb-1.5 block text-xs font-medium text-foreground"
-            >
-              Agenda or focus{" "}
-              <span className="font-normal text-muted-foreground">— optional</span>
-            </label>
-            <textarea
-              id="record-agenda"
-              value={agenda}
-              onChange={(e) => setAgenda(e.target.value)}
-              rows={2}
-              placeholder="What's this meeting about? e.g. decide Q3 pricing; focus on the launch date."
-              className="w-full resize-none rounded-2xl border border-border bg-background/60 px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
-            />
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Steers the summary and insights toward what matters to you.
-            </p>
-          </div>
-        ) : null}
-
-        {/* Store-audio toggle (Task #30) — in-person default ON; locked once recording starts. */}
-        {!recording && !ending ? (
-          <label className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-background/60 px-4 py-3">
-            <input
-              type="checkbox"
-              checked={storeAudio}
-              onChange={(e) => setStoreAudio(e.target.checked)}
-              className="size-4 accent-primary"
-            />
-            <span className="text-xs text-foreground">
-              Store the audio recording
-              <span className="ml-1 text-muted-foreground">
-                — encrypted in the enclave, replayable later. Off = transcript only, no audio kept.
-              </span>
+        {/* Store-audio toggle (Task #30) — in-person default ON. */}
+        <label className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-background/60 px-4 py-3">
+          <input
+            type="checkbox"
+            checked={storeAudio}
+            onChange={(e) => setStoreAudio(e.target.checked)}
+            className="size-4 accent-primary"
+          />
+          <span className="text-xs text-foreground">
+            Store the audio recording
+            <span className="ml-1 text-muted-foreground">
+              — encrypted in the enclave, replayable later. Off = transcript only, no audio kept.
             </span>
-          </label>
-        ) : null}
+          </span>
+        </label>
 
-        {/* Live diart transcript (the transcription PROCESS runs in capture; this just displays it). */}
-        {segs.length > 0 ? (
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded-2xl border border-border bg-background/60 p-3">
-            <ol className="space-y-2">
-              {segs.map((s, i) => (
-                <li key={i} className="text-xs">
-                  <span className="font-bold text-primary">{s.speaker}</span>
-                  <span className="ml-2 font-mono text-[10px] text-muted-foreground">
-                    {s.start.toFixed(1)}–{s.end.toFixed(1)}s
-                  </span>
-                  <p className="mt-0.5 text-foreground">{s.text}</p>
-                </li>
-              ))}
-            </ol>
-          </div>
-        ) : null}
-
-        {error ? <p className="mt-3 text-xs text-destructive">{error}</p> : null}
-
-        <div className="mt-5 flex items-center justify-end gap-3">
+        <div className="mt-6 flex items-center justify-end gap-3">
           <button
-            onClick={close}
+            onClick={onClose}
             className="rounded-full px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
-            {ending ? "Close" : "Cancel"}
+            Cancel
+          </button>
+          <button
+            onClick={begin}
+            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 active:scale-95"
+          >
+            <Mic className="size-4" aria-hidden />
+            Start recording
           </button>
         </div>
       </div>

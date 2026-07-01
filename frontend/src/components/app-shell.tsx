@@ -36,6 +36,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { AttestedBadge } from "@/components/attested-badge";
 import { cn } from "@/lib/utils";
+import { fmt, useRecording } from "@/components/recording-provider";
 import { SearchBox } from "@/components/search-box";
 import { useWorkspace } from "@/components/workspace-provider";
 import { auth, type User } from "@/lib/api";
@@ -73,6 +74,8 @@ export function AppShell({
       {/* ── Sidebar (Brutalist style) ── */}
       <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
         <WorkspaceSwitcher />
+
+        <RecordingIndicator />
 
         <nav className="space-y-1.5">
           {NAV.map(({ href, label, icon: Icon }) => {
@@ -187,6 +190,7 @@ export function AppShell({
             <span className="text-sm font-bold tracking-tight">Conclave</span>
           </Link>
           <div className="flex items-center gap-3">
+            <RecordingIndicator compact />
             <AttestedBadge />
             <button
               onClick={handleLogout}
@@ -199,6 +203,49 @@ export function AppShell({
         {children}
       </div>
     </div>
+  );
+}
+
+/**
+ * "Still recording" indicator (Task #14). The recording session lives in the
+ * global `RecordingProvider`, so it survives navigation — this links back to the
+ * live page from anywhere. Hidden when idle, on a finished/errored session, or
+ * while already viewing that recording's own page.
+ */
+function RecordingIndicator({ compact = false }: { compact?: boolean }) {
+  const { recording } = useRecording();
+  const pathname = usePathname();
+  if (!recording) return null;
+  const isLive =
+    recording.status === "starting" ||
+    recording.status === "recording" ||
+    recording.status === "ending";
+  if (!isLive) return null;
+  if (pathname === `/recording/${recording.id}`) return null;
+
+  const ending = recording.status === "ending";
+  if (compact) {
+    return (
+      <Link
+        href={`/recording/${recording.id}`}
+        aria-label="Return to live recording"
+        className="inline-flex items-center gap-1.5 rounded-full border border-destructive bg-destructive/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive"
+      >
+        <span className="size-2 animate-pulse rounded-full bg-destructive" />
+        {ending ? "Ending" : fmt(recording.seconds)}
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href={`/recording/${recording.id}`}
+      className="mb-4 flex items-center gap-2.5 rounded-none border border-destructive bg-destructive/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-destructive transition hover:bg-destructive/20"
+    >
+      <span className="size-2.5 shrink-0 animate-pulse rounded-full bg-destructive" />
+      <span className="min-w-0 flex-1 truncate">
+        {ending ? "Ending meeting…" : `Recording · ${fmt(recording.seconds)}`}
+      </span>
+    </Link>
   );
 }
 
