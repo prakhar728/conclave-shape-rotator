@@ -252,6 +252,8 @@ export default function MeetingPage({
                 (meeting.effective_visibility as "owner-only" | "shared") ??
                 "owner-only"
               }
+              initialSharedToWorkspace={meeting.shared_to_workspace ?? false}
+              initialOwnerOnly={meeting.owner_only ?? false}
             />
             <RetentionControl
               sessionId={meeting.session_id}

@@ -72,9 +72,10 @@ async def identify_meeting(session_id: str, native_meeting_id: str,
     # (record_routes.tag_speaker → propose_binding). Enroll voiceprints under it, not the raw Conclave
     # workspace, or tagging looks in a different VFTE workspace and never finds the voiceprint.
     vfte_ws = settings.fpm_workspace_for(workspace_id)
-    # Task #2: the requesting host identity (workspace owner) → VFTE's host-dependent candidate
-    # set. None → the scope-wide floor only (back-compat).
-    host_user = fpm_consent.workspace_host_email(workspace_id)
+    # Task #32: the identify host is the meeting's RECORDER (stamped on the session at capture
+    # time), falling back to the workspace owner then the scope-wide floor. This upgrades #2's
+    # owner-placeholder so the per-adder overlay resolves under whoever actually recorded.
+    host_user = fpm_consent.meeting_host_email(session_id, workspace_id)
 
     # Task #16: queue mode — instead of the blocking diarize_recording call below, SUBMIT a durable
     # diarize job and return. A DiariZen worker fetches the audio by reference, runs the engine, and

@@ -155,9 +155,46 @@ export type OpenQuestion = {
   };
 };
 
+// Task #32 — workspace multi-membership.
+export type WorkspaceMember = {
+  user_id: string;
+  role: string;
+  added_at: string;
+  email: string | null;
+  display_name: string | null;
+};
+
+export type WorkspaceInvite = {
+  id: string;
+  email: string;
+  role: string;
+  invited_by: string;
+  created_at: string;
+};
+
 export const workspaces = {
   list: () =>
     apiFetch<{ workspaces: Workspace[] }>("/api/workspaces"),
+  // Task #32 — owner-only membership management.
+  listMembers: (id: string) =>
+    apiFetch<{ members: WorkspaceMember[]; invites: WorkspaceInvite[] }>(
+      `/api/workspaces/${id}/members`,
+    ),
+  inviteMember: (id: string, email: string, role = "member") =>
+    apiFetch<{ invite: WorkspaceInvite }>(`/api/workspaces/${id}/members`, {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    }),
+  removeMember: (id: string, memberUserId: string) =>
+    apiFetch<{ ok: boolean; removed: string }>(
+      `/api/workspaces/${id}/members/${memberUserId}`,
+      { method: "DELETE" },
+    ),
+  acceptInvite: (token: string) =>
+    apiFetch<{ workspace: Workspace; role: string }>(
+      `/api/workspaces/accept-invite`,
+      { method: "POST", body: JSON.stringify({ token }) },
+    ),
   create: (name: string) =>
     apiFetch<{ workspace: Workspace }>("/api/workspaces", {
       method: "POST",
@@ -192,6 +229,14 @@ export const workspaces = {
   // 204 No Content on success.
   recordAgenda: (id: string, params: { uid: string; agenda: string }) =>
     apiFetch<void>(`/api/workspaces/${id}/record/agenda`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
+  // Task #32: stash WHO is recording (server reads the identity from the cookie),
+  // keyed by the meeting uid — the finalize webhook uses it as the VFTE identify
+  // host. Called at record-start regardless of whether an agenda was typed.
+  recordRecorder: (id: string, params: { uid: string }) =>
+    apiFetch<void>(`/api/workspaces/${id}/record/recorder`, {
       method: "POST",
       body: JSON.stringify(params),
     }),
@@ -281,6 +326,9 @@ export type MeetingView = {
   // without an extra round-trip.
   is_owner?: boolean;
   effective_visibility?: string;
+  // Task #32 — sharing state for the owner controls.
+  shared_to_workspace?: boolean;
+  owner_only?: boolean;
   // P4 — the meeting's workspace, used to POST speaker tags. Present in
   // workspace-mode (authed user + workspace-bound session).
   workspace_id?: string | null;
@@ -503,6 +551,26 @@ export const meetingOwner = {
       method: "POST",
       body: JSON.stringify({ email, ...config }),
     }),
+  // Task #32 — one-click "share with the whole workspace" (every current + future
+  // member gets full artifacts). `share: false` revokes it.
+  shareWorkspace: (sessionId: string, share: boolean) =>
+    apiFetch<{ ok: boolean; shared_to_workspace: boolean }>(
+      `/api/meetings/${sessionId}/share-workspace`,
+      { method: "POST", body: JSON.stringify({ share }) },
+    ),
+  // Task #32 — share with ONE specific member (full artifacts, decision B).
+  shareMember: (sessionId: string, email: string) =>
+    apiFetch<{ ok: boolean; email: string }>(
+      `/api/meetings/${sessionId}/share-member`,
+      { method: "POST", body: JSON.stringify({ email }) },
+    ),
+  // Task #32 — the confidential lock: when set, the meeting can't be shared to
+  // the workspace/members even by the owner.
+  setOwnerOnly: (sessionId: string, locked: boolean) =>
+    apiFetch<{ ok: boolean; owner_only: boolean }>(
+      `/api/meetings/${sessionId}/owner-only`,
+      { method: "POST", body: JSON.stringify({ locked }) },
+    ),
   setRetention: (
     sessionId: string,
     body: { mode: "inherit" | "keep_forever" | "days"; days?: number },

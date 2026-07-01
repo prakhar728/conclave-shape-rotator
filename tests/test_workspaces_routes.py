@@ -100,8 +100,10 @@ def test_meetings_endpoint_empty_for_new_workspace(client: TestClient):
     assert r.json()["meetings"] == []
 
 
-def test_add_member_returns_501(client: TestClient):
+def test_owner_can_invite_member(client: TestClient):
+    """Task #32: the once-501 endpoint now creates a pending invite (owner-only)."""
     _login(client, "members@example.com")
     ws_id = client.get("/api/workspaces").json()["workspaces"][0]["id"]
-    r = client.post(f"/api/workspaces/{ws_id}/members", json={})
-    assert r.status_code == 501
+    r = client.post(f"/api/workspaces/{ws_id}/members", json={"email": "invitee@example.com"})
+    assert r.status_code == 201, r.text
+    assert r.json()["invite"]["email"] == "invitee@example.com"

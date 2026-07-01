@@ -57,6 +57,34 @@ def workspace_host_email(workspace_id: str | None) -> str | None:
         return None
 
 
+def meeting_host_email(session_id: str | None, workspace_id: str | None) -> str | None:
+    """The identify `host_user` for a meeting — its RECORDER, falling back to the
+    workspace owner (Task #32, replacing the #2 owner-placeholder stopgap).
+
+    On the write/identify side there is no request user (the finalize webhook is an
+    async callback), so the member who recorded is stamped on the session at capture
+    time (`recorder_user_id`). VFTE computes the host-dependent candidate set from
+    this — so an adder-only voiceprint added by the recorder is matched, not one the
+    owner privately added. Best-effort: any miss falls back to the owner, then to the
+    scope-wide floor (None). Multi-membership (this task) is what makes this matter —
+    before it, the owner WAS the only member, so owner == recorder.
+    """
+    try:
+        if session_id:
+            from transcripts import store
+            fields = store.get_workspace_fields(session_id)
+            rid = (fields or {}).get("recorder_user_id")
+            if rid:
+                from infra import identity
+                user = identity.get_user(rid)
+                email = (user or {}).get("email")
+                if email:
+                    return email
+    except Exception:  # noqa: BLE001 — never block identify on a recorder lookup
+        logger.debug("meeting_host_email recorder lookup failed for %s", session_id, exc_info=True)
+    return workspace_host_email(workspace_id)
+
+
 def _base() -> str:
     return settings.fpm_base_url.rstrip("/")
 

@@ -107,6 +107,41 @@ def magic_link_email(
     return _shell(body_html=body_html, footer_html=footer_html)
 
 
+def workspace_invite_email(
+    *,
+    accept_url: str,
+    workspace_name: Optional[str],
+    inviter_email: Optional[str],
+) -> str:
+    """Invite to join a Conclave workspace (Task #32). No content — just the link."""
+    import html
+
+    ws_line = (
+        f"<strong>{html.escape(workspace_name)}</strong>" if workspace_name else "a workspace"
+    )
+    inviter_line = (
+        f"<p style='margin:0 0 16px 0;font-size:14px;color:{_MUTED};'>"
+        f"Invited by {html.escape(inviter_email)}.</p>"
+        if inviter_email
+        else ""
+    )
+    body_html = (
+        f"<h1 style='margin:0 0 16px 0;font-size:18px;font-weight:600;color:{_FG};'>"
+        f"You&apos;ve been invited to {ws_line}</h1>"
+        + inviter_line
+        + f"<p style='margin:0 0 24px 0;font-size:14px;line-height:1.5;color:{_FG};'>"
+        f"Click below to sign in and join. Once you accept, the workspace&apos;s shared "
+        f"meetings will appear in your Conclave.</p>"
+        + _cta_button(accept_url, "Join workspace")
+        + f"<p style='margin:24px 0 0 0;font-size:12px;color:{_MUTED};word-break:break-all;'>"
+        f"Or paste this link into your browser:<br>{accept_url}</p>"
+    )
+    footer_html = (
+        "If you didn&apos;t expect this invitation, you can safely ignore it."
+    )
+    return _shell(body_html=body_html, footer_html=footer_html)
+
+
 def feedback_email(
     *,
     category: str,

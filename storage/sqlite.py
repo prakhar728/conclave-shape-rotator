@@ -691,6 +691,27 @@ def set_transcript_workspace(
     )
 
 
+def set_transcript_recorder(session_id: str, recorder_user_id: str | None) -> None:
+    """Set the `recorder_user_id` column (Task #32) — the member who actually
+    recorded the meeting. Passed to VFTE as the identify `host_user` so the
+    per-adder overlay resolves under the recorder, not the workspace owner."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET recorder_user_id = ?, updated_at = ? "
+        "WHERE session_id = ?",
+        (recorder_user_id, _now(), session_id),
+    )
+
+
+def set_transcript_owner_only(session_id: str, owner_only: bool) -> None:
+    """Set the per-meeting `owner_only` confidential lock (Task #32 §0b-D). When
+    set, the meeting can't be shared to the workspace/members even by the owner."""
+    _get_conn().execute(
+        "UPDATE transcript_sessions SET owner_only = ?, updated_at = ? "
+        "WHERE session_id = ?",
+        (int(owner_only), _now(), session_id),
+    )
+
+
 def get_transcript_workspace_fields(session_id: str) -> dict | None:
     """Read the typed workspace + retention columns for a session.
 
@@ -698,10 +719,12 @@ def get_transcript_workspace_fields(session_id: str) -> dict | None:
     (`retention_override`, `raw_transcript_deleted_at`) ride along so the
     transcript endpoint can decide 410-vs-serve in the same fetch that
     drives `can_see_transcript`. Extra keys are additive — `can_user_see`
-    only reads workspace_id / owner_user_id / visibility.
+    only reads workspace_id / owner_user_id / visibility. `recorder_user_id`
+    (Task #32) is the identify host; `owner_only` is the confidential lock.
     """
     row = _get_conn().execute(
         "SELECT workspace_id, owner_user_id, visibility, "
+        "recorder_user_id, owner_only, "
         "retention_override, raw_transcript_deleted_at "
         "FROM transcript_sessions WHERE session_id = ?",
         (session_id,),

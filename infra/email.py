@@ -20,7 +20,12 @@ import logging
 import os
 from typing import Optional
 
-from infra.email_templates import feedback_email, magic_link_email, welcome_email
+from infra.email_templates import (
+    feedback_email,
+    magic_link_email,
+    welcome_email,
+    workspace_invite_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +91,28 @@ def send_magic_link(
     html = magic_link_email(
         magic_link_url=magic_link_url,
         meeting_title=meeting_title,
+        inviter_email=inviter_email,
+    )
+    return _send(to=recipient_email, subject=subject, html=html)
+
+
+def send_workspace_invite(
+    *,
+    recipient_email: str,
+    accept_url: str,
+    workspace_name: Optional[str] = None,
+    inviter_email: Optional[str] = None,
+) -> dict:
+    """Email a workspace-invite accept link (Task #32). Callers wrap in best-effort
+    try/except — a failed send must never lose the invite. Stub-mode just logs."""
+    subject = (
+        f"Conclave: you're invited to {workspace_name}"
+        if workspace_name
+        else "Conclave: you're invited to a workspace"
+    )
+    html = workspace_invite_email(
+        accept_url=accept_url,
+        workspace_name=workspace_name,
         inviter_email=inviter_email,
     )
     return _send(to=recipient_email, subject=subject, html=html)

@@ -117,6 +117,9 @@ def verify_otp_route(body: VerifyOtpBody, response: Response, request: Request):
         "WHERE user_email = ? AND user_id IS NULL",
         (user["id"], body.email),
     )
+    # Task #32 — accept-on-signup: any workspace invite issued to this email before
+    # they had an account becomes a membership now.
+    workspaces.accept_pending_invites_for_email(body.email, user["id"])
 
     return {"user": _user_to_public(user), "workspace": workspace}
 
@@ -166,6 +169,8 @@ def exchange_token_route(
         "WHERE user_email = ? AND user_id IS NULL",
         (user["id"], email),
     )
+    # Task #32 — accept-on-signup (OAuth/magic-link path mirrors verify-otp).
+    workspaces.accept_pending_invites_for_email(email, user["id"])
 
     return {"user": _user_to_public(user), "workspace": workspace}
 

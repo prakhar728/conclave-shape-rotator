@@ -108,14 +108,18 @@ def can_user_see(user: Optional[dict], row: dict) -> bool:
     `session_id`, `workspace_id`, `owner_user_id`, `visibility`.
     `user` is the authenticated User dict (or None for anonymous).
 
-    Visibility branches:
-      - 'owner-only'  : user.id == row.owner_user_id
-      - 'shared'      : owner OR explicit meeting_shares row for user.email
-      - 'workspace'   : any member of row.workspace_id (reserved for v1.5;
-                        v1 UI doesn't expose this option but the check
-                        works if rows are set to it manually)
-      - 'public-link' : False in v1 (BUILD_DOC §11 — public links deferred)
-      - unknown       : False (defensive; CHECK constraint should prevent)
+    Grants (Task #32 — meetings are OWNER-PRIVATE by default; bare workspace
+    membership does NOT expose a meeting):
+      - owner of the meeting                              → yes
+      - an explicit per-recipient `meeting_shares` row     → yes (an outside email
+        OR a specific member — checked regardless of the visibility mode, so an
+        owner-only meeting shared to one person grants that person)
+      - a whole-workspace share + the viewer is a member   → yes (§0b-D one-click
+        "share to the whole workspace" grant, covers current + future members)
+      - legacy `visibility == 'workspace'` + member         → yes (back-compat: the
+        pre-#32 in-person default; new meetings default owner-private instead)
+      - 'public-link'                                       → False (deferred)
+      - everyone else / anonymous                           → False
     """
     visibility = row.get("visibility") or "owner-only"
     owner_user_id = row.get("owner_user_id")
@@ -133,17 +137,22 @@ def can_user_see(user: Optional[dict], row: dict) -> bool:
     if owner_user_id and owner_user_id == user["id"]:
         return True
 
-    if visibility == "owner-only":
-        return False
+    from infra.workspaces import (
+        has_meeting_share,
+        has_meeting_workspace_share,
+        is_member,
+    )
 
-    if visibility == "shared":
-        # Explicit grant via meeting_shares (Phase 2.x writes these).
-        from infra.workspaces import has_meeting_share
-        return has_meeting_share(row["session_id"], user["email"])
+    # Explicit per-recipient grant (outside email OR a specific member) — checked
+    # independently of the visibility mode so an owner-only meeting shared to one
+    # person grants exactly that person (§0b-D: an explicit share, not membership).
+    if has_meeting_share(row["session_id"], user["email"]):
+        return True
 
-    if visibility == "workspace":
-        from infra.workspaces import is_member
-        return bool(workspace_id) and is_member(workspace_id, user["id"])
+    # Whole-workspace grant (or the legacy 'workspace' visibility) → every member.
+    member = bool(workspace_id) and is_member(workspace_id, user["id"])
+    if member and (has_meeting_workspace_share(row["session_id"]) or visibility == "workspace"):
+        return True
 
     return False
 
@@ -177,21 +186,33 @@ def can_see_artifact(user: Optional[dict], row: dict, artifact: str) -> bool:
         return True
 
     visibility = row.get("visibility") or "owner-only"
+    workspace_id = row.get("workspace_id")
+    session_id = row["session_id"]
 
-    if visibility == "workspace":
-        from infra.workspaces import is_member
-        workspace_id = row.get("workspace_id")
-        return bool(workspace_id) and is_member(workspace_id, user["id"])
+    from infra.workspaces import (
+        get_meeting_share_scope,
+        has_meeting_share,
+        has_meeting_workspace_share,
+        is_member,
+    )
 
-    if visibility == "shared":
-        from infra.workspaces import get_meeting_share_scope
-        config = get_meeting_share_scope(row["session_id"], user["email"])
-        if config is None:
-            return False
-        return bool(getattr(config, artifact))
+    # Task #32 decision B: a workspace MEMBER granted the meeting (via a
+    # whole-workspace share, the legacy 'workspace' visibility, or a member-specific
+    # share) gets FULL artifacts — transcript + insights + audio all pass.
+    member = bool(workspace_id) and is_member(workspace_id, user["id"])
+    if member and (
+        has_meeting_workspace_share(session_id)
+        or visibility == "workspace"
+        or has_meeting_share(session_id, user["email"])
+    ):
+        return True
 
-    # 'owner-only' (non-owner), 'public-link', or unknown → withhold.
-    return False
+    # A NON-member recipient (an outside-workspace, by-email share) keeps #31's
+    # per-artifact gating — only the flags on their share row are granted.
+    config = get_meeting_share_scope(session_id, user["email"])
+    if config is None:
+        return False
+    return bool(getattr(config, artifact))
 
 
 def can_see_transcript(user: Optional[dict], row: dict) -> bool:
@@ -355,33 +376,15 @@ def _redact_insights(view: dict) -> dict:
     return view
 
 
-def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
-    """Refresh `resolved_speakers` names from FPM's live consent decision (P4 read-time gate).
+def _apply_resolved_names(speakers: dict, resolved: dict) -> bool:
+    """Apply an FPM consent-resolve map onto `resolved_speakers`. Returns whether
+    anything changed. Shared by the persisted baseline + the per-viewer overlay.
 
-    Pulls the current name/visibility for the session's voiceprints (cached ~60s) so a confirm
-    that happened without a re-tag surfaces on next load, and revoked consent withholds the name
-    at read time. Fail-open: if FPM is unreachable, the stored names stand. Rewrites only
-    `resolved_speakers[label]["name"]` — never the label key or `raw_diarization` (C3).
-
-    Pure name-refresh: the Task #13 heal-on-open is a SEPARATE step (`_maybe_heal_on_open`),
-    invoked only from the meeting-detail open path so the transcript read never spawns a
-    background re-enrich.
+    Task #3 Part (a): a CONSENTED (claimed + identify-allowed) recognition auto-applies
+    its name; a named-but-UNCLAIMED one is NOT silently applied — its name is withheld
+    and surfaced to the host as a "Proposed: <name>" one-click confirm instead. WS5
+    anonymous / unnamed stays nameless.
     """
-    speakers = session.metadata.resolved_speakers or {}
-    vids = sorted({m["voiceprint_id"] for m in speakers.values()
-                   if isinstance(m, dict) and m.get("voiceprint_id")})
-    if not vids:
-        return
-    from config import settings
-    from infra import fpm_consent
-    # Task #2: resolve names under the workspace host so an adder-only edge stays private to its
-    # adder at read time too (Case 2). None → scope-wide floor (back-compat).
-    host_user = fpm_consent.workspace_host_email(workspace_id)
-    try:
-        resolved = fpm_consent.consent_resolve_batch_sync(
-            settings.fpm_workspace_for(workspace_id), vids, host_user=host_user)
-    except Exception:  # noqa: BLE001 — never let a consent lookup break the read
-        return
     changed = False
     for meta in speakers.values():
         if not (isinstance(meta, dict) and meta.get("voiceprint_id") in resolved):
@@ -389,10 +392,6 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
         r = resolved[meta["voiceprint_id"]]
         name = r.get("name")
         consented = bool(r.get("consented"))
-        # Task #3 Part (a): a CONSENTED (claimed + identify-allowed) recognition auto-applies
-        # its name; a named-but-UNCLAIMED one is NOT silently applied — its name is withheld
-        # and surfaced to the host as a "Proposed: <name>" one-click confirm instead. WS5
-        # anonymous / unnamed stays nameless.
         applied = name if (name and consented) else None
         proposed = name if (name and not consented) else None
         if (meta.get("name") != applied or meta.get("proposed_name") != proposed
@@ -401,9 +400,64 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
             meta["proposed_name"] = proposed
             meta["consented"] = consented
             changed = True
-    if changed:
+    return changed
+
+
+def _resolve_names(session: Session, workspace_id: str, host_user: Optional[str]) -> Optional[dict]:
+    """Fetch FPM's consent-resolve map for this session's voiceprints under `host_user`.
+
+    Returns the `{vid: {...}}` map, or None on no-voiceprints / FPM error (fail-open)."""
+    speakers = session.metadata.resolved_speakers or {}
+    vids = sorted({m["voiceprint_id"] for m in speakers.values()
+                   if isinstance(m, dict) and m.get("voiceprint_id")})
+    if not vids:
+        return None
+    from config import settings
+    from infra import fpm_consent
+    try:
+        return fpm_consent.consent_resolve_batch_sync(
+            settings.fpm_workspace_for(workspace_id), vids, host_user=host_user)
+    except Exception:  # noqa: BLE001 — never let a consent lookup break the read
+        return None
+
+
+def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
+    """Refresh `resolved_speakers` names from FPM's live consent decision (P4 read-time gate).
+
+    Resolves under the SCOPE-WIDE floor (`host_user=None`) so the PERSISTED baseline never
+    carries an adder-only private name — that would leak it to other workspace members (Task
+    #32). A confirm/revoke that happened without a re-tag still surfaces on next load. Fail-open:
+    if FPM is unreachable, the stored names stand. Rewrites only `resolved_speakers[label]["name"]`
+    — never the label key or `raw_diarization` (C3).
+
+    The per-viewer adder-only overlay is a SEPARATE, non-persisted step (`_overlay_viewer_names`),
+    and the Task #13 heal-on-open (`_maybe_heal_on_open`) keys off THIS scope-wide baseline so the
+    summary regen is deterministic across viewers.
+    """
+    resolved = _resolve_names(session, workspace_id, host_user=None)
+    if resolved is None:
+        return
+    if _apply_resolved_names(session.metadata.resolved_speakers or {}, resolved):
         from transcripts import store as _store
         _store.set_metadata(session.session_id, session.metadata)
+
+
+def _overlay_viewer_names(session: Session, workspace_id: str, viewer_email: Optional[str]) -> None:
+    """Task #32 decision A — per-viewer adder-only name overlay (response only, NOT persisted).
+
+    Re-resolves this session's voiceprints under `host_user = the viewing member`, so an
+    adder-only edge resolves ONLY for whoever added it — even across members viewing the SAME
+    meeting. Applied to the in-memory `session` (mutated, then read by `to_view`/`to_transcript`)
+    but NEVER written back with `set_metadata`, so two viewers never clobber each other's names or
+    trigger heal churn. No-op when the viewer is anonymous or FPM is unreachable (fail-open to the
+    scope-wide baseline the backstop already applied).
+    """
+    if not viewer_email:
+        return
+    resolved = _resolve_names(session, workspace_id, host_user=viewer_email)
+    if resolved is None:
+        return
+    _apply_resolved_names(session.metadata.resolved_speakers or {}, resolved)
 
 
 def _maybe_heal_on_open(session: Session) -> bool:
@@ -577,6 +631,9 @@ def get_session(
         # last enrich. `regenerating` drives the meeting page's "updating insights" badge.
         _apply_consent_backstop(session, row["workspace_id"])
         regenerating = _maybe_heal_on_open(session)
+        # Task #32 decision A: overlay THIS viewer's adder-only names (response only, no
+        # persist) AFTER heal keys off the scope-wide baseline.
+        _overlay_viewer_names(session, row["workspace_id"], user.get("email"))
         view = to_view(session)
         # Task #31 — insights (summary/signals/entities) are now independently
         # withholdable. A share with insights=off sees the meeting shell but not
@@ -590,6 +647,11 @@ def get_session(
         # typed visibility value (separate from the legacy JSON one).
         view["effective_visibility"] = row.get("visibility")
         view["is_owner"] = row.get("owner_user_id") == user["id"]
+        # Task #32 — sharing state for the owner controls (whole-workspace grant +
+        # confidential lock). Cheap single-row lookups; only meaningful to the owner.
+        from infra.workspaces import has_meeting_workspace_share
+        view["shared_to_workspace"] = has_meeting_workspace_share(session_id)
+        view["owner_only"] = bool(ws_row.get("owner_only"))
         # The meeting's workspace — the UI needs it to POST speaker tags
         # (/api/workspaces/{workspace_id}/meetings/{id}/tag-speaker).
         view["workspace_id"] = row.get("workspace_id")
@@ -662,6 +724,8 @@ def get_session_transcript(session_id: str, request: Request) -> dict:
         raise HTTPException(status_code=410, detail="transcript auto-deleted")
     # P4: refresh names from FPM's live consent decision before projecting (cached, fail-open).
     _apply_consent_backstop(session, ws_row["workspace_id"])
+    # Task #32 decision A: per-viewer adder-only overlay (response only, not persisted).
+    _overlay_viewer_names(session, ws_row["workspace_id"], user.get("email"))
     return to_transcript(session)
 
 

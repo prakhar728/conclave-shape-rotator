@@ -44,9 +44,14 @@ function sharedArtifacts(s: MeetingShare): string[] {
 export function OwnerControls({
   sessionId,
   initialVisibility,
+  initialSharedToWorkspace = false,
+  initialOwnerOnly = false,
 }: {
   sessionId: string;
   initialVisibility: Visibility;
+  // Task #32 — whole-workspace share + confidential lock state.
+  initialSharedToWorkspace?: boolean;
+  initialOwnerOnly?: boolean;
 }) {
   const [visibility, setVisibility] = useState<Visibility>(initialVisibility);
   const [shares, setShares] = useState<MeetingShare[] | null>(null);
@@ -54,6 +59,35 @@ export function OwnerControls({
   const [config, setConfig] = useState<ShareConfig>(DEFAULT_CONFIG);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sharedToWorkspace, setSharedToWorkspace] = useState(initialSharedToWorkspace);
+  const [ownerOnly, setOwnerOnly] = useState(initialOwnerOnly);
+
+  async function toggleWorkspaceShare() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await meetingOwner.shareWorkspace(sessionId, !sharedToWorkspace);
+      setSharedToWorkspace(r.shared_to_workspace);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleOwnerOnly() {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await meetingOwner.setOwnerOnly(sessionId, !ownerOnly);
+      setOwnerOnly(r.owner_only);
+      if (r.owner_only) setSharedToWorkspace(false); // locking revokes the ws share
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -139,6 +173,43 @@ export function OwnerControls({
         >
           {visibility === "shared" ? "Make private" : "Share"}
         </Button>
+      </div>
+
+      {/* Task #32 — team sharing (workspace members). Independent of the
+          by-email shares below (which are for people OUTSIDE the workspace). */}
+      <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
+        <label className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-foreground">
+            Share with everyone in this workspace
+            <span className="mt-0.5 block text-muted-foreground">
+              Every current and future member gets full access.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={sharedToWorkspace}
+            onChange={toggleWorkspaceShare}
+            disabled={busy || ownerOnly}
+            className="h-4 w-4 accent-foreground"
+            aria-label="Share with the whole workspace"
+          />
+        </label>
+        <label className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-foreground">
+            Keep confidential (owner-only)
+            <span className="mt-0.5 block text-muted-foreground">
+              Locks this meeting so it can&apos;t be shared with the workspace.
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={ownerOnly}
+            onChange={toggleOwnerOnly}
+            disabled={busy}
+            className="h-4 w-4 accent-foreground"
+            aria-label="Keep confidential (owner-only)"
+          />
+        </label>
       </div>
 
       {visibility === "shared" ? (

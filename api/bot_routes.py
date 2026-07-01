@@ -546,6 +546,105 @@ def add_share(
     }
 
 
+# --- Task #32: share a meeting with the whole workspace / a specific member -----
+
+
+def _meeting_workspace_id(session_id: str) -> Optional[str]:
+    from transcripts import store as _store
+    fields = _store.get_workspace_fields(session_id)
+    return (fields or {}).get("workspace_id")
+
+
+def _meeting_owner_only(session_id: str) -> bool:
+    from transcripts import store as _store
+    fields = _store.get_workspace_fields(session_id)
+    return bool((fields or {}).get("owner_only"))
+
+
+class ShareWorkspaceBody(BaseModel):
+    #: True → grant every member; False → revoke the whole-workspace grant.
+    share: bool = True
+
+
+@router.post("/{session_id}/share-workspace", status_code=201)
+def share_with_workspace(
+    session_id: str,
+    body: ShareWorkspaceBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner one-click shares (or un-shares) a meeting with the ENTIRE workspace (Task #32).
+
+    Covers current + future members (a single grant row, not a per-member snapshot).
+    Refused when the meeting is `owner_only`-locked (the confidential escape hatch).
+    """
+    if not _user_owns_meeting(session_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    from infra.workspaces import (
+        add_meeting_workspace_share,
+        remove_meeting_workspace_share,
+    )
+    if not body.share:
+        remove_meeting_workspace_share(session_id)
+        return {"ok": True, "shared_to_workspace": False}
+    if _meeting_owner_only(session_id):
+        raise HTTPException(status_code=409,
+                            detail="This meeting is locked owner-only and can't be shared")
+    workspace_id = _meeting_workspace_id(session_id)
+    if not workspace_id:
+        raise HTTPException(status_code=409, detail="Meeting is not bound to a workspace")
+    add_meeting_workspace_share(session_id, workspace_id, user["id"])
+    return {"ok": True, "shared_to_workspace": True}
+
+
+class ShareMemberBody(BaseModel):
+    #: The member's email (a workspace member). They get FULL artifacts (decision B).
+    email: EmailStr
+
+
+@router.post("/{session_id}/share-member", status_code=201)
+def share_with_member(
+    session_id: str,
+    body: ShareMemberBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner shares a meeting with ONE specific workspace member (Task #32, decision B →
+    full artifacts). Implemented as a per-recipient `meeting_shares` row keyed by the
+    member's email; the artifact gate grants members full regardless of the flags."""
+    if not _user_owns_meeting(session_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    if _meeting_owner_only(session_id):
+        raise HTTPException(status_code=409,
+                            detail="This meeting is locked owner-only and can't be shared")
+    from infra.workspaces import ShareConfig, add_meeting_share
+    # Full artifacts for a member (decision B). The email path also covers the case where
+    # the invitee hasn't accepted yet — they'll see it once they're a member.
+    add_meeting_share(session_id, str(body.email), user["id"],
+                      ShareConfig(transcript=True, insights=True, audio=True))
+    return {"ok": True, "email": str(body.email)}
+
+
+class OwnerOnlyBody(BaseModel):
+    locked: bool
+
+
+@router.post("/{session_id}/owner-only", status_code=200)
+def set_owner_only_lock(
+    session_id: str,
+    body: OwnerOnlyBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner toggles the per-meeting confidential lock (Task #32 §0b-D). Locking also
+    removes any existing whole-workspace share so the meeting goes private immediately."""
+    if not _user_owns_meeting(session_id, user["id"]):
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    from transcripts import store as _store
+    _store.set_owner_only(session_id, body.locked)
+    if body.locked:
+        from infra.workspaces import remove_meeting_workspace_share
+        remove_meeting_workspace_share(session_id)
+    return {"ok": True, "owner_only": body.locked}
+
+
 class RetentionBody(BaseModel):
     # 'inherit' clears the override (use the account default); 'keep_forever'
     # pins this meeting; 'days' auto-deletes its raw transcript after `days`.

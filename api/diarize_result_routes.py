@@ -110,8 +110,9 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
 
     audio = _assemble_audio(native_id) if native_id else b""
     vfte_ws = settings.fpm_workspace_for(workspace)
-    # Task #2: host identity (workspace owner) → VFTE's host-dependent candidate set.
-    host_user = fpm_consent.workspace_host_email(workspace)
+    # Task #32: identify host = the meeting's recorder (stamped on the session), else the
+    # workspace owner, else the scope-wide floor. Same upgrade as the inline identify path.
+    host_user = fpm_consent.meeting_host_email(session_id, workspace)
     try:
         fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, segments, tag="offline",
                                                     meeting_id=native_id, host_user=host_user)

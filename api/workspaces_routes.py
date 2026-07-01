@@ -13,11 +13,15 @@ without forcing a phase-ordering dependency.
 """
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field
 
 from auth.session import require_current_user
 from infra import workspaces
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
 
@@ -31,6 +35,18 @@ def _require_member(workspace_id: str, user_id: str) -> dict:
     ws = workspaces.get_workspace(workspace_id)
     if ws is None or not workspaces.is_member(workspace_id, user_id):
         raise HTTPException(status_code=404, detail="Workspace not found")
+    return ws
+
+
+def _require_owner(workspace_id: str, user_id: str) -> dict:
+    """Resolve workspace + assert the caller is an OWNER (the manage gate, §0b-C).
+
+    404 (not 403) when the caller isn't even a member, so a non-member can't probe
+    which workspaces exist; 403 when they're a member but not an owner.
+    """
+    ws = _require_member(workspace_id, user_id)
+    if not workspaces.is_owner(workspace_id, user_id):
+        raise HTTPException(status_code=403, detail="Only the workspace owner can manage members")
     return ws
 
 
@@ -67,17 +83,24 @@ def list_workspace_meetings(
     workspace_id: str,
     user: dict = Depends(require_current_user),
 ):
-    """List meetings in this workspace, newest-first.
+    """List meetings in this workspace the caller can see, newest-first.
 
-    Phase 1.6 wired this to the typed `workspace_id` column. Phase 1.7
-    layers the per-meeting visibility check on top — for now membership
-    in the workspace is the only gate, so a member sees everything.
+    Task #32 §0b-D: meetings are OWNER-PRIVATE by default — a member sees only the
+    ones they own or that were explicitly shared to them (a per-recipient share OR a
+    whole-workspace share). The `can_user_see` gate is the single source of truth for
+    that decision (same one the detail endpoint enforces), so the list can't leak a
+    meeting the detail view would 403.
     """
     _require_member(workspace_id, user["id"])
+    from api.transcripts_routes import can_user_see
     from transcripts import store as _store
     sessions = _store.list_workspace_sessions(workspace_id)
     meetings = []
     for s in sessions:
+        ws_fields = _store.get_workspace_fields(s.session_id)
+        row = {"session_id": s.session_id, **ws_fields} if ws_fields else None
+        if row is None or not can_user_see(user, row):
+            continue
         summary = s.derived.summary if s.derived else None
         # A session is "processing" when it's been ingested but enrichment
         # hasn't filled in the summary yet. The window is ~30s-2min between
@@ -165,14 +188,119 @@ def list_open_questions(
     return {"questions": questions}
 
 
-@router.post("/{workspace_id}/members", status_code=501)
+# ---------------------------------------------------------------------------
+# Multi-membership (Task #32) — owner-only invite/list/remove + accept.
+# ---------------------------------------------------------------------------
+
+
+class InviteMemberBody(BaseModel):
+    email: EmailStr
+    role: str = "member"
+
+
+@router.post("/{workspace_id}/members", status_code=201)
 def add_workspace_member(
+    workspace_id: str,
+    body: InviteMemberBody,
+    user: dict = Depends(require_current_user),
+):
+    """Owner invites an email to the workspace (Task #32).
+
+    Creates a pending invite and emails an accept link. The recipient becomes a
+    `workspace_members` row when they accept — either by clicking the link (an
+    already-signed-in user) or automatically on their first sign-in (invites are
+    hydrated by email, mirroring `meeting_shares`). Owner-only.
+    """
+    _require_owner(workspace_id, user["id"])
+    if body.role not in workspaces.WORKSPACE_ROLES:
+        raise HTTPException(status_code=422,
+                            detail=f"role must be one of {list(workspaces.WORKSPACE_ROLES)}")
+
+    email = str(body.email).strip().lower()
+    # Already a member? (the invited email resolves to an existing member) → 409.
+    from infra import identity
+    existing_user = identity.get_user_by_email(email)
+    if existing_user and workspaces.is_member(workspace_id, existing_user["id"]):
+        raise HTTPException(status_code=409, detail="That person is already a member")
+
+    invite = workspaces.create_invite(
+        workspace_id, email, role=body.role, invited_by=user["id"],
+    )
+
+    # Best-effort email — a send failure must not lose the invite (the recipient can
+    # still be auto-added on signup, and the owner can re-send).
+    try:
+        from infra import email as _email
+        from infra.magic_links import base_url
+        _email.send_workspace_invite(
+            recipient_email=email,
+            accept_url=f"{base_url()}/invite/{invite['token']}",
+            workspace_name=_require_member(workspace_id, user["id"]).get("name"),
+            inviter_email=user.get("email"),
+        )
+    except Exception:  # noqa: BLE001 — never block the invite on an email hiccup
+        logger.warning("workspace invite email to %s failed (invite still created)", email,
+                       exc_info=True)
+
+    return {"invite": {"id": invite["id"], "email": invite["email"],
+                       "role": invite["role"], "created_at": invite["created_at"]}}
+
+
+@router.get("/{workspace_id}/members")
+def list_members(
     workspace_id: str,
     user: dict = Depends(require_current_user),
 ):
-    """Multi-member workspaces ship in v1.5 (BUILD_DOC §11)."""
-    _require_member(workspace_id, user["id"])
-    raise HTTPException(
-        status_code=501,
-        detail="Multi-member workspaces are not in v1. See BUILD_DOC §11.",
-    )
+    """List current members + pending invites. Owner-only (membership is managed
+    by the owner, §0b-C)."""
+    _require_owner(workspace_id, user["id"])
+    return {
+        "members": workspaces.list_workspace_members(workspace_id),
+        "invites": workspaces.list_pending_invites(workspace_id),
+    }
+
+
+@router.delete("/{workspace_id}/members/{member_user_id}")
+def remove_member(
+    workspace_id: str,
+    member_user_id: str,
+    user: dict = Depends(require_current_user),
+):
+    """Owner removes a member (revokes their workspace access). Owner-only.
+
+    Refuses to remove the last owner (a workspace must always have one). Removing a
+    member is content-side only — it does NOT touch VFTE voiceprint↔scope edges (#2).
+    """
+    _require_owner(workspace_id, user["id"])
+    if member_user_id == user["id"] and workspaces.count_owners(workspace_id) <= 1:
+        raise HTTPException(status_code=409, detail="Cannot remove the last owner")
+    if workspaces.get_member_role(workspace_id, member_user_id) == "owner" and \
+            workspaces.count_owners(workspace_id) <= 1:
+        raise HTTPException(status_code=409, detail="Cannot remove the last owner")
+    removed = workspaces.remove_workspace_member(workspace_id, member_user_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="Member not found")
+    return {"ok": True, "removed": member_user_id}
+
+
+class AcceptInviteBody(BaseModel):
+    token: str
+
+
+@router.post("/accept-invite")
+def accept_invite(
+    body: AcceptInviteBody,
+    user: dict = Depends(require_current_user),
+):
+    """Accept a workspace invite by token → become a member (Task #32).
+
+    Idempotent-ish: an unknown/already-consumed token 404s (the membership, if any,
+    already exists). The email is not required to match the invite — clicking a valid
+    link is the proof of intent (the token is unguessable), matching how meeting magic
+    links work.
+    """
+    member = workspaces.accept_invite(body.token, user["id"])
+    if member is None:
+        raise HTTPException(status_code=404, detail="Invite not found or already used")
+    ws = workspaces.get_workspace(member["workspace_id"])
+    return {"workspace": ws, "role": member["role"]}

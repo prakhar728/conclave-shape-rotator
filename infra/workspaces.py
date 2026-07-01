@@ -123,6 +123,86 @@ def get_member_role(workspace_id: str, user_id: str) -> Optional[str]:
     return row["role"] if row else None
 
 
+#: Roles in v1 of multi-membership (Task #32). `viewer` is reserved for v1.5.
+WORKSPACE_ROLES = ("owner", "member")
+
+
+def is_owner(workspace_id: str, user_id: str) -> bool:
+    """True iff `user_id` is the/an owner of the workspace — the manage gate.
+
+    Owner-only manages membership (invite / remove / list) and per-meeting sharing
+    (§0b-C). Members can see-what's-shared + create/record their own meetings.
+    """
+    return get_member_role(workspace_id, user_id) == "owner"
+
+
+def add_workspace_member(
+    workspace_id: str,
+    user_id: str,
+    *,
+    role: str = "member",
+    added_by: str,
+) -> dict:
+    """Insert (or promote) a `workspace_members` row. Idempotent on (ws, user).
+
+    Roles are validated against :data:`WORKSPACE_ROLES`. Re-adding an existing
+    member updates their role (so an accepted invite can't create a duplicate).
+    Returns the resulting `{workspace_id, user_id, role}`.
+    """
+    if role not in WORKSPACE_ROLES:
+        raise ValueError(f"role must be one of {WORKSPACE_ROLES}, got {role!r}")
+    conn = _get_conn()
+    conn.execute(
+        "INSERT INTO workspace_members (workspace_id, user_id, role, added_at, added_by) "
+        "VALUES (?, ?, ?, ?, ?) "
+        "ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = excluded.role",
+        (workspace_id, user_id, role, _now(), added_by),
+    )
+    return {"workspace_id": workspace_id, "user_id": user_id, "role": role}
+
+
+def remove_workspace_member(workspace_id: str, user_id: str) -> bool:
+    """Remove a member. Returns True if a row was deleted.
+
+    Revocation is pure content-side: the member loses workspace access and any
+    meetings shared to them via bare membership. Voiceprint↔scope edges (VFTE #2)
+    are a SEPARATE graph and are intentionally untouched (§0.5).
+    """
+    cur = _get_conn().execute(
+        "DELETE FROM workspace_members WHERE workspace_id = ? AND user_id = ?",
+        (workspace_id, user_id),
+    )
+    return cur.rowcount > 0
+
+
+def count_owners(workspace_id: str) -> int:
+    """How many owners a workspace has — used to refuse removing the last owner."""
+    row = _get_conn().execute(
+        "SELECT COUNT(*) AS n FROM workspace_members "
+        "WHERE workspace_id = ? AND role = 'owner'",
+        (workspace_id,),
+    ).fetchone()
+    return int(row["n"]) if row else 0
+
+
+def list_workspace_members(workspace_id: str) -> list[dict]:
+    """Members of a workspace, owners first then by join time — with their email.
+
+    Joins `users` so the UI can render a real identity, not an opaque id. A member
+    with no `users` row yet (shouldn't happen post-signup) still lists with a null
+    email rather than being dropped.
+    """
+    rows = _get_conn().execute(
+        "SELECT m.user_id, m.role, m.added_at, u.email, u.display_name "
+        "FROM workspace_members m "
+        "LEFT JOIN users u ON u.id = m.user_id "
+        "WHERE m.workspace_id = ? "
+        "ORDER BY CASE m.role WHEN 'owner' THEN 0 ELSE 1 END, m.added_at ASC",
+        (workspace_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 # --- Meeting shares (Phase 1.7 / 2.x consumer; Task #31 per-artifact flags) ---
 
 
@@ -266,3 +346,152 @@ def list_meeting_shares(session_id: str) -> list[dict]:
         )
         out.append(d)
     return out
+
+
+# --- Workspace invites (Task #32) ------------------------------------------
+
+
+def _new_invite_id() -> str:
+    return f"inv_{secrets.token_hex(4)}"
+
+
+def create_invite(
+    workspace_id: str, email: str, *, role: str = "member", invited_by: str,
+) -> dict:
+    """Create (or refresh) a pending invite for `email` on this workspace.
+
+    Idempotent per (workspace, email): re-inviting an un-accepted email refreshes
+    the token + role rather than piling up rows. Returns
+    `{id, workspace_id, email, role, token, created_at}` — the caller emails the
+    token as an accept link. `email` is normalised to lowercase (the accept +
+    signup-hydration paths match on it).
+    """
+    if role not in WORKSPACE_ROLES:
+        raise ValueError(f"role must be one of {WORKSPACE_ROLES}, got {role!r}")
+    email = email.strip().lower()
+    conn = _get_conn()
+    now = _now()
+    token = secrets.token_urlsafe(32)
+    existing = conn.execute(
+        "SELECT id FROM workspace_invites "
+        "WHERE workspace_id = ? AND email = ? AND accepted_at IS NULL",
+        (workspace_id, email),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE workspace_invites SET token = ?, role = ?, invited_by = ?, "
+            "created_at = ? WHERE id = ?",
+            (token, role, invited_by, now, existing["id"]),
+        )
+        invite_id = existing["id"]
+    else:
+        invite_id = _new_invite_id()
+        conn.execute(
+            "INSERT INTO workspace_invites "
+            "(id, workspace_id, email, role, token, invited_by, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (invite_id, workspace_id, email, role, token, invited_by, now),
+        )
+    return {"id": invite_id, "workspace_id": workspace_id, "email": email,
+            "role": role, "token": token, "created_at": now}
+
+
+def get_invite_by_token(token: str) -> Optional[dict]:
+    """Resolve a pending (un-accepted) invite by its token, else None."""
+    row = _get_conn().execute(
+        "SELECT id, workspace_id, email, role, token, invited_by, created_at, "
+        "accepted_at, accepted_user_id FROM workspace_invites WHERE token = ?",
+        (token,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def list_pending_invites(workspace_id: str) -> list[dict]:
+    """Un-accepted invites for a workspace, newest-first (owner-facing list)."""
+    rows = _get_conn().execute(
+        "SELECT id, email, role, invited_by, created_at FROM workspace_invites "
+        "WHERE workspace_id = ? AND accepted_at IS NULL ORDER BY created_at DESC",
+        (workspace_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _accept_invite_row(invite: dict, user_id: str) -> dict:
+    """Mark an invite accepted + create the member row. Shared by token + signup."""
+    conn = _get_conn()
+    conn.execute(
+        "UPDATE workspace_invites SET accepted_at = ?, accepted_user_id = ? WHERE id = ?",
+        (_now(), user_id, invite["id"]),
+    )
+    return add_workspace_member(
+        invite["workspace_id"], user_id, role=invite["role"], added_by=invite["invited_by"],
+    )
+
+
+def accept_invite(token: str, user_id: str) -> Optional[dict]:
+    """Accept an invite by token → `workspace_members` row. Returns the member
+    dict, or None if the token is unknown or already accepted. Idempotent-safe:
+    an already-accepted token returns None (the member row already exists)."""
+    invite = get_invite_by_token(token)
+    if invite is None or invite.get("accepted_at"):
+        return None
+    return _accept_invite_row(invite, user_id)
+
+
+def accept_pending_invites_for_email(email: str, user_id: str) -> int:
+    """Auto-accept every pending invite issued to `email` (called on first sign-in).
+
+    This is the "accept on signup" half of the flow: an owner invites an address
+    before that person has an account; when they sign in, their pending invites
+    become memberships. Returns how many were accepted. Matches on lowercased email.
+    """
+    email = email.strip().lower()
+    rows = _get_conn().execute(
+        "SELECT id, workspace_id, email, role, invited_by, created_at "
+        "FROM workspace_invites WHERE email = ? AND accepted_at IS NULL",
+        (email,),
+    ).fetchall()
+    accepted = 0
+    for r in rows:
+        _accept_invite_row(dict(r), user_id)
+        accepted += 1
+    return accepted
+
+
+# --- Whole-workspace meeting share (Task #32) ------------------------------
+#
+# A one-click "share this meeting with the entire workspace" grant. One row per
+# meeting, so it automatically covers members added LATER (unlike snapshotting a
+# per-member share). Composes with the per-recipient `meeting_shares` (an email /
+# a specific member) instead of overloading the `visibility` enum — that keeps an
+# outside-email share and a whole-workspace share able to coexist on one meeting.
+
+
+def add_meeting_workspace_share(session_id: str, workspace_id: str, granted_by: str) -> None:
+    """Grant every member of `workspace_id` access to `session_id` (idempotent)."""
+    _get_conn().execute(
+        "INSERT INTO meeting_workspace_shares "
+        "(session_id, workspace_id, granted_by, granted_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT (session_id) DO UPDATE SET "
+        "workspace_id = excluded.workspace_id, granted_by = excluded.granted_by, "
+        "granted_at = excluded.granted_at",
+        (session_id, workspace_id, granted_by, _now()),
+    )
+
+
+def has_meeting_workspace_share(session_id: str) -> bool:
+    """True iff this meeting is shared with its whole workspace (Task #32)."""
+    row = _get_conn().execute(
+        "SELECT 1 FROM meeting_workspace_shares WHERE session_id = ?",
+        (session_id,),
+    ).fetchone()
+    return row is not None
+
+
+def remove_meeting_workspace_share(session_id: str) -> bool:
+    """Revoke a whole-workspace share. Returns True if a row was removed."""
+    cur = _get_conn().execute(
+        "DELETE FROM meeting_workspace_shares WHERE session_id = ?",
+        (session_id,),
+    )
+    return cur.rowcount > 0

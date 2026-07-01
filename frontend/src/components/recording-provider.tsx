@@ -167,6 +167,14 @@ export function RecordingProvider({ children }: { children: React.ReactNode }) {
           /* non-fatal: proceed without agenda grounding */
         }
       }
+      // Task #32: stash the recorder identity (always, even with no agenda) so the
+      // finalize webhook uses the actual recorder as the VFTE identify host. The
+      // server derives WHO from the session cookie; we only send the meeting uid.
+      try {
+        await workspaces.recordRecorder(workspaceId, { uid: id });
+      } catch {
+        /* non-fatal: identify falls back to the workspace owner */
+      }
       if (idRef.current !== id) return; // cancelled while stashing
 
       const url =

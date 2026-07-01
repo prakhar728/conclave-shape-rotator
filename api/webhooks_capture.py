@@ -179,7 +179,9 @@ async def on_meeting_completed(
                     session_id=session_id,
                     workspace_id=payload_ws,
                     owner_user_id=owner,          # workspace creator owns walk-up recordings
-                    visibility="workspace",       # visible to workspace members
+                    # Task #32 §0b-D: OWNER-PRIVATE by default — bare membership no longer
+                    # auto-exposes a meeting. The owner opts in via "share to workspace".
+                    visibility="owner-only",
                 )
             except Exception:  # noqa: BLE001 — never block finalize on a bad workspace binding
                 logger.warning("in-person workspace bind to %r failed for %s — session unbound",
@@ -216,6 +218,21 @@ async def on_meeting_completed(
             except Exception:  # noqa: BLE001 — agenda is optional grounding
                 logger.exception("webhook: set in-person agenda intent failed for %s",
                                  session_id)
+
+    # Task #32: stamp the RECORDER on the session (the identify host_user), for BOTH ingress
+    # modes. In-person recorders are stashed at record-start by uid (== native_id); gMeet's
+    # "recorder" is the inviter. None → identify falls back to the workspace owner. MUST run
+    # before the identity task below so `meeting_host_email` reads it. Best-effort.
+    if status_label == "accepted":
+        try:
+            from infra import inperson_recorder
+            recorder = inperson_recorder.pop_recorder(native_id)
+            if recorder is None and inv is not None:
+                recorder = inv["user_id"]
+            if recorder:
+                transcripts_store.set_recorder(session_id, recorder)
+        except Exception:  # noqa: BLE001 — recorder is best-effort (owner is the fallback)
+            logger.exception("webhook: set recorder for %s failed", session_id)
 
     # 6b. Calendar enrichment (best-effort): if this Meet was auto-recorded
     # from a calendar event, link the transcript to the event and auto-share

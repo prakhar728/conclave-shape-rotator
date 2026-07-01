@@ -67,6 +67,9 @@ def test_set_workspace_writes_typed_columns():
         # Retention columns ride along additively (Alembic 0012) — unset here.
         "retention_override": None,
         "raw_transcript_deleted_at": None,
+        # Task #32 columns (Alembic 0027) — additive, unset here.
+        "recorder_user_id": None,
+        "owner_only": None,
     }
 
 

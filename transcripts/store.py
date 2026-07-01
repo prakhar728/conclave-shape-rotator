@@ -259,10 +259,22 @@ def set_workspace(
 
 
 def get_workspace_fields(session_id: str) -> Optional[dict]:
-    """Return `{workspace_id, owner_user_id, visibility, retention_override,
-    raw_transcript_deleted_at}` or None if missing."""
+    """Return `{workspace_id, owner_user_id, visibility, recorder_user_id,
+    owner_only, retention_override, raw_transcript_deleted_at}` or None if missing."""
     from storage import sqlite as _sqlite
     return _sqlite.get_transcript_workspace_fields(session_id)
+
+
+def set_recorder(session_id: str, recorder_user_id: Optional[str]) -> None:
+    """Task #32 — stamp the member who recorded this meeting (the identify host)."""
+    from storage import sqlite as _sqlite
+    _sqlite.set_transcript_recorder(session_id, recorder_user_id)
+
+
+def set_owner_only(session_id: str, owner_only: bool) -> None:
+    """Task #32 — set the per-meeting confidential lock (blocks workspace sharing)."""
+    from storage import sqlite as _sqlite
+    _sqlite.set_transcript_owner_only(session_id, owner_only)
 
 
 # ---------------------------------------------------------------------------

@@ -361,6 +361,9 @@ async def record_meeting(
         owner_user_id=user["id"],
         visibility="owner-only",
     )
+    # Task #32: the request user IS the recorder here → stamp it as the identify host_user
+    # (the read cache is host-keyed, so per-member overlays hold). Mirrors the webhook path.
+    store.set_recorder(session.session_id, user["id"])
 
     # Durable via the job queue when on (Task #16), else the same in-process background task.
     from connectors.jobs import enqueue
@@ -394,6 +397,30 @@ async def stash_record_agenda(
     from infra import inperson_agenda
 
     inperson_agenda.set_agenda(body.uid, body.agenda, workspace_id=workspace_id)
+    return None
+
+
+class RecordRecorderBody(BaseModel):
+    uid: str
+
+
+@router.post("/{workspace_id}/record/recorder", status_code=status.HTTP_204_NO_CONTENT)
+async def stash_record_recorder(
+    workspace_id: str,
+    body: RecordRecorderBody,
+    user: dict = Depends(require_current_user),
+):
+    """Task #32: stash WHO is recording an in-person meeting, keyed by `uid`.
+
+    The recorder identity is the authenticated caller (server-derived from the session
+    cookie — the body carries only the meeting `uid`). Capture is untouched, so the
+    in-person finalize webhook can't know the recorder otherwise; it pops this at finalize
+    and stamps `recorder_user_id` on the session (the VFTE identify host). Called at
+    record-start regardless of whether an agenda was typed. 204 always."""
+    _require_member(workspace_id, user["id"])
+    from infra import inperson_recorder
+
+    inperson_recorder.set_recorder(body.uid, user["id"], workspace_id=workspace_id)
     return None
 
 

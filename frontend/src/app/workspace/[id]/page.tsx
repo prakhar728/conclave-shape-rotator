@@ -95,6 +95,14 @@ export default function WorkspacePage({
             {meetings.length} meeting{meetings.length === 1 ? "" : "s"} ·{" "}
             <span className="capitalize">{workspace.role}</span>
           </p>
+          {workspace.role === "owner" ? (
+            <Link
+              href={`/workspace/${id}/members`}
+              className="mt-2 inline-block text-xs text-muted-foreground hover:text-foreground"
+            >
+              Manage members →
+            </Link>
+          ) : null}
         </div>
 
         {meetings.length === 0 ? (
