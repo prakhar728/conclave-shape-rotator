@@ -175,7 +175,7 @@ async def test_result_acks_the_stashed_msg(client, monkeypatch):
     queue.set_status(job_id, "processing", client=fake, msg_id=msg_id, consumer=consumer)
     assert fake.xpending(queue.DIARIZE_STREAM, queue.DIARIZE_GROUP)["pending"] == 1
 
-    async def _fake_identify(ws, audio, segs, tag=None):
+    async def _fake_identify(ws, audio, segs, tag=None, meeting_id=None):
         return segs
     monkeypatch.setattr("connectors.capture.identify._assemble_audio", lambda nid: b"")
     monkeypatch.setattr("transcripts.store.load_session", lambda sid: object())

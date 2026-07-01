@@ -115,7 +115,8 @@ async def identify_meeting(session_id: str, native_meeting_id: str,
             if not spans:
                 logger.info("identify_meeting: no %s spans for %s — skipping", src, native_meeting_id)
                 return False
-            fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, spans, tag="offline")
+            fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, spans, tag="offline",
+                                                        meeting_id=native_meeting_id)
         else:
             # Legacy rollback path: FPM re-diarizes + identifies the recording.
             fpm_segs = await fpm_consent.diarize_audio(vfte_ws, audio, tag="offline")
@@ -130,4 +131,11 @@ async def identify_meeting(session_id: str, native_meeting_id: str,
     from connectors.capture.reconcile import reconcile_identity
     authoritative = bool(settings.inperson_via_capture and settings.diarize_url)
     reconcile_identity(session_id, session, fpm_segs, authoritative=authoritative)
+    # Task #3 Part (c): consent-to-recognize ≠ consent-to-silence — tell FPM which voiceprints
+    # were recognized so it records + emails the consented subjects (best-effort, never blocks).
+    try:
+        await fpm_consent.notify_recognitions(vfte_ws, fpm_segs, native_meeting_id=native_meeting_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("identify_meeting: recognition notices failed for %s", session_id,
+                       exc_info=True)
     return False

@@ -111,12 +111,18 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
     audio = _assemble_audio(native_id) if native_id else b""
     vfte_ws = settings.fpm_workspace_for(workspace)
     try:
-        fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, segments, tag="offline")
+        fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, segments, tag="offline",
+                                                    meeting_id=native_id)
     except Exception as e:  # noqa: BLE001 — identity is best-effort, never wedge the worker
         logger.warning("diarize result: identify-spans for job %s failed: %s", job_id, e)
         return "identify_failed"
 
     reconcile_identity(session_id, session, fpm_segs, authoritative=bool(authoritative))
+    # Task #3 Part (c): notify the consented subjects recognized in this meeting (best-effort).
+    try:
+        await fpm_consent.notify_recognitions(vfte_ws, fpm_segs, native_meeting_id=native_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("diarize result: recognition notices for job %s failed", job_id, exc_info=True)
     # Mark reconciled BEFORE chaining enrich so a duplicate callback can't double-enqueue enrichment.
     queue.set_status(job_id, "done", client=client, reconciled="1")
 

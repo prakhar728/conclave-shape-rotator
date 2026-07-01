@@ -380,11 +380,23 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
         return
     changed = False
     for meta in speakers.values():
-        if isinstance(meta, dict) and meta.get("voiceprint_id") in resolved:
-            new_name = resolved[meta["voiceprint_id"]].get("name")
-            if meta.get("name") != new_name:
-                meta["name"] = new_name
-                changed = True
+        if not (isinstance(meta, dict) and meta.get("voiceprint_id") in resolved):
+            continue
+        r = resolved[meta["voiceprint_id"]]
+        name = r.get("name")
+        consented = bool(r.get("consented"))
+        # Task #3 Part (a): a CONSENTED (claimed + identify-allowed) recognition auto-applies
+        # its name; a named-but-UNCLAIMED one is NOT silently applied — its name is withheld
+        # and surfaced to the host as a "Proposed: <name>" one-click confirm instead. WS5
+        # anonymous / unnamed stays nameless.
+        applied = name if (name and consented) else None
+        proposed = name if (name and not consented) else None
+        if (meta.get("name") != applied or meta.get("proposed_name") != proposed
+                or bool(meta.get("consented")) != consented):
+            meta["name"] = applied
+            meta["proposed_name"] = proposed
+            meta["consented"] = consented
+            changed = True
     if changed:
         from transcripts import store as _store
         _store.set_metadata(session.session_id, session.metadata)
@@ -440,23 +452,26 @@ def to_transcript(session: Session) -> dict:
     from transcripts import store as _tstore
     speakers = session.metadata.resolved_speakers or {}
 
-    def _name_for(label: str) -> Optional[str]:
+    def _meta_for(label: str) -> dict:
         meta = speakers.get(label)
-        if isinstance(meta, dict):
-            return meta.get("name")
-        return None
+        return meta if isinstance(meta, dict) else {}
 
     raw_segs = _tstore.v2_segments_or_raw(session.session_id)
-    segments = [
-        {
+    segments = []
+    for seg in raw_segs:
+        m = _meta_for(seg["speaker"])
+        vid = m.get("voiceprint_id")
+        segments.append({
             "speaker": seg["speaker"],
-            "speaker_name": _name_for(seg["speaker"]),
+            "speaker_name": m.get("name"),          # applied only for consented (Task #3 Part a)
+            # Task #3 Part (a): a recognized-but-unconsented name the host can one-click confirm.
+            "proposed_name": m.get("proposed_name"),
+            "voiceprint_id": vid,
+            "consented": bool(m.get("consented")) if vid else None,
             "text": seg["text"],
             "start": seg.get("start"),
             "end": seg.get("end"),
-        }
-        for seg in raw_segs
-    ]
+        })
     return {
         "session_id": session.session_id,
         "segment_count": len(segments),
@@ -692,21 +707,50 @@ def get_session_audio(
     request: Request,
     start: Optional[float] = None,
     end: Optional[float] = None,
+    cap: Optional[str] = None,
 ):
     """Decrypt + serve a meeting's stored audio (full, or a segment clip).
 
-    Task #31: gated by the dedicated `can_see_audio` flag (owner + full workspace
-    members + recipients whose share has audio=on) — independent of the transcript
-    grant. Legacy cohort sessions never exposed audio, so they 403. Decryption
-    happens in memory (`_assemble_audio`); plaintext is never re-written to disk.
+    Two auth paths:
+      1. Session cookie (Task #31): gated by the dedicated `can_see_audio` flag (owner +
+         full workspace members + recipients whose share has audio=on). Legacy cohort
+         sessions never exposed audio, so they 403.
+      2. Task #3 clip capability (`?cap=`): an FPM-signed, expiring, subject-scoped token
+         (from the "is this you?" box) authorizing ONLY the one [start,end] clip in the
+         capability. A non-member subject can hear their own segment — nothing else. FPM
+         never streams bytes; it only signs the pointer.
 
-    Note: for capture meetings `session_id == native_meeting_id` (the audio-dir key),
-    so the directory resolves directly — see webhooks_capture finalize.
+    Decryption happens in memory (`_assemble_audio`); plaintext is never re-written to disk.
+    For capture meetings `session_id == native_meeting_id` (the audio-dir key).
     """
     session = store.load_session(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
 
+    from fastapi.responses import Response
+
+    # ── path 2: FPM-signed clip capability (bounded to one segment of THIS session) ──
+    if cap is not None:
+        from infra.clip_capability import verify_capability
+
+        payload = verify_capability(cap)
+        if payload is None:
+            raise HTTPException(status_code=403, detail="invalid or expired capability")
+        clip_ref = payload.get("clip_ref") or {}
+        cap_session = clip_ref.get("conclave_session_id") or clip_ref.get("native_meeting_id")
+        # A capability for session A must never fetch session B (path is authoritative).
+        if cap_session != session_id:
+            raise HTTPException(status_code=403, detail="capability does not match this session")
+        from connectors.capture.identify import _assemble_audio
+        audio = _assemble_audio(session_id)
+        if not audio:
+            raise HTTPException(status_code=404, detail="no stored audio for this meeting")
+        # Slice is fixed by the capability, not the query — the token can only ever yield
+        # its own bounded [start,end] clip, never the whole recording.
+        audio = _slice_wav(audio, clip_ref.get("start"), clip_ref.get("end"))
+        return Response(content=audio, media_type="audio/wav")
+
+    # ── path 1: signed-in member / recipient (Task #31 gate) ──
     from auth.session import try_current_user
     user = try_current_user(request)
     if user is None:
@@ -729,7 +773,6 @@ def get_session_audio(
     if start is not None or end is not None:
         audio = _slice_wav(audio, start, end)
 
-    from fastapi.responses import Response
     return Response(content=audio, media_type="audio/wav")
 
 

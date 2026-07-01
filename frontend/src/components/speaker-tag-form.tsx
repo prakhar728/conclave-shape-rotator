@@ -14,16 +14,20 @@ export function SpeakerTagForm({
   label,
   busy,
   err,
+  initialName = "",
   onCancel,
   onSubmit,
 }: {
   label: string;
   busy: boolean;
   err: string | null;
+  // Task #3 — pre-fill the name (the "Proposed:" Confirm/Edit path). The host
+  // still fills in the email, so a proposal is only created on submit.
+  initialName?: string;
   onCancel: () => void;
   onSubmit: (label: string, name: string, email: string) => void;
 }) {
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [email, setEmail] = useState("");
   const ready = name.trim() !== "" && email.trim() !== "";
   return (

@@ -42,7 +42,7 @@ def wiring(monkeypatch):
     import transcripts.store as store
     calls = {"identify_spans": None, "diarize_audio": None, "set_metadata": None, "set_raw": None}
 
-    async def fake_identify_spans(ws, audio, spans, *, tag="offline"):
+    async def fake_identify_spans(ws, audio, spans, *, tag="offline", meeting_id=None):
         calls["identify_spans"] = {"ws": ws, "spans": spans, "tag": tag}
         return [{"start": s["start"], "end": s["end"], "local_speaker": s["local_speaker"],
                  "voiceprint_id": "vp_A" if s["local_speaker"] == "speaker0" else "vp_B",

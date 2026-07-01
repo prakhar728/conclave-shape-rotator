@@ -50,10 +50,21 @@ export function TranscriptPanel({
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [openIdx, setOpenIdx] = useState<number | null>(null);
+  // Task #3 — name to pre-fill the tag form with when it's opened via the
+  // "Proposed:" Confirm/Edit affordance (blank for a plain label click).
+  const [formName, setFormName] = useState("");
   // label -> proposed name, for speakers whose tag is awaiting the target's confirm
   const [pending, setPending] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Open the tag form on a segment, optionally pre-filling the name (Confirm/Edit
+  // of a recognized-but-unconsented proposal); toggles closed if already open.
+  const openForm = useCallback((idx: number, name = "") => {
+    setFormName(name);
+    // Confirm/Edit (a name is supplied) always opens; a bare label click toggles.
+    setOpenIdx((cur) => (name === "" && cur === idx ? null : idx));
+  }, []);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -127,6 +138,8 @@ export function TranscriptPanel({
         pending={pending}
         openIdx={openIdx}
         setOpenIdx={setOpenIdx}
+        openForm={openForm}
+        formName={formName}
         submitTag={submitTag}
         busy={busy}
         err={err}
@@ -143,6 +156,8 @@ function Body({
   pending,
   openIdx,
   setOpenIdx,
+  openForm,
+  formName,
   submitTag,
   busy,
   err,
@@ -154,6 +169,8 @@ function Body({
   pending: Record<string, string>;
   openIdx: number | null;
   setOpenIdx: (i: number | null) => void;
+  openForm: (idx: number, name?: string) => void;
+  formName: string;
   submitTag: (label: string, name: string, email: string) => void;
   busy: boolean;
   err: string | null;
@@ -188,6 +205,11 @@ function Body({
       {state.segments.map((seg, idx) => {
         const pendingName = pending[seg.speaker];
         const display = seg.speaker_name ?? seg.speaker;
+        // Task #3 — a recognized-but-not-yet-consented name to suggest. Only
+        // offer it while the speaker is still anonymous and the host hasn't
+        // already acted (no applied name, no in-flight tag of our own).
+        const proposedName =
+          !seg.speaker_name && !pendingName ? seg.proposed_name ?? null : null;
         return (
           <li
             key={idx}
@@ -197,7 +219,7 @@ function Body({
               {taggable ? (
                 <button
                   type="button"
-                  onClick={() => setOpenIdx(openIdx === idx ? null : idx)}
+                  onClick={() => openForm(idx)}
                   className="underline decoration-dotted underline-offset-2 hover:text-foreground"
                   title="Tag this speaker"
                 >
@@ -206,6 +228,28 @@ function Body({
               ) : (
                 display
               )}
+              {taggable && proposedName ? (
+                <span
+                  data-testid="proposed-chip"
+                  className="ml-2 inline-flex items-center gap-1.5 rounded-full border border-sky-500/60 px-2 py-0.5 text-[0.65rem] text-sky-600"
+                >
+                  Proposed: {proposedName}
+                  <button
+                    type="button"
+                    onClick={() => openForm(idx, proposedName)}
+                    className="font-semibold underline decoration-dotted underline-offset-2 hover:text-sky-800"
+                  >
+                    Confirm
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openForm(idx, proposedName)}
+                    className="underline decoration-dotted underline-offset-2 hover:text-sky-800"
+                  >
+                    Edit
+                  </button>
+                </span>
+              ) : null}
               {pendingName ? (
                 <span className="ml-2 rounded-full border border-amber-500/60 px-2 py-0.5 text-[0.65rem] text-amber-600">
                   pending: {pendingName}
@@ -219,9 +263,12 @@ function Body({
             </p>
             {taggable && openIdx === idx ? (
               <SpeakerTagForm
+                // Remount when the prefill changes so Confirm/Edit re-seeds the name.
+                key={formName}
                 label={seg.speaker}
                 busy={busy}
                 err={err}
+                initialName={formName}
                 onCancel={() => setOpenIdx(null)}
                 onSubmit={submitTag}
               />

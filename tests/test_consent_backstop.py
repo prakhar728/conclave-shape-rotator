@@ -66,7 +66,9 @@ def test_confirm_surfaces_on_next_load(client, monkeypatch):
     # Conclave still has name=None (no re-tag), but FPM now says the binding is confirmed.
     _make_session("bs1", wsid, user["id"],
                   {"Speaker 2": {"voiceprint_id": "vp_b", "name": None, "confidence": 0.9}})
-    _stub_resolve(monkeypatch, {"vp_b": {"name": "Alice", "owner_email": "a@x.com", "visibility": "named"}})
+    # confirmed binding = claimed owner + identify-allowed ⇒ consented ⇒ auto-apply (Task #3)
+    _stub_resolve(monkeypatch, {"vp_b": {"name": "Alice", "owner_email": "a@x.com",
+                                         "visibility": "named", "consented": True}})
     r = client.get("/transcripts/sessions/bs1/transcript")
     assert r.status_code == 200
     seg = r.json()["segments"][0]

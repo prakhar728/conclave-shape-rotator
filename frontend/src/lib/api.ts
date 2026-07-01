@@ -305,6 +305,12 @@ export type MeetingView = {
 export type TranscriptSegment = {
   speaker: string;
   speaker_name: string | null;
+  // Task #3 — a recognized-but-NOT-yet-consented name to suggest to the host.
+  // Present (with speaker_name null) → render a "Proposed: <name>" chip with
+  // Confirm/Edit; a proposal is only created when the host submits the tag form.
+  proposed_name?: string | null;
+  voiceprint_id?: string | null;
+  consented?: boolean | null;
   text: string;
   start: number | null;
   end: number | null;

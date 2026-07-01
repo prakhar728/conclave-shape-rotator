@@ -156,6 +156,24 @@ def build_resolved_speakers(identity_segments: list[dict]) -> dict[str, dict]:
     }
 
 
+def _representative_clip(session, label: str, session_id: str) -> dict | None:
+    """A representative segment for `label` → the "is this you?" clip locator (Task #3).
+
+    The longest segment attributed to the label (a stable sample of that speaker; a
+    per-segment confidence isn't stored, so longest is the representative — spec §5). For
+    capture meetings `session_id == native_meeting_id` (the audio-dir key), so both keys
+    resolve the same recording. Returns None if the label has no timed segment to clip.
+    """
+    segs = [s for s in (session.raw_diarization or [])
+            if s.speaker == label and s.start is not None and s.end is not None
+            and s.end > s.start]
+    if not segs:
+        return None
+    best = max(segs, key=lambda s: s.end - s.start)
+    return {"conclave_session_id": session_id, "native_meeting_id": session_id,
+            "start": float(best.start), "end": float(best.end)}
+
+
 #: Identity fields carried per C2 segment. Back-filled onto the final view from
 #: the streamed lines if the final ("transcript") message omits them.
 _C2_IDENTITY_FIELDS = ("voiceprint_id", "name", "confidence", "local_speaker")
@@ -407,12 +425,19 @@ async def tag_speaker(
     if not voiceprint_id:
         raise HTTPException(404, f"no voiceprint for label '{body.label}'")
 
+    # Task #3: attach a representative clip the subject can play before consenting — the
+    # longest segment attributed to this label (a stable "is this you?" sample). clip_ref
+    # is a locator only; the audio stays in Conclave and is served via a signed capability.
+    clip_ref = _representative_clip(session, body.label, session_id)
+    confidence = entry.get("confidence") if isinstance(entry, dict) else None
+
     from infra import fpm_consent
 
     result = await fpm_consent.propose_binding(
         settings.fpm_workspace_for(workspace_id), voiceprint_id,
         proposed_email=body.email, proposed_by=(user.get("email") or ""),
         proposed_name=body.name,
+        clip_ref=clip_ref, source="tag", confidence=confidence,
     )
     if result.get("status") == "confirmed":
         store.reresolve_voiceprint(voiceprint_id, result.get("name") or body.name,

@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     transcription_service_url: str = ""    # e.g. http://localhost:8083 (NEAR Whisper)
     transcription_service_token: str = ""  # optional bearer
     transcription_model: str = "whisper-1"
+    # Task #3 (hear the clip): FPM's raw Ed25519 receipt public key (hex). Pins the key
+    # Conclave verifies clip capabilities against, avoiding a fetch to FPM's
+    # /v1/deletion-receipt-key on the serving path. Empty → fetch-and-cache from FPM.
+    fpm_receipt_pubkey_hex: str = ""
 
     # Migration P4 atomic cutover (R1): when True, in-person identity comes from CAPTURE's diarization
     # — Conclave sends capture's own spans to VFTE `/v1/identify-spans` (identity only). When False
