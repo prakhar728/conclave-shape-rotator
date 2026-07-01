@@ -294,3 +294,44 @@ def test_record_empty_audio_400(client: TestClient, monkeypatch):
     r = client.post(f"/api/workspaces/{wsid}/record",
                     files={"file": ("rec.webm", b"", "audio/webm")})
     assert r.status_code == 400
+
+
+# ── Task #12: agenda → raw_intent ────────────────────────────
+
+
+def test_record_form_intent_lands_on_raw_intent(client: TestClient, monkeypatch):
+    """Regression guard for the legacy batch path: the /record Form `intent`
+    still lands on session.metadata.raw_intent (record_routes.py)."""
+    _enable_record(monkeypatch)
+    _login(client, "alice@example.com")
+    wsid = _my_workspace_id(client)
+    r = client.post(f"/api/workspaces/{wsid}/record",
+                    files=_audio(), data={"intent": "kickoff sync"})
+    assert r.status_code == 202, r.text
+    session = store.load_session(r.json()["session_id"])
+    assert session.metadata.raw_intent == "kickoff sync"
+
+
+def test_record_agenda_stash_roundtrip(client: TestClient):
+    """POST /record/agenda stashes the agenda keyed by uid (trimmed)."""
+    from infra import inperson_agenda
+    _login(client, "alice@example.com")
+    wsid = _my_workspace_id(client)
+    r = client.post(f"/api/workspaces/{wsid}/record/agenda",
+                    json={"uid": "inperson-x", "agenda": "  decide pricing  "})
+    assert r.status_code == 204, r.text
+    assert inperson_agenda.pop_agenda("inperson-x") == "decide pricing"
+
+
+def test_record_agenda_nonmember_404(client: TestClient):
+    """The stash endpoint is member-gated — a non-member can't write (or even
+    confirm the workspace exists), and nothing is stashed."""
+    from infra import inperson_agenda
+    _login(client, "owner2@example.com")
+    wsid = _my_workspace_id(client)
+    client.cookies.clear()
+    _login(client, "intruder2@example.com")
+    r = client.post(f"/api/workspaces/{wsid}/record/agenda",
+                    json={"uid": "inperson-y", "agenda": "secret agenda"})
+    assert r.status_code == 404  # not 403 — no existence leak
+    assert inperson_agenda.pop_agenda("inperson-y") is None

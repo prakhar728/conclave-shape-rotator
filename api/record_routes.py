@@ -349,6 +349,32 @@ async def record_meeting(
             "speakers": sorted({m["speaker"] for m in merged}), "status": "accepted"}
 
 
+class RecordAgendaBody(BaseModel):
+    uid: str
+    agenda: str
+
+
+@router.post("/{workspace_id}/record/agenda", status_code=status.HTTP_204_NO_CONTENT)
+async def stash_record_agenda(
+    workspace_id: str,
+    body: RecordAgendaBody,
+    user: dict = Depends(require_current_user),
+):
+    """Task #12: stash the agenda typed in the record modal, keyed by meeting `uid`.
+
+    The in-person live path streams the mic straight to the capture microservice
+    (untouched), so the agenda can't ride the WS. The modal POSTs it here before
+    Start; the `meeting.completed` webhook reads it back by `uid` and applies it
+    as `session.metadata.raw_intent` before enrichment — giving in-person the same
+    agenda grounding online + upload get. 204 even on an empty agenda (no-op stash).
+    """
+    _require_member(workspace_id, user["id"])
+    from infra import inperson_agenda
+
+    inperson_agenda.set_agenda(body.uid, body.agenda, workspace_id=workspace_id)
+    return None
+
+
 class TagSpeakerBody(BaseModel):
     label: str
     name: str

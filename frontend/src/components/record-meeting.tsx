@@ -20,6 +20,7 @@ import { Mic, Square, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
+import { workspaces } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // capture's in-person WebSocket base (e.g. ws://localhost:8087) + the engine token. Public env so the
@@ -104,6 +105,9 @@ function RecordModal({
   // Task #30: store the audio recording (encrypted at rest) for later playback.
   // In-person defaults ON; one tap turns it off before you start.
   const [storeAudio, setStoreAudio] = useState(true);
+  // Task #12: optional agenda/focus typed before Start. Stashed by uid, then read
+  // by the finalize webhook → session.metadata.raw_intent → grounds the summary.
+  const [agenda, setAgenda] = useState("");
 
   const ctxRef = useRef<AudioContext | null>(null);
   const nodeRef = useRef<AudioWorkletNode | null>(null);
@@ -127,6 +131,16 @@ function RecordModal({
     setSegs([]);
     const uid = newMeetingId();
     meetingIdRef.current = uid;
+    // Task #12: stash the agenda BEFORE the stream starts so it's persisted by the
+    // time the finalize webhook fires (on Stop). Best-effort — a stash failure must
+    // not block the recording; the meeting just runs ungrounded (prior behavior).
+    if (agenda.trim()) {
+      try {
+        await workspaces.recordAgenda(workspaceId, { uid, agenda: agenda.trim() });
+      } catch {
+        /* non-fatal: proceed without agenda grounding */
+      }
+    }
     const url =
       `${CAPTURE_WS_BASE.replace(/\/$/, "")}/v1/inperson/stream` +
       `?uid=${encodeURIComponent(uid)}&workspace=${encodeURIComponent(workspaceId)}` +
@@ -183,7 +197,7 @@ function RecordModal({
       teardown();
       setRecording(false);
     }
-  }, [workspaceId, router, teardown, ending, storeAudio]);
+  }, [workspaceId, router, teardown, ending, storeAudio, agenda]);
 
   const stop = useCallback(() => {
     const sock = sockRef.current;
@@ -267,6 +281,30 @@ function RecordModal({
           </div>
           <p className="text-[11px] text-muted-foreground">{status}</p>
         </div>
+
+        {/* Agenda / focus (Task #12) — optional; grounds the summary. Locked once recording starts. */}
+        {!recording && !ending ? (
+          <div className="mt-4">
+            <label
+              htmlFor="record-agenda"
+              className="mb-1.5 block text-xs font-medium text-foreground"
+            >
+              Agenda or focus{" "}
+              <span className="font-normal text-muted-foreground">— optional</span>
+            </label>
+            <textarea
+              id="record-agenda"
+              value={agenda}
+              onChange={(e) => setAgenda(e.target.value)}
+              rows={2}
+              placeholder="What's this meeting about? e.g. decide Q3 pricing; focus on the launch date."
+              className="w-full resize-none rounded-2xl border border-border bg-background/60 px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              Steers the summary and insights toward what matters to you.
+            </p>
+          </div>
+        ) : null}
 
         {/* Store-audio toggle (Task #30) — in-person default ON; locked once recording starts. */}
         {!recording && !ending ? (

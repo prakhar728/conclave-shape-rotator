@@ -181,6 +181,14 @@ export const workspaces = {
       method: "POST",
       body: JSON.stringify(params),
     }),
+  // Task #12: stash the in-person agenda keyed by the meeting uid, before the
+  // mic stream starts. The finalize webhook reads it back and grounds enrichment.
+  // 204 No Content on success.
+  recordAgenda: (id: string, params: { uid: string; agenda: string }) =>
+    apiFetch<void>(`/api/workspaces/${id}/record/agenda`, {
+      method: "POST",
+      body: JSON.stringify(params),
+    }),
   // In-person recording → identified, transcribed meeting. multipart/form-data,
   // so it bypasses apiFetch (which forces a JSON Content-Type); the session
   // cookie still rides along via credentials: "same-origin".

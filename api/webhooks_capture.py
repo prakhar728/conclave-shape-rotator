@@ -194,6 +194,29 @@ async def on_meeting_completed(
         if status_label == "accepted" and meeting.get("store_audio") is not None:
             _set_store_audio_meta(session_id, bool(meeting.get("store_audio")))
 
+        # Task #12: in-person agenda → enrichment grounding. The record modal stashed
+        # the agenda keyed by the meeting uid (== native_id); apply it as raw_intent
+        # so the in-person summary is grounded just like online/upload. MUST run here,
+        # BEFORE enrich is enqueued below — once set, it flows through the existing
+        # compile_intent → <meeting_intent> chain (no raw-text splice). Manual-intent-
+        # wins: never overwrite an already-set raw_intent. Best-effort — a stash hiccup
+        # must not block finalize. Only on a fresh session ("accepted"), never a
+        # duplicate (already enriched, and pop_agenda would consume nothing useful).
+        if status_label == "accepted":
+            try:
+                from infra import inperson_agenda
+                agenda = inperson_agenda.pop_agenda(native_id)
+                if agenda:
+                    sess = transcripts_store.load_session(session_id)
+                    if sess is not None and not (
+                        sess.metadata.raw_intent and sess.metadata.raw_intent.strip()
+                    ):
+                        sess.metadata.raw_intent = agenda
+                        transcripts_store.set_metadata(session_id, sess.metadata)
+            except Exception:  # noqa: BLE001 — agenda is optional grounding
+                logger.exception("webhook: set in-person agenda intent failed for %s",
+                                 session_id)
+
     # 6b. Calendar enrichment (best-effort): if this Meet was auto-recorded
     # from a calendar event, link the transcript to the event and auto-share
     # it with the event's attendees. Never fatal — a failure here must not
