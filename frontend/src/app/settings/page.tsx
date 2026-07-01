@@ -13,6 +13,8 @@ import { useRouter } from "next/navigation";
 
 import { AppShell } from "@/components/app-shell";
 import { CalendarSettings } from "@/components/calendar-settings";
+import { DataExportControl } from "@/components/data-export-control";
+import { TncNotice } from "@/components/tnc-notice";
 import { PageError, PageLoading } from "@/components/page-state";
 import { Button } from "@/components/ui/button";
 import {
@@ -130,6 +132,10 @@ export default function SettingsPage() {
         </section>
 
         <CalendarSettings />
+
+        <DataExportControl />
+
+        <TncNotice />
       </main>
     </AppShell>
   );

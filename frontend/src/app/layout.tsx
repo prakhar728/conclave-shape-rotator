@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { WorkspaceProvider } from "@/components/workspace-provider";
+import { TncGate } from "@/components/tnc-gate";
 
 // Inter for body, Space Grotesk for headings, JetBrains Mono for machine ids.
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -36,7 +37,9 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <WorkspaceProvider>{children}</WorkspaceProvider>
+        <WorkspaceProvider>
+          <TncGate>{children}</TncGate>
+        </WorkspaceProvider>
       </body>
     </html>
   );

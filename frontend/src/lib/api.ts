@@ -92,6 +92,12 @@ export type User = {
   // Config-pinned admin allowlist (CONCLAVE_ADMIN_EMAILS). UI-only hint to reveal
   // admin surfaces; the server re-checks on every admin route.
   is_admin?: boolean;
+  // Task #18 — T&C acceptance state. `tnc_needs_acceptance` drives the blocking
+  // first-login gate (true until the CURRENT version is accepted).
+  tnc_accepted_at?: string | null;
+  tnc_version?: string | null;
+  tnc_current_version?: string;
+  tnc_needs_acceptance?: boolean;
 };
 
 export type Workspace = {
@@ -817,4 +823,48 @@ export const feedback = {
     const qs = q.toString();
     return apiFetch<FeedbackList>(`/api/feedback${qs ? `?${qs}` : ""}`);
   },
+};
+
+// --- Terms & Conditions + Data export (Task #18) ---------------------------
+// (Appended block — keep both if a parallel branch also appends here.)
+
+export type TncStatus = {
+  version: string;
+  text: string;
+  accepted_at: string | null;
+  accepted_version: string | null;
+  needs_acceptance: boolean;
+};
+
+export const tnc = {
+  get: () => apiFetch<TncStatus>("/api/users/me/tnc"),
+  accept: (version: string) =>
+    apiFetch<TncStatus>("/api/users/me/tnc/accept", {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+};
+
+export type ExportJob = {
+  export_id: string;
+  status: "pending" | "processing" | "done" | "failed";
+  include_audio: boolean;
+  error?: string | null;
+};
+
+// The export endpoints return a ZIP (not JSON), so downloads use a plain
+// same-origin navigation (the session cookie rides along) rather than apiFetch.
+export const dataExport = {
+  // Synchronous, no-audio dump — navigate the browser to trigger the download.
+  downloadUrl: () => "/api/users/me/export",
+  // Async (audio-on) build → poll → download.
+  startJob: (include_audio: boolean) =>
+    apiFetch<ExportJob>("/api/users/me/export/jobs", {
+      method: "POST",
+      body: JSON.stringify({ include_audio }),
+    }),
+  jobStatus: (exportId: string) =>
+    apiFetch<ExportJob>(`/api/users/me/export/jobs/${exportId}`),
+  jobDownloadUrl: (exportId: string) =>
+    `/api/users/me/export/jobs/${exportId}/download`,
 };

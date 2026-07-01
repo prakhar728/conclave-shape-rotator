@@ -75,7 +75,8 @@ def upsert_user_by_supabase(
 
 def get_user(user_id: str) -> Optional[dict]:
     row = _get_conn().execute(
-        "SELECT id, supabase_id, email, display_name, created_at, updated_at "
+        "SELECT id, supabase_id, email, display_name, created_at, updated_at, "
+        "tnc_accepted_at, tnc_version "
         "FROM users WHERE id = ?",
         (user_id,),
     ).fetchone()
@@ -101,6 +102,37 @@ def get_user_by_supabase(supabase_id: str) -> Optional[dict]:
 
 
 # --- Account settings (users.settings JSON, Alembic 0012) ------------------
+
+def get_tnc_status(user_id: str) -> dict:
+    """Return the user's recorded T&C acceptance (Task #18).
+
+    ``{"accepted_at": <iso|None>, "version": <str|None>}``. Both None when the
+    user has never accepted (a fresh row / pre-0025 backfill) — the gate reads
+    this to decide whether to block.
+    """
+    row = _get_conn().execute(
+        "SELECT tnc_accepted_at, tnc_version FROM users WHERE id = ?",
+        (user_id,),
+    ).fetchone()
+    if row is None:
+        return {"accepted_at": None, "version": None}
+    return {"accepted_at": row["tnc_accepted_at"], "version": row["tnc_version"]}
+
+
+def accept_tnc(user_id: str, version: str) -> dict:
+    """Record acceptance of terms ``version`` by ``user_id`` (Task #18).
+
+    Stamps ``tnc_accepted_at`` = now and ``tnc_version`` = the accepted version.
+    Idempotent-ish: re-accepting the same version just refreshes the timestamp.
+    Returns the new ``{"accepted_at", "version"}`` status.
+    """
+    now = _now()
+    _get_conn().execute(
+        "UPDATE users SET tnc_accepted_at = ?, tnc_version = ?, updated_at = ? WHERE id = ?",
+        (now, version, now, user_id),
+    )
+    return {"accepted_at": now, "version": version}
+
 
 def get_user_settings(user_id: str) -> dict:
     """Return the user's settings dict (empty `{}` if unset or row missing).

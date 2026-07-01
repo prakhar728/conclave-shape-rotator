@@ -162,6 +162,10 @@ app.include_router(shape_contrib_router)
 from api.feedback_routes import router as feedback_router
 app.include_router(feedback_router)
 
+# Task #18: "download my data" export (owned-only ZIP; audio opt-in via #16 queue).
+from api.export_routes import router as export_router
+app.include_router(export_router)
+
 # C11: stylized cohort-context dashboard. Static page served at /dashboard;
 # the page calls /transcripts/sessions for its data. Vendored shape-ui (MIT).
 from fastapi.staticfiles import StaticFiles

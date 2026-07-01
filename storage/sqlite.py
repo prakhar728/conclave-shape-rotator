@@ -784,6 +784,39 @@ def list_workspace_transcript_sessions(workspace_id: str) -> list[dict]:
     ]
 
 
+def list_owned_transcript_sessions(owner_user_id: str) -> list[dict]:
+    """List sessions OWNED by a user, newest-first (Task #18 data export).
+
+    The load-bearing scope filter for "download my data": a row is included iff
+    ``owner_user_id`` matches, so one user's export can never carry another
+    user's meetings. Legacy cohort rows (``owner_user_id IS NULL``) never match.
+    Same rich row shape as :func:`list_workspace_transcript_sessions`.
+    """
+    rows = _get_conn().execute(
+        "SELECT session_id, source, session_date, raw_diarization, metadata, "
+        "derived, created_at, updated_at, workspace_id, owner_user_id, visibility "
+        "FROM transcript_sessions WHERE owner_user_id = ? "
+        "ORDER BY session_date DESC, created_at DESC",
+        (owner_user_id,),
+    ).fetchall()
+    return [
+        {
+            "session_id": r["session_id"],
+            "source": r["source"],
+            "session_date": r["session_date"],
+            "raw_diarization": json.loads(r["raw_diarization"]),
+            "metadata": json.loads(r["metadata"]),
+            "derived": json.loads(r["derived"]),
+            "created_at": r["created_at"],
+            "updated_at": r["updated_at"],
+            "workspace_id": r["workspace_id"],
+            "owner_user_id": r["owner_user_id"],
+            "visibility": r["visibility"],
+        }
+        for r in rows
+    ]
+
+
 def delete_transcript_session(session_id: str) -> None:
     """Hard-delete a session row. Only the `--force` replace path uses this;
     the normal write path is `save_transcript_session` (raw-write-once)."""

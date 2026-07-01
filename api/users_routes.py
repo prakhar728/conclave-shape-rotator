@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from auth.session import require_current_user
-from infra import identity
+from infra import identity, tnc
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -55,3 +55,64 @@ def update_my_settings(
     settings["retention_days"] = body.retention_days
     identity.set_user_settings(user["id"], settings)
     return SettingsResponse(retention_days=body.retention_days)
+
+
+# ---------------------------------------------------------------------------
+# Terms & Conditions (Task #18) — the copy + a recorded-acceptance endpoint.
+# The blocking first-login gate reads `needs_acceptance`; Settings mirrors the
+# same `text`. Acceptance is stamped on `users` (tnc_accepted_at / tnc_version).
+# ---------------------------------------------------------------------------
+
+
+class TncResponse(BaseModel):
+    version: str
+    text: str
+    accepted_at: Optional[str] = None
+    accepted_version: Optional[str] = None
+    needs_acceptance: bool
+
+
+class AcceptTncBody(BaseModel):
+    version: str
+
+
+@router.get("/me/tnc", response_model=TncResponse)
+def get_my_tnc(user: dict = Depends(require_current_user)) -> TncResponse:
+    """Current terms copy + this user's acceptance state.
+
+    `needs_acceptance` is True until the user has accepted the CURRENT version
+    — a version bump re-fires it. The gate blocks the app on this flag.
+    """
+    status = identity.get_tnc_status(user["id"])
+    return TncResponse(
+        version=tnc.TNC_VERSION,
+        text=tnc.TNC_TEXT,
+        accepted_at=status["accepted_at"],
+        accepted_version=status["version"],
+        needs_acceptance=status["version"] != tnc.TNC_VERSION,
+    )
+
+
+@router.post("/me/tnc/accept", response_model=TncResponse)
+def accept_my_tnc(
+    body: AcceptTncBody,
+    user: dict = Depends(require_current_user),
+) -> TncResponse:
+    """Record that the current user accepted the terms.
+
+    Rejects a version that isn't the current one (422) so a stale client can't
+    satisfy the gate against outdated terms — it must re-fetch and re-accept.
+    """
+    if body.version != tnc.TNC_VERSION:
+        raise HTTPException(
+            status_code=422,
+            detail=f"unknown terms version {body.version!r}; current is {tnc.TNC_VERSION!r}",
+        )
+    status = identity.accept_tnc(user["id"], tnc.TNC_VERSION)
+    return TncResponse(
+        version=tnc.TNC_VERSION,
+        text=tnc.TNC_TEXT,
+        accepted_at=status["accepted_at"],
+        accepted_version=status["version"],
+        needs_acceptance=False,
+    )

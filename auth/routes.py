@@ -53,6 +53,9 @@ def _require_supabase() -> None:
 
 def _user_to_public(u: dict) -> dict:
     """Strip Supabase-internal id from the wire shape — clients only need our id + email."""
+    from infra import tnc as _tnc
+
+    accepted_version = u.get("tnc_version")
     return {
         "id": u["id"],
         "email": u["email"],
@@ -62,6 +65,15 @@ def _user_to_public(u: dict) -> dict:
         # reveal admin surfaces (e.g. the feedback inbox). The server re-checks on
         # every admin route; this flag is UI-only, not an authorization boundary.
         "is_admin": settings.is_admin(u["email"]),
+        # Task #18: T&C acceptance state drives the blocking first-login gate.
+        # `tnc_needs_acceptance` is True until the user accepts the CURRENT
+        # version (a version bump re-fires the gate). UI-only: no route is
+        # actually blocked server-side, but the client won't render the app
+        # until this clears.
+        "tnc_accepted_at": u.get("tnc_accepted_at"),
+        "tnc_version": accepted_version,
+        "tnc_current_version": _tnc.TNC_VERSION,
+        "tnc_needs_acceptance": accepted_version != _tnc.TNC_VERSION,
     }
 
 

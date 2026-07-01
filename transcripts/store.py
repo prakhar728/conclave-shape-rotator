@@ -295,6 +295,16 @@ def list_workspace_sessions(workspace_id: str) -> list[Session]:
     return [_row_to_session(r) for r in _sqlite.list_workspace_transcript_sessions(workspace_id)]
 
 
+def list_owned_sessions(owner_user_id: str) -> list[Session]:
+    """All sessions OWNED by a user, newest-first (Task #18 data export).
+
+    Owner-scoped by construction (see
+    ``sqlite.list_owned_transcript_sessions``) — the single filter that keeps
+    one user's export free of any other user's meetings."""
+    from storage import sqlite as _sqlite
+    return [_row_to_session(r) for r in _sqlite.list_owned_transcript_sessions(owner_user_id)]
+
+
 def save_session_with_workspace(
     session: Session,
     workspace_id: str,

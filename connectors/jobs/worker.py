@@ -64,6 +64,23 @@ def process_message(fields: dict, *, client, stream: str = None, group: str = No
             return "failed"
         queue.set_status(job_id, "processing", client=client)
 
+    # Task #18 — data-export jobs are keyed by export_id, not session_id, so
+    # they bypass the session-scoped handler map. run_export_job is best-effort
+    # (records failed status internally, never raises) so the job always
+    # completes + acks rather than looping in the pending list.
+    if job_type == "data_export":
+        from infra import data_export
+        export_id = payload.get("export_id")
+        if export_id:
+            data_export.run_export_job(export_id)
+        else:
+            logger.warning("conclave worker: data_export job %s missing export_id", job_id)
+        if job_id:
+            queue.set_status(job_id, "done", client=client)
+        if msg_id is not None:
+            queue.ack(stream, group, msg_id, client=client)
+        return "done"
+
     handler = _handler_for(job_type)
     if handler is None or not session_id:
         logger.warning("conclave worker: unknown job type %r / no session — skipping %s",

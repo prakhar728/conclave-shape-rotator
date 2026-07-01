@@ -76,3 +76,38 @@ def enrich(session_id: str, *, client=None) -> str | None:
 
 def regen(session_id: str, *, client=None) -> str | None:
     return submit_or_run("regen", session_id, client=client)
+
+
+# Task #18 — data-export builds are keyed by export_id (not session_id), so they
+# don't fit submit_or_run's session-scoped shape; a dedicated producer carries
+# the export_id payload. Audio-on "download my data" rides this onto the queue.
+def _run_export_in_background(export_id: str) -> None:
+    from infra import data_export
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None:
+        loop.create_task(asyncio.to_thread(data_export.run_export_job, export_id))
+    else:
+        import threading
+        threading.Thread(target=data_export.run_export_job, args=(export_id,), daemon=True).start()
+
+
+def data_export(export_id: str, *, client=None) -> str | None:
+    """Enqueue a data-export build (Task #18). Returns the job_id when queued.
+
+    Same on/off decision as :func:`submit_or_run`: durable ``conclave_jobs`` job
+    when the queue is on + reachable, else an in-process background run (so the
+    export still completes on default single-node deployments)."""
+    if settings.jobs_queue:
+        client = client or queue.get_client()
+        if client is not None:
+            job_id = queue.submit(
+                queue.CONCLAVE_STREAM, "data_export", {"export_id": export_id}, client=client
+            )
+            logger.info("enqueue: data_export for %s (job %s)", export_id, job_id)
+            return job_id
+        logger.warning("enqueue: jobs_queue on but REDIS_URL unset — running data_export in-process")
+    _run_export_in_background(export_id)
+    return None
