@@ -426,14 +426,27 @@ export const bots = {
     apiFetch<{ active: ActiveInvitation[] }>("/api/meetings/active"),
 };
 
+// Legacy 2-value enum — kept only for back-compat where old payloads surface it.
 // 'summary_and_transcript' lets the recipient open the raw transcript;
 // 'summary_only' withholds it (they still get the summary + signals).
 export type ShareScope = "summary_and_transcript" | "summary_only";
 
+// Task #31 — a share grants any subset of the three artifacts.
+export type ShareConfig = {
+  transcript: boolean;
+  insights: boolean;
+  audio: boolean;
+};
+
 export type MeetingShare = {
   email: string;
   granted_at: string;
-  scope: ShareScope;
+  // Per-artifact flags (Task #31).
+  transcript: boolean;
+  insights: boolean;
+  audio: boolean;
+  // Derived legacy field, still returned by the API for back-compat.
+  scope?: ShareScope;
 };
 
 export const meetingOwner = {
@@ -449,14 +462,18 @@ export const meetingOwner = {
     apiFetch<{ shares: MeetingShare[] }>(
       `/api/meetings/${sessionId}/shares`,
     ),
-  addShare: (sessionId: string, email: string, scope: ShareScope) =>
-    apiFetch<{ ok: boolean; email: string; scope: ShareScope }>(
-      `/api/meetings/${sessionId}/shares`,
-      {
-        method: "POST",
-        body: JSON.stringify({ email, scope }),
-      },
-    ),
+  addShare: (sessionId: string, email: string, config: ShareConfig) =>
+    apiFetch<{
+      ok: boolean;
+      email: string;
+      transcript: boolean;
+      insights: boolean;
+      audio: boolean;
+      scope: ShareScope;
+    }>(`/api/meetings/${sessionId}/shares`, {
+      method: "POST",
+      body: JSON.stringify({ email, ...config }),
+    }),
   setRetention: (
     sessionId: string,
     body: { mode: "inherit" | "keep_forever" | "days"; days?: number },

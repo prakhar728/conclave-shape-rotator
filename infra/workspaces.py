@@ -12,6 +12,7 @@ v1 semantics (per BUILD_DOC §9 + §11):
 from __future__ import annotations
 
 import secrets
+from dataclasses import dataclass
 from typing import Optional
 
 from storage.sqlite import _get_conn, _now
@@ -122,40 +123,98 @@ def get_member_role(workspace_id: str, user_id: str) -> Optional[str]:
     return row["role"] if row else None
 
 
-# --- Meeting shares (Phase 1.7 / 2.x consumer) ---
+# --- Meeting shares (Phase 1.7 / 2.x consumer; Task #31 per-artifact flags) ---
 
 
-#: Permission levels a share can grant. 'summary_and_transcript' is the default
-#: (and what every pre-0011 row back-fills to); 'summary_only' withholds the raw
-#: transcript at the gated /transcripts/sessions/{id}/transcript endpoint.
+#: Legacy 2-value permission enum. Retained ONLY for back-compat mapping — the
+#: API still accepts these strings for one release (map → flags). Storage moved
+#: to three independent booleans in Alembic 0024.
 SHARE_SCOPES = ("summary_and_transcript", "summary_only")
-_DEFAULT_SHARE_SCOPE = "summary_and_transcript"
+
+
+@dataclass(frozen=True)
+class ShareConfig:
+    """Which meeting artifacts a share grants the recipient (Task #31).
+
+    Three independent axes — a meeting can be shared as any subset:
+      - ``transcript`` → the raw diarized transcript
+      - ``insights``   → summary / signals / entities (the derived view)
+      - ``audio``      → the stored recording (Task #30 endpoint)
+    """
+
+    transcript: bool
+    insights: bool
+    audio: bool
+
+    @classmethod
+    def default(cls) -> "ShareConfig":
+        """Pre-#31 default: summary + transcript, no audio (== the old
+        'summary_and_transcript' scope). Preserves 'shared = full access'."""
+        return cls(transcript=True, insights=True, audio=False)
+
+    @classmethod
+    def from_legacy_scope(cls, scope: str) -> "ShareConfig":
+        """Map an old 2-value scope enum onto the three flags.
+
+        summary_and_transcript → (t=1, i=1, a=0); summary_only → (t=0, i=1, a=0).
+        """
+        if scope == "summary_and_transcript":
+            return cls(transcript=True, insights=True, audio=False)
+        if scope == "summary_only":
+            return cls(transcript=False, insights=True, audio=False)
+        raise ValueError(f"scope must be one of {SHARE_SCOPES}, got {scope!r}")
+
+    def to_legacy_scope(self) -> str:
+        """Best-effort projection back to the old enum for legacy clients/UI.
+
+        Transcript access ⇒ 'summary_and_transcript', otherwise 'summary_only'.
+        Lossy (can't express insights-off or audio in the old vocabulary) — the
+        new flags are authoritative; this is a display convenience only.
+        """
+        return "summary_and_transcript" if self.transcript else "summary_only"
 
 
 def add_meeting_share(
     session_id: str,
     user_email: str,
     granted_by: str,
-    scope: str = _DEFAULT_SHARE_SCOPE,
+    config: Optional[ShareConfig] = None,
+    *,
+    scope: Optional[str] = None,
 ) -> None:
-    """Grant `user_email` access to a 'shared' meeting at permission `scope`.
+    """Grant `user_email` access to a 'shared' meeting at the given artifact flags.
 
-    Idempotent (PK absorbs dups); re-sharing the same email updates the scope,
-    so an owner can downgrade summary+transcript → summary-only (or back) by
-    re-adding the same recipient.
+    Pass a :class:`ShareConfig` (preferred) or a legacy ``scope`` string (mapped
+    via :meth:`ShareConfig.from_legacy_scope`). With neither, defaults to
+    summary + transcript (the pre-#31 grant).
+
+    Idempotent (PK absorbs dups); re-sharing the same email updates the flags,
+    so an owner can add/remove any artifact by re-adding the same recipient.
     """
-    if scope not in SHARE_SCOPES:
-        raise ValueError(f"scope must be one of {SHARE_SCOPES}, got {scope!r}")
+    if config is None:
+        config = ShareConfig.from_legacy_scope(scope) if scope is not None else ShareConfig.default()
     conn = _get_conn()
     now = _now()
-    # Upsert: ignore if already shared, refresh granted_at + scope otherwise.
+    # Upsert: ignore if already shared, refresh granted_at + flags otherwise.
     conn.execute(
-        "INSERT INTO meeting_shares (session_id, user_email, granted_by, granted_at, scope) "
-        "VALUES (?, ?, ?, ?, ?) "
+        "INSERT INTO meeting_shares "
+        "(session_id, user_email, granted_by, granted_at, "
+        " share_transcript, share_insights, share_audio) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT (session_id, user_email) DO UPDATE SET "
         "granted_by = excluded.granted_by, granted_at = excluded.granted_at, "
-        "scope = excluded.scope",
-        (session_id, user_email, granted_by, now, scope),
+        "share_transcript = excluded.share_transcript, "
+        "share_insights = excluded.share_insights, "
+        "share_audio = excluded.share_audio",
+        (
+            session_id,
+            user_email,
+            granted_by,
+            now,
+            int(config.transcript),
+            int(config.insights),
+            int(config.audio),
+        ),
     )
 
 
@@ -167,24 +226,43 @@ def has_meeting_share(session_id: str, user_email: str) -> bool:
     return row is not None
 
 
-def get_meeting_share_scope(session_id: str, user_email: str) -> Optional[str]:
-    """Return the share scope granted to `user_email`, or None if not shared.
+def get_meeting_share_scope(session_id: str, user_email: str) -> Optional[ShareConfig]:
+    """Return the :class:`ShareConfig` granted to `user_email`, or None if not shared.
 
-    Used by the transcript gate to decide whether a 'shared' recipient is
-    allowed the raw transcript ('summary_and_transcript') or only the derived
-    summary ('summary_only').
+    Used by the per-artifact gates to decide which of {transcript, insights,
+    audio} a 'shared' recipient may load.
     """
     row = _get_conn().execute(
-        "SELECT scope FROM meeting_shares WHERE session_id = ? AND user_email = ?",
+        "SELECT share_transcript, share_insights, share_audio "
+        "FROM meeting_shares WHERE session_id = ? AND user_email = ?",
         (session_id, user_email),
     ).fetchone()
-    return row["scope"] if row else None
+    if row is None:
+        return None
+    return ShareConfig(
+        transcript=bool(row["share_transcript"]),
+        insights=bool(row["share_insights"]),
+        audio=bool(row["share_audio"]),
+    )
 
 
 def list_meeting_shares(session_id: str) -> list[dict]:
+    """Rows for a meeting's shares, each carrying the three artifact flags
+    plus a derived legacy ``scope`` string for back-compat display."""
     rows = _get_conn().execute(
-        "SELECT session_id, user_email, granted_by, granted_at, user_id, scope "
+        "SELECT session_id, user_email, granted_by, granted_at, user_id, "
+        "share_transcript, share_insights, share_audio "
         "FROM meeting_shares WHERE session_id = ? ORDER BY granted_at ASC",
         (session_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["share_transcript"] = bool(d["share_transcript"])
+        d["share_insights"] = bool(d["share_insights"])
+        d["share_audio"] = bool(d["share_audio"])
+        d["scope"] = (
+            "summary_and_transcript" if d["share_transcript"] else "summary_only"
+        )
+        out.append(d)
+    return out

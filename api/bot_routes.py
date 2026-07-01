@@ -436,11 +436,21 @@ def set_visibility(
 
 
 class AddShareBody(BaseModel):
+    """Grant a recipient any subset of {transcript, insights, audio} (Task #31).
+
+    Preferred: pass the three booleans. Back-compat: the old `scope` enum is
+    still accepted for one release and mapped → flags when the flags are absent.
+    """
+
     email: EmailStr
-    # 'summary_and_transcript' (default) lets the recipient open the raw
-    # transcript; 'summary_only' withholds it. Validated against the
-    # canonical list in infra.workspaces (CHECK constraint backs it in SQL).
-    scope: str = "summary_and_transcript"
+    # New per-artifact flags. `None` = "not specified" so we can distinguish an
+    # explicit flags payload from a legacy scope-only payload.
+    transcript: Optional[bool] = None
+    insights: Optional[bool] = None
+    audio: Optional[bool] = None
+    # Legacy 2-value enum ('summary_and_transcript' | 'summary_only'). Accepted
+    # for back-compat; ignored if any flag above is set.
+    scope: Optional[str] = None
 
 
 def _user_owns_meeting(session_id: str, user_id: str) -> bool:
@@ -472,6 +482,11 @@ def list_shares(
             {
                 "email": s["user_email"],
                 "granted_at": s["granted_at"],
+                # Per-artifact flags (Task #31) + a derived legacy `scope` for
+                # any client still reading the old field.
+                "transcript": s["share_transcript"],
+                "insights": s["share_insights"],
+                "audio": s["share_audio"],
                 "scope": s.get("scope") or "summary_and_transcript",
             }
             for s in shares
@@ -496,14 +511,39 @@ def add_share(
     if not _user_owns_meeting(session_id, user["id"]):
         raise HTTPException(status_code=404, detail="Meeting not found")
 
-    from infra.workspaces import SHARE_SCOPES, add_meeting_share
-    if body.scope not in SHARE_SCOPES:
-        raise HTTPException(
-            status_code=422,
-            detail=f"scope must be one of {list(SHARE_SCOPES)}",
+    from infra.workspaces import SHARE_SCOPES, ShareConfig, add_meeting_share
+
+    # Prefer the new per-artifact flags; fall back to the legacy scope enum.
+    flags_given = any(
+        v is not None for v in (body.transcript, body.insights, body.audio)
+    )
+    if flags_given:
+        config = ShareConfig(
+            transcript=bool(body.transcript),
+            insights=bool(body.insights),
+            audio=bool(body.audio),
         )
-    add_meeting_share(session_id, str(body.email), user["id"], scope=body.scope)
-    return {"ok": True, "email": str(body.email), "scope": body.scope}
+    elif body.scope is not None:
+        if body.scope not in SHARE_SCOPES:
+            raise HTTPException(
+                status_code=422,
+                detail=f"scope must be one of {list(SHARE_SCOPES)}",
+            )
+        config = ShareConfig.from_legacy_scope(body.scope)
+    else:
+        # Neither flags nor scope → pre-#31 default (summary + transcript).
+        config = ShareConfig.default()
+
+    add_meeting_share(session_id, str(body.email), user["id"], config)
+    return {
+        "ok": True,
+        "email": str(body.email),
+        "transcript": config.transcript,
+        "insights": config.insights,
+        "audio": config.audio,
+        # Legacy field for old clients still reading `scope`.
+        "scope": config.to_legacy_scope(),
+    }
 
 
 class RetentionBody(BaseModel):

@@ -1,9 +1,11 @@
 /**
  * Owner-only controls on the meeting detail page.
  *
- * Two affordances (Phase 2.12, 2.13):
+ * Two affordances (Phase 2.12, 2.13; Task #31):
  *  - Visibility toggle: owner-only ⇄ shared
- *  - Attendee list + add-by-email form
+ *  - Attendee list + add-by-email form with three independent artifact
+ *    checkboxes {transcript, insights, audio} — a recipient can be granted any
+ *    subset. Each row shows which artifacts that recipient can see.
  *
  * Mounting condition is the caller's job: only render when MeetingView.is_owner
  * is true. We don't double-gate here.
@@ -18,15 +20,26 @@ import {
   ApiError,
   meetingOwner,
   type MeetingShare,
-  type ShareScope,
+  type ShareConfig,
 } from "@/lib/api";
 
 type Visibility = "owner-only" | "shared";
 
-const SCOPE_LABELS: Record<ShareScope, string> = {
-  summary_and_transcript: "Summary + transcript",
-  summary_only: "Summary only",
+const ARTIFACTS: { key: keyof ShareConfig; label: string }[] = [
+  { key: "insights", label: "Insights" },
+  { key: "transcript", label: "Transcript" },
+  { key: "audio", label: "Audio" },
+];
+
+const DEFAULT_CONFIG: ShareConfig = {
+  transcript: true,
+  insights: true,
+  audio: false,
 };
+
+function sharedArtifacts(s: MeetingShare): string[] {
+  return ARTIFACTS.filter((a) => s[a.key]).map((a) => a.label);
+}
 
 export function OwnerControls({
   sessionId,
@@ -38,7 +51,7 @@ export function OwnerControls({
   const [visibility, setVisibility] = useState<Visibility>(initialVisibility);
   const [shares, setShares] = useState<MeetingShare[] | null>(null);
   const [email, setEmail] = useState("");
-  const [scope, setScope] = useState<ShareScope>("summary_and_transcript");
+  const [config, setConfig] = useState<ShareConfig>(DEFAULT_CONFIG);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,16 +87,23 @@ export function OwnerControls({
   async function handleAddShare(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
+    if (!config.transcript && !config.insights && !config.audio) {
+      setError("Pick at least one thing to share.");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const r = await meetingOwner.addShare(sessionId, email.trim(), scope);
+      const r = await meetingOwner.addShare(sessionId, email.trim(), config);
       const added: MeetingShare = {
         email: r.email,
         granted_at: new Date().toISOString(),
+        transcript: r.transcript,
+        insights: r.insights,
+        audio: r.audio,
         scope: r.scope,
       };
-      // Re-sharing the same email updates its scope rather than duplicating.
+      // Re-sharing the same email updates its flags rather than duplicating.
       setShares((prev) => {
         const rest = (prev ?? []).filter((s) => s.email !== added.email);
         return [...rest, added];
@@ -123,30 +143,42 @@ export function OwnerControls({
 
       {visibility === "shared" ? (
         <>
-          <form onSubmit={handleAddShare} className="mt-4 flex flex-wrap gap-2">
-            <Input
-              type="email"
-              placeholder="attendee@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={busy}
-              className="min-w-[12rem] flex-1"
-            />
-            <select
-              value={scope}
-              onChange={(e) => setScope(e.target.value as ShareScope)}
-              disabled={busy}
-              aria-label="Share permission level"
-              className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+          <form onSubmit={handleAddShare} className="mt-4 flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                type="email"
+                placeholder="attendee@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={busy}
+                className="min-w-[12rem] flex-1"
+              />
+              <Button type="submit" disabled={busy || !email.trim()}>
+                Add
+              </Button>
+            </div>
+            <fieldset
+              className="flex flex-wrap gap-4"
+              aria-label="What to share"
             >
-              <option value="summary_and_transcript">
-                {SCOPE_LABELS.summary_and_transcript}
-              </option>
-              <option value="summary_only">{SCOPE_LABELS.summary_only}</option>
-            </select>
-            <Button type="submit" disabled={busy || !email.trim()}>
-              Add
-            </Button>
+              {ARTIFACTS.map((a) => (
+                <label
+                  key={a.key}
+                  className="flex items-center gap-1.5 text-xs text-foreground"
+                >
+                  <input
+                    type="checkbox"
+                    checked={config[a.key]}
+                    onChange={(e) =>
+                      setConfig((c) => ({ ...c, [a.key]: e.target.checked }))
+                    }
+                    disabled={busy}
+                    className="h-3.5 w-3.5 accent-foreground"
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </fieldset>
           </form>
 
           {shares && shares.length > 0 ? (
@@ -158,9 +190,14 @@ export function OwnerControls({
                 >
                   <span className="text-foreground">{s.email}</span>
                   <span className="flex items-center gap-2 text-muted-foreground">
-                    <span className="rounded bg-muted px-1.5 py-0.5">
-                      {SCOPE_LABELS[s.scope] ?? s.scope}
-                    </span>
+                    {sharedArtifacts(s).map((label) => (
+                      <span
+                        key={label}
+                        className="rounded bg-muted px-1.5 py-0.5"
+                      >
+                        {label}
+                      </span>
+                    ))}
                     {s.granted_at.split("T")[0]}
                   </span>
                 </li>

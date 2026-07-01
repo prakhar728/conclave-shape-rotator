@@ -148,23 +148,27 @@ def can_user_see(user: Optional[dict], row: dict) -> bool:
     return False
 
 
-def can_see_transcript(user: Optional[dict], row: dict) -> bool:
-    """Gate the RAW transcript — stricter than `can_user_see`.
+#: The three independently-shareable artifacts (Task #31). Each maps to the
+#: matching boolean on a `meeting_shares` row (via ShareConfig).
+_ARTIFACTS = ("transcript", "insights", "audio")
 
-    Until the Transcript Saving feature, `raw_diarization` was NEVER served at
-    the API boundary (the old blanket privacy guard). This opens it, but only
-    to people the owner explicitly trusted with it:
 
-      - owner of the meeting                              → yes
-      - 'workspace' visibility + workspace member         → yes (full members)
-      - 'shared' recipient with 'summary_and_transcript'  → yes
-      - 'shared' recipient with 'summary_only'            → NO (summary only)
-      - everyone else / anonymous / 'owner-only' non-owner→ no
+def can_see_artifact(user: Optional[dict], row: dict, artifact: str) -> bool:
+    """Per-artifact gate — stricter than `can_user_see` (Task #31).
 
-    A caller who passes `can_see_transcript` may also see the derived view; the
-    reverse is NOT true — `summary_only` recipients pass `can_user_see` (so they
-    get the summary) but fail here (so the raw transcript stays withheld).
+    `artifact` ∈ {"transcript", "insights", "audio"}. Grants:
+
+      - owner of the meeting                          → yes (all artifacts)
+      - 'workspace' visibility + workspace member      → yes (full members)
+      - 'shared' recipient                             → iff that artifact's flag
+                                                          is set on their share
+      - everyone else / anonymous / 'owner-only'       → no
+
+    'insights' (summary/signals/entities) is now a real gate: pre-#31 every
+    share saw insights, so a `summary_only`-era row back-fills to insights=on.
     """
+    if artifact not in _ARTIFACTS:
+        raise ValueError(f"artifact must be one of {_ARTIFACTS}, got {artifact!r}")
     if user is None:
         return False
 
@@ -181,11 +185,37 @@ def can_see_transcript(user: Optional[dict], row: dict) -> bool:
 
     if visibility == "shared":
         from infra.workspaces import get_meeting_share_scope
-        scope = get_meeting_share_scope(row["session_id"], user["email"])
-        return scope == "summary_and_transcript"
+        config = get_meeting_share_scope(row["session_id"], user["email"])
+        if config is None:
+            return False
+        return bool(getattr(config, artifact))
 
-    # 'owner-only' (non-owner), 'public-link', or unknown → withhold raw.
+    # 'owner-only' (non-owner), 'public-link', or unknown → withhold.
     return False
+
+
+def can_see_transcript(user: Optional[dict], row: dict) -> bool:
+    """Gate the RAW transcript — see :func:`can_see_artifact`.
+
+    Kept as a named wrapper: a caller who passes this may also see the derived
+    view via `can_user_see`, but the reverse is NOT true — a share that withholds
+    the transcript still passes `can_user_see` (session-level) yet fails here.
+    """
+    return can_see_artifact(user, row, "transcript")
+
+
+def can_see_insights(user: Optional[dict], row: dict) -> bool:
+    """Gate the derived INSIGHTS (summary/signals/entities) — Task #31.
+
+    NEW gate: before #31 these were served ungated to every share. Now a share
+    can withhold them (insights=off) while still granting transcript and/or audio.
+    """
+    return can_see_artifact(user, row, "insights")
+
+
+def can_see_audio(user: Optional[dict], row: dict) -> bool:
+    """Gate the stored AUDIO recording (Task #30 endpoint) — Task #31."""
+    return can_see_artifact(user, row, "audio")
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +322,37 @@ def to_view(session: Session) -> dict:
         "enrichment_status": session.metadata.enrichment_status,
     })
     return card
+
+
+#: Fields of a `to_view()` payload that constitute the derived "insights"
+#: (summary/signals/entities) gated by `can_see_insights` (Task #31).
+_INSIGHT_VIEW_FIELDS = (
+    "summary",
+    "signals",
+    "signals_by_kind",
+    "entities",
+    "graph_nodes",
+    "signal_count",
+    "entity_count",
+)
+
+
+def _redact_insights(view: dict) -> dict:
+    """Strip the derived insights from a view when the viewer lacks the
+    insights grant (Task #31). Mutates + returns `view`.
+
+    Empties summary/signals/entities (+ their counts) so an insights=off share
+    sees the meeting shell (date/participants/transcript+audio availability)
+    without the summary or extracted signals/entities.
+    """
+    view["summary"] = None
+    view["signals"] = []
+    view["signals_by_kind"] = {plural: [] for plural, _ in _SIGNAL_KIND_GROUPS}
+    view["entities"] = []
+    view["graph_nodes"] = None
+    view["signal_count"] = 0
+    view["entity_count"] = 0
+    return view
 
 
 def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
@@ -470,8 +531,10 @@ def get_session(
             raise HTTPException(status_code=403, detail="not allowed")
         view = to_view(session)
         # Demo sessions are readable in full by any authed user (see
-        # get_session_transcript), so their transcript panel renders too.
+        # get_session_transcript), so every panel renders.
         view["can_view_transcript"] = True
+        view["can_view_insights"] = True
+        view["can_view_audio"] = True
         return view
     # Only consult the workspace columns when there's an authed user — keeps
     # anonymous cohort traffic on the legacy path and means test DBs without
@@ -496,6 +559,12 @@ def get_session(
         _apply_consent_backstop(session, row["workspace_id"])
         regenerating = _maybe_heal_on_open(session)
         view = to_view(session)
+        # Task #31 — insights (summary/signals/entities) are now independently
+        # withholdable. A share with insights=off sees the meeting shell but not
+        # the derived view. Owner + full members always pass.
+        insights_ok = can_see_insights(user, row)
+        if not insights_ok:
+            view = _redact_insights(view)
         view["insights_regenerating"] = regenerating
         # Decorate with workspace-side metadata the frontend needs to render
         # owner controls (visibility toggle, add-attendee form) and the
@@ -505,9 +574,11 @@ def get_session(
         # The meeting's workspace — the UI needs it to POST speaker tags
         # (/api/workspaces/{workspace_id}/meetings/{id}/tag-speaker).
         view["workspace_id"] = row.get("workspace_id")
-        # Lets the transcript panel pick its state (show transcript vs.
-        # "not shared with you") without a round-trip that 403s.
+        # Lets the frontend pick each panel's state (show vs. "not shared with
+        # you") without a round-trip that 403s.
         view["can_view_transcript"] = can_see_transcript(user, row)
+        view["can_view_insights"] = insights_ok
+        view["can_view_audio"] = can_see_audio(user, row)
         # Retention state — drives the auto-deleted note + (owner-only) the
         # per-meeting override control. retention_override: None=inherit |
         # 'keep_forever' | '<int>' days.
@@ -530,8 +601,9 @@ def get_session_transcript(session_id: str, request: Request) -> dict:
 
       - authenticated-only (no anonymous / legacy `?viewer=` path), and
       - gated by `can_see_transcript`, which grants the owner, full workspace
-        members, and 'summary_and_transcript' recipients — and denies
-        'summary_only' recipients and everyone else.
+        members, and recipients whose share has the transcript flag on (Task
+        #31) — and denies everyone else (a share with transcript=off still sees
+        the summary via `get_session` but 403s here).
 
     Legacy cohort sessions (no `workspace_id`) keep the old invariant: the raw
     transcript is never served, so they 403 here regardless of viewer.
@@ -623,10 +695,10 @@ def get_session_audio(
 ):
     """Decrypt + serve a meeting's stored audio (full, or a segment clip).
 
-    Same gate as the raw transcript (`can_see_transcript`: owner + full workspace
-    members + 'summary_and_transcript' recipients) — audio is at least as sensitive.
-    Legacy cohort sessions never exposed audio, so they 403. Decryption happens in
-    memory (`_assemble_audio`); plaintext is never re-written to disk.
+    Task #31: gated by the dedicated `can_see_audio` flag (owner + full workspace
+    members + recipients whose share has audio=on) — independent of the transcript
+    grant. Legacy cohort sessions never exposed audio, so they 403. Decryption
+    happens in memory (`_assemble_audio`); plaintext is never re-written to disk.
 
     Note: for capture meetings `session_id == native_meeting_id` (the audio-dir key),
     so the directory resolves directly — see webhooks_capture finalize.
@@ -647,7 +719,7 @@ def get_session_audio(
     if not ws_row or not ws_row.get("workspace_id"):
         raise HTTPException(status_code=403, detail="not allowed")
     row = {"session_id": session_id, **ws_row}
-    if not can_see_transcript(user, row):
+    if not can_see_audio(user, row):
         raise HTTPException(status_code=403, detail="not allowed")
 
     from connectors.capture.identify import _assemble_audio
