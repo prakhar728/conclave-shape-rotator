@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { FileText, ShieldCheck } from "lucide-react";
+import { Bot, FileText, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
@@ -155,9 +155,11 @@ export default function DashboardPage() {
               ) : null}
               <Link
                 href="/invite"
-                className="inline-flex h-9 items-center justify-center rounded-none border border-foreground bg-primary px-5 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition-all hover:bg-muted-foreground active:scale-98"
+                aria-label="Invite bot"
+                title="Invite bot"
+                className="inline-flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all hover:bg-muted-foreground active:scale-95"
               >
-                Invite bot
+                <Bot className="size-5" aria-hidden />
               </Link>
             </div>
           </div>
@@ -197,7 +199,7 @@ export default function DashboardPage() {
           ) : null}
 
           {meetings !== null && meetings.length === 0 ? (
-            <EmptyState workspaceId={workspaceId} />
+            <EmptyState />
           ) : (
             /* Widget grid: meetings list (2 cols) + right rail. */
             <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
@@ -392,7 +394,7 @@ function DemoTag() {
   );
 }
 
-function EmptyState({ workspaceId }: { workspaceId: string | null }) {
+function EmptyState() {
   return (
     <div className="flex flex-col gap-6">
       <div className="rounded-none border border-border bg-card p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
@@ -405,19 +407,6 @@ function EmptyState({ workspaceId }: { workspaceId: string | null }) {
           inside a TEE — operator-blind from end to end.
         </p>
         <div className="mt-6 flex flex-wrap items-center gap-4">
-          <Link
-            href="/invite"
-            className="inline-flex h-10 items-center justify-center rounded-none bg-primary px-6 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition hover:bg-muted-foreground"
-          >
-            Invite bot
-          </Link>
-          {workspaceId ? (
-            <>
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">or</span>
-              <RecordMeetingButton workspaceId={workspaceId} />
-              <UploadTranscriptButton workspaceId={workspaceId} />
-            </>
-          ) : null}
           <Link
             href={`/meeting/${EXAMPLE_SESSION_ID}`}
             className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground border-b border-transparent hover:border-foreground pb-0.5"

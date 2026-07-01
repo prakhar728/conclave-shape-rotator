@@ -53,7 +53,7 @@ describe("RecordMeetingButton", () => {
         <RecordMeetingButton workspaceId="ws1" />
       </RecordingProvider>,
     );
-    fireEvent.click(screen.getByText("Record meeting")); // open the dialog
+    fireEvent.click(screen.getByRole("button", { name: "Record meeting" })); // open the dialog (icon button, labelled)
     fireEvent.click(screen.getByText("Start recording"));
     await waitFor(() => expect(push).toHaveBeenCalledTimes(1));
     // The id is created before navigation and keys the route.

@@ -34,7 +34,6 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
-import { AttestedBadge } from "@/components/attested-badge";
 import { cn } from "@/lib/utils";
 import { fmt, useRecording } from "@/components/recording-provider";
 import { SearchBox } from "@/components/search-box";
@@ -191,7 +190,6 @@ export function AppShell({
           </Link>
           <div className="flex items-center gap-3">
             <RecordingIndicator compact />
-            <AttestedBadge />
             <button
               onClick={handleLogout}
               className="text-xs font-bold tracking-wider uppercase text-muted-foreground"

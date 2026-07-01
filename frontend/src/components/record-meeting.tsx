@@ -39,13 +39,14 @@ export function RecordMeetingButton({
     <>
       <button
         onClick={() => setOpen(true)}
+        aria-label="Record meeting"
+        title="Record meeting"
         className={cn(
-          "inline-flex h-10 items-center gap-2 rounded-full bg-primary px-5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95",
+          "inline-flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all hover:bg-muted-foreground active:scale-95",
           className,
         )}
       >
-        <Mic className="size-4" aria-hidden />
-        Record meeting
+        <Mic className="size-5" aria-hidden />
       </button>
       {open ? (
         <RecordDialog workspaceId={workspaceId} onClose={() => setOpen(false)} />

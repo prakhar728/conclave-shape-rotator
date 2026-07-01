@@ -10,7 +10,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
 
 function openAndSubmit() {
   render(<UploadTranscriptButton workspaceId="ws1" />);
-  fireEvent.click(screen.getByText("Upload transcript")); // open the modal
+  fireEvent.click(screen.getByRole("button", { name: "Upload transcript" })); // open the modal (icon button, labelled)
   fireEvent.change(screen.getByPlaceholderText(/Ada Lovelace/), {
     target: { value: "Speaker  0:01\nhi" },
   });
