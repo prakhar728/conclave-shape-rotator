@@ -83,7 +83,7 @@ Rules:
 - **Phase 2:** only the target confirms — `proposal.proposed_email == session_email` else `403`.
 - On confirm: `claim_owner(ws, vid, proposed_email)` + `set_name(ws, vid, proposed_name, actor=email)`;
   `status→confirmed`, `confirmed_at` stamped.
-- **Consent-bypass guard (Phase 2):** if `identify_allowed == False` for the voiceprint, bind
+- **Consent-bypass guard (Phase 2):** if the edge `subject_consent != "allow"` for the voiceprint, bind
   `owner_email` but **do not set a name**; response `name=null`. Revoked consent never re-attaches a name.
 - Response:
 ```json
@@ -107,7 +107,7 @@ returns its confirmed view; denying a denied one returns its denied view).
 ```json
 {
   "voiceprint_id": "vp_abc",
-  "name": "Alice",               // null whenever identify_allowed=False OR unbound/unnamed
+  "name": "Alice",               // null whenever subject_consent != "allow" OR unbound/unnamed
   "owner_email": "alice@x.com",  // null if no owner bound
   "visibility": "named"          // "named" | "anonymous" | "unknown"
 }
@@ -122,12 +122,12 @@ returns its confirmed view; denying a denied one returns its denied view).
 ```
 
 `visibility` semantics (read-side consent gate — mirrors the `/v1/identify` gate, `main.py` ~L215):
-- **`named`** — voiceprint exists, `identify_allowed=True`, and has a non-empty `name` → `name` returned.
-- **`anonymous`** — voiceprint exists but `identify_allowed=False` **or** has no name → `name=null`
+- **`named`** — voiceprint exists, edge `subject_consent == "allow"`, and has a non-empty `name` → `name` returned.
+- **`anonymous`** — voiceprint exists but `subject_consent != "allow"` **or** has no name → `name=null`
   (`owner_email` may still be present if bound).
 - **`unknown`** — voiceprint not found in this workspace → all fields null.
 
-`name` is **null whenever `identify_allowed=False`** regardless of binding — this is the single read-side
+`name` is **null whenever `subject_consent != "allow"`** regardless of binding — this is the single read-side
 gate Conclave trusts; it must never surface a withheld name.
 
 ---

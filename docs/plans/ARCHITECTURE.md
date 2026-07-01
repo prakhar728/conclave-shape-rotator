@@ -170,7 +170,7 @@ decision.
 `eval_harness/harness/diarizen_engine.py` (port as-is) · `SessionIdentifier` (extend, don't fork) ·
 `match.classify` + config thresholds · `store.set_name`/`/v1/knowledge` (evolve to email binding) ·
 `SessionMetadata.resolved_speakers` (mutable JSON) · `merge_by_timestamp`/`_best_overlap` (keep
-overlap logic) · consent plane `owner_email`/`identify_allowed`/`usage_ledger`/delete.
+overlap logic) · consent plane `owner_email`/`subject_consent`/`usage_ledger`/delete.
 
 ## 9. Verification (per phase)
 
