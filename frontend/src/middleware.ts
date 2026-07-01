@@ -23,6 +23,7 @@ const PROTECTED_PREFIXES = [
   "/calendar",
   "/workspace",
   "/meeting",
+  "/recording",
   "/invite",
   "/questions",
   "/entities",

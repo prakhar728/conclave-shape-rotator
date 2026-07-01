@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { RecordingProvider } from "@/components/recording-provider";
 import { WorkspaceProvider } from "@/components/workspace-provider";
 
 // Inter for body, Space Grotesk for headings, JetBrains Mono for machine ids.
@@ -36,7 +37,9 @@ export default function RootLayout({
       )}
     >
       <body className="min-h-full flex flex-col">
-        <WorkspaceProvider>{children}</WorkspaceProvider>
+        <WorkspaceProvider>
+          <RecordingProvider>{children}</RecordingProvider>
+        </WorkspaceProvider>
       </body>
     </html>
   );
