@@ -72,6 +72,9 @@ async def identify_meeting(session_id: str, native_meeting_id: str,
     # (record_routes.tag_speaker → propose_binding). Enroll voiceprints under it, not the raw Conclave
     # workspace, or tagging looks in a different VFTE workspace and never finds the voiceprint.
     vfte_ws = settings.fpm_workspace_for(workspace_id)
+    # Task #2: the requesting host identity (workspace owner) → VFTE's host-dependent candidate
+    # set. None → the scope-wide floor only (back-compat).
+    host_user = fpm_consent.workspace_host_email(workspace_id)
 
     # Task #16: queue mode — instead of the blocking diarize_recording call below, SUBMIT a durable
     # diarize job and return. A DiariZen worker fetches the audio by reference, runs the engine, and
@@ -116,10 +119,12 @@ async def identify_meeting(session_id: str, native_meeting_id: str,
                 logger.info("identify_meeting: no %s spans for %s — skipping", src, native_meeting_id)
                 return False
             fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, spans, tag="offline",
-                                                        meeting_id=native_meeting_id)
+                                                        meeting_id=native_meeting_id,
+                                                        host_user=host_user)
         else:
             # Legacy rollback path: FPM re-diarizes + identifies the recording.
-            fpm_segs = await fpm_consent.diarize_audio(vfte_ws, audio, tag="offline")
+            fpm_segs = await fpm_consent.diarize_audio(vfte_ws, audio, tag="offline",
+                                                       host_user=host_user)
     except Exception as e:  # noqa: BLE001 — best-effort, never block finalize
         logger.warning("identify_meeting: identity for %s failed: %s", session_id, e)
         return False

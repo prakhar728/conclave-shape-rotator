@@ -57,7 +57,7 @@ def _make_session(sid, wsid, owner_id, resolved):
 
 def _stub_resolve(monkeypatch, mapping):
     import infra.fpm_consent as fc
-    monkeypatch.setattr(fc, "consent_resolve_batch_sync", lambda ws, vids: mapping)
+    monkeypatch.setattr(fc, "consent_resolve_batch_sync", lambda ws, vids, host_user=None: mapping)
 
 
 def test_confirm_surfaces_on_next_load(client, monkeypatch):
@@ -94,7 +94,7 @@ def test_backstop_fail_open_keeps_stored_name(client, monkeypatch):
                   {"Speaker 1": {"voiceprint_id": "vp_f", "name": "Keep", "confidence": 0.9}})
     import infra.fpm_consent as fc
 
-    def boom(ws, vids):
+    def boom(ws, vids, host_user=None):
         raise RuntimeError("fpm unreachable")
 
     monkeypatch.setattr(fc, "consent_resolve_batch_sync", boom)

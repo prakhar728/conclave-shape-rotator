@@ -42,15 +42,15 @@ def wiring(monkeypatch):
     import transcripts.store as store
     calls = {"identify_spans": None, "diarize_audio": None, "set_metadata": None, "set_raw": None}
 
-    async def fake_identify_spans(ws, audio, spans, *, tag="offline", meeting_id=None):
-        calls["identify_spans"] = {"ws": ws, "spans": spans, "tag": tag}
+    async def fake_identify_spans(ws, audio, spans, *, tag="offline", meeting_id=None, host_user=None):
+        calls["identify_spans"] = {"ws": ws, "spans": spans, "tag": tag, "host_user": host_user}
         return [{"start": s["start"], "end": s["end"], "local_speaker": s["local_speaker"],
                  "voiceprint_id": "vp_A" if s["local_speaker"] == "speaker0" else "vp_B",
                  "name": "Alice" if s["local_speaker"] == "speaker0" else None}
                 for s in spans]
 
-    async def fake_diarize_audio(ws, audio, *, tag="offline"):
-        calls["diarize_audio"] = {"ws": ws, "tag": tag}
+    async def fake_diarize_audio(ws, audio, *, tag="offline", host_user=None):
+        calls["diarize_audio"] = {"ws": ws, "tag": tag, "host_user": host_user}
         return [{"start": 0.0, "end": 4.0, "voiceprint_id": "vp_A", "name": "Alice"}]
 
     session = _Session()
@@ -68,6 +68,26 @@ async def _run(flag, monkeypatch, diarize_url=""):
     monkeypatch.setattr(settings, "inperson_via_capture", flag)
     monkeypatch.setattr(settings, "diarize_url", diarize_url)
     await idmod.identify_meeting("sess1", "meet1", "ws1")
+
+
+@pytest.mark.asyncio
+async def test_host_user_threaded_to_identify(wiring, monkeypatch):
+    # Task #2: the workspace host identity is resolved and passed to VFTE for the candidate set.
+    calls, session = wiring
+    import infra.fpm_consent as fpm
+    monkeypatch.setattr(fpm, "workspace_host_email", lambda ws: "tina@x.com")
+    await _run(True, monkeypatch, diarize_url="")
+    assert calls["identify_spans"]["host_user"] == "tina@x.com"
+
+
+@pytest.mark.asyncio
+async def test_host_user_none_is_backcompat(wiring, monkeypatch):
+    # Task #2 back-compat: an unresolved host → None → VFTE uses the scope-wide floor.
+    calls, session = wiring
+    import infra.fpm_consent as fpm
+    monkeypatch.setattr(fpm, "workspace_host_email", lambda ws: None)
+    await _run(True, monkeypatch, diarize_url="")
+    assert calls["identify_spans"]["host_user"] is None
 
 
 @pytest.mark.asyncio

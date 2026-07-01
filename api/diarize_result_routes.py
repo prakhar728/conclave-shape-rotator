@@ -110,9 +110,11 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
 
     audio = _assemble_audio(native_id) if native_id else b""
     vfte_ws = settings.fpm_workspace_for(workspace)
+    # Task #2: host identity (workspace owner) → VFTE's host-dependent candidate set.
+    host_user = fpm_consent.workspace_host_email(workspace)
     try:
         fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, segments, tag="offline",
-                                                    meeting_id=native_id)
+                                                    meeting_id=native_id, host_user=host_user)
     except Exception as e:  # noqa: BLE001 — identity is best-effort, never wedge the worker
         logger.warning("diarize result: identify-spans for job %s failed: %s", job_id, e)
         return "identify_failed"

@@ -110,7 +110,7 @@ def _make_session(sid, wsid, owner_id, resolved):
 
 def _stub_resolve(monkeypatch, mapping):
     import infra.fpm_consent as fc
-    monkeypatch.setattr(fc, "consent_resolve_batch_sync", lambda ws, vids: mapping)
+    monkeypatch.setattr(fc, "consent_resolve_batch_sync", lambda ws, vids, host_user=None: mapping)
 
 
 def test_unclaimed_match_is_proposed_not_applied(client, monkeypatch):

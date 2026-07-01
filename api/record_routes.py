@@ -220,14 +220,17 @@ def _parse_diarize_ndjson(text: str) -> list[dict]:
 
 
 async def _fpm_diarize(client, audio: bytes, filename: str, content_type: str,
-                       fpm_workspace: str) -> list[dict]:
-    """Call FPM /v1/diarize (offline) → identity segments (final corrected view)."""
+                       fpm_workspace: str, host_user: str | None = None) -> list[dict]:
+    """Call FPM /v1/diarize (offline) → identity segments (final corrected view).
+
+    Task #2: `host_user` (the recording user) → FPM's host-dependent candidate set; empty →
+    the scope-wide floor only (back-compat)."""
     headers = {"Authorization": f"Bearer {settings.fpm_api_token}"} if settings.fpm_api_token else {}
     resp = await client.post(
         f"{settings.fpm_base_url.rstrip('/')}/v1/diarize",
         headers=headers,
         files={"file": (filename, audio, content_type)},
-        data={"workspace": fpm_workspace, "tag": "offline"},
+        data={"workspace": fpm_workspace, "tag": "offline", "host_user": host_user or ""},
     )
     if resp.status_code != 200:
         raise HTTPException(502, f"FPM diarize failed ({resp.status_code}): {resp.text[:200]}")
@@ -309,9 +312,10 @@ async def record_meeting(
     import httpx
 
     fpm_ws = settings.fpm_workspace_for(workspace_id)
+    host_user = user.get("email") or None   # Task #2: recording user = the VFTE host
     async with httpx.AsyncClient(timeout=180.0) as client:
         identity, asr = await asyncio.gather(
-            _fpm_diarize(client, audio, filename, content_type, fpm_ws),
+            _fpm_diarize(client, audio, filename, content_type, fpm_ws, host_user),
             _transcribe(client, audio, filename, content_type),
         )
 

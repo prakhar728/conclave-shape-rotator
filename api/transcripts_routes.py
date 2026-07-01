@@ -374,8 +374,12 @@ def _apply_consent_backstop(session: Session, workspace_id: str) -> None:
         return
     from config import settings
     from infra import fpm_consent
+    # Task #2: resolve names under the workspace host so an adder-only edge stays private to its
+    # adder at read time too (Case 2). None → scope-wide floor (back-compat).
+    host_user = fpm_consent.workspace_host_email(workspace_id)
     try:
-        resolved = fpm_consent.consent_resolve_batch_sync(settings.fpm_workspace_for(workspace_id), vids)
+        resolved = fpm_consent.consent_resolve_batch_sync(
+            settings.fpm_workspace_for(workspace_id), vids, host_user=host_user)
     except Exception:  # noqa: BLE001 — never let a consent lookup break the read
         return
     changed = False

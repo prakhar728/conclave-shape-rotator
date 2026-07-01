@@ -32,7 +32,7 @@ def _wired(monkeypatch):
     # record feature ON (class-level patch — the settings instance is not mutable)
     monkeypatch.setattr(Settings, "record_meeting_enabled", lambda self: True)
 
-    async def fake_diarize(client, audio, filename, content_type, fpm_ws):
+    async def fake_diarize(client, audio, filename, content_type, fpm_ws, host_user=None):
         return IDENTITY
 
     async def fake_transcribe(client, audio, filename, content_type):

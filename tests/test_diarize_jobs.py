@@ -53,7 +53,7 @@ def wiring(monkeypatch):
 
     calls = {"identify_spans": 0, "set_metadata": None, "set_raw": None, "enrich": []}
 
-    async def fake_identify_spans(ws, audio, spans, *, tag="offline", meeting_id=None):
+    async def fake_identify_spans(ws, audio, spans, *, tag="offline", meeting_id=None, host_user=None):
         calls["identify_spans"] += 1
         return [{"start": s["start"], "end": s["end"], "local_speaker": s["local_speaker"],
                  "voiceprint_id": "vp_A" if s["local_speaker"] == "speaker0" else "vp_B",
