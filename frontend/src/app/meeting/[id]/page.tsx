@@ -7,7 +7,8 @@
  *
  * Renders:
  *  - Header (workspace context)
- *  - Title (summary or fallback)
+ *  - Title (#40 short LLM title, owner-renameable; summary-first-line fallback)
+ *  - Summary (the prose body; distinct from the title heading)
  *  - Action items
  *  - Open questions
  *  - Insights
@@ -393,6 +394,17 @@ export default function MeetingPage({
 
         {tab === "summary" ? (
           <>
+            {/* Task #40 — the short title is the heading; the summary PROSE is the
+                body (previously the summary WAS the <h1>, so replacing the h1 with
+                the title would otherwise have hidden it). */}
+            {meeting.summary ? (
+              <p
+                data-testid="meeting-summary"
+                className="mb-8 whitespace-pre-line text-base leading-relaxed text-foreground/90"
+              >
+                {meeting.summary}
+              </p>
+            ) : null}
             {meeting.entities.length > 0 ? (
               <section className="mb-8">
                 <h2 className="mb-2.5 text-sm font-semibold text-foreground">

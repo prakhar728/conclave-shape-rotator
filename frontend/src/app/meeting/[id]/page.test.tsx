@@ -82,6 +82,7 @@ function baseMeeting(overrides: Record<string, unknown> = {}) {
     session_id: "s1",
     date: "2026-06-01",
     source: "otter",
+    title: "Meeting title",
     summary: "Meeting summary",
     visibility: "owner-only",
     owner: "u1",
@@ -287,6 +288,26 @@ describe("MeetingPage — Task #13 heal-on-open badge", () => {
     fireEvent.click(btn);
     await waitFor(() => expect(delSpy).toHaveBeenCalledWith("s1"));
     expect(pushMock).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("Task #40 — the summary PROSE still renders as the body when a title is the heading", async () => {
+    vi.spyOn(auth, "me").mockResolvedValue(ME as never);
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({
+        is_owner: false,
+        title: "Board sync",
+        summary: "We shipped the matcher and locked the diarization plan.",
+      }) as never,
+    );
+    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "no v2", "no v2"));
+
+    renderPage();
+    // Heading is the short title...
+    expect(await screen.findByTestId("meeting-title")).toHaveTextContent("Board sync");
+    // ...and the full summary prose is still shown as the body (not hidden by the title).
+    expect(screen.getByTestId("meeting-summary")).toHaveTextContent(
+      "We shipped the matcher and locked the diarization plan.",
+    );
   });
 
   it("Task #42 — a non-owner does not see the delete control", async () => {
