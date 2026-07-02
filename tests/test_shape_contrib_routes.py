@@ -145,3 +145,51 @@ def test_real_post_path_is_gated_behind_dry_run(client, monkeypatch):
     assert captured["metadata"]["workspace_id"] == wsid
     assert captured["url"] == settings.shapeos_supabase_url
     assert captured["segments"]  # non-empty corrected transcript
+
+
+def _capture_contribute(monkeypatch):
+    """Stub contribute_raw, returning a dict the test fills with the call kwargs."""
+    monkeypatch.setattr(settings, "shapeos_contrib_dry_run", False)
+    captured: dict = {}
+    from infra import shape_contrib as sc
+
+    def fake(**kwargs):
+        captured.update(kwargs)
+        return sc.InboxResult(ok=True, status="ok", parts=1, http_statuses=[201])
+
+    monkeypatch.setattr(sc, "contribute_raw", fake)
+    return captured
+
+
+def test_agenda_flows_into_submission_metadata(client, monkeypatch):
+    # Task #12 agenda (metadata.raw_intent) rides into the Shape OS submission,
+    # trimmed. "raw transcript + agenda → Shape" is then literal.
+    captured = _capture_contribute(monkeypatch)
+    user = _login(client)
+    wsid = _wsid(client)
+    store.save_session(
+        Session(
+            session_id="m6",
+            raw_diarization=[RawSegment(speaker="speaker_1", text="hello world")],
+            metadata=SessionMetadata(date="2026-06-29", source="test", raw_intent="  Decide Q3 roadmap  "),
+        )
+    )
+    store.set_workspace("m6", workspace_id=wsid, owner_user_id=user["id"], visibility="owner-only")
+    store.create_v2_draft("m6")
+    store.approve_v2("m6")
+    r = client.post(URL.format("m6"))
+    assert r.status_code == 200, r.text
+    assert captured["metadata"]["agenda"] == "Decide Q3 roadmap"  # trimmed
+
+
+def test_no_agenda_key_when_absent(client, monkeypatch):
+    # No agenda stashed → no `agenda` key (never a null/empty field on the row).
+    captured = _capture_contribute(monkeypatch)
+    user = _login(client)
+    wsid = _wsid(client)
+    _make_session("m7", wsid, user["id"])  # SessionMetadata has no raw_intent
+    store.create_v2_draft("m7")
+    store.approve_v2("m7")
+    r = client.post(URL.format("m7"))
+    assert r.status_code == 200, r.text
+    assert "agenda" not in captured["metadata"]
