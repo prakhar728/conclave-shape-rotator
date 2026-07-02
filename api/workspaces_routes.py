@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from auth.session import require_current_user
 from infra import workspaces
+from infra.meeting_lifecycle import meeting_lifecycle
 from infra.meeting_origin import resolve_origin
 
 logger = logging.getLogger(__name__)
@@ -103,11 +104,14 @@ def list_workspace_meetings(
         if row is None or not can_user_see(user, row):
             continue
         summary = s.derived.summary if s.derived else None
-        # A session is "processing" when it's been ingested but enrichment
-        # hasn't filled in the summary yet. The window is ~30s-2min between
-        # webhook arrival and LLM completion. Lets the frontend render a
-        # placeholder card with progress copy instead of an empty one.
-        is_processing = not summary
+        # Task #42 — a real lifecycle instead of `is_processing = not summary`
+        # (which spun a "Sharpening insights…" card forever for cancelled/empty/
+        # failed meetings). `processing` while enrich is in-flight and fresh;
+        # `failed` once it errored or aged past the staleness cutoff; `done`
+        # otherwise. `is_processing` stays as a bool for back-compat.
+        lifecycle = meeting_lifecycle(
+            s.metadata.enrichment_status, bool(summary), s.created_at,
+        )
         meetings.append({
             "session_id": s.session_id,
             "date": s.metadata.date,
@@ -120,7 +124,10 @@ def list_workspace_meetings(
             # None → FE falls back to the summary first line).
             "title": s.metadata.manual_title or (s.derived.title if s.derived else None),
             "summary": summary,
-            "is_processing": is_processing,
+            "is_processing": lifecycle == "processing",
+            # Task #42 — the failed state drives the "couldn't generate insights"
+            # card with Retry + Delete (no eternal spinner).
+            "enrichment_state": lifecycle,
         })
     return {"meetings": meetings}
 

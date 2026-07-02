@@ -24,6 +24,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from infra.meeting_lifecycle import meeting_lifecycle
 from infra.meeting_origin import resolve_origin
 from transcripts import store
 from transcripts.models import Session
@@ -353,6 +354,12 @@ def to_view(session: Session) -> dict:
         "graph_nodes": d.graph_nodes,
         # Lets the meeting page explain empty insights (no LLM vs found-nothing).
         "enrichment_status": session.metadata.enrichment_status,
+        # Task #42 — coarse lifecycle (processing/failed/done) with the staleness
+        # cutoff applied, so the meeting page can show a "couldn't generate
+        # insights" state + Retry/Delete instead of a perpetual spinner.
+        "enrichment_state": meeting_lifecycle(
+            session.metadata.enrichment_status, bool(d.summary), session.created_at,
+        ),
     })
     return card
 
@@ -931,6 +938,55 @@ def rename_session(session_id: str, body: _TitleUpdate, request: Request) -> dic
     )
     return {"session_id": session_id, "title": effective,
             "manual": session.metadata.manual_title is not None}
+
+
+# ---------------------------------------------------------------------------
+# Task #42 — owner delete (hard) + retry a stuck/failed enrich.
+# ---------------------------------------------------------------------------
+
+def _require_meeting_owner(session_id: str, request: Request):
+    """Load a session and assert the caller is its workspace owner. Returns the
+    loaded `Session`. Raises 404 (missing), 401 (unauth), or 403 (not owner)."""
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+    try:
+        ws_row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001
+        ws_row = None
+    owner_id = (ws_row or {}).get("owner_user_id")
+    if not owner_id or owner_id != user.get("id"):
+        raise HTTPException(status_code=403, detail="only the owner can do that")
+    return session
+
+
+@router.delete("/sessions/{session_id}")
+def delete_session(session_id: str, request: Request) -> dict:
+    """Owner-gated HARD delete of a meeting (Task #42). Removes the transcript
+    (raw + derived), shares, KB mentions/obligations, encrypted audio, and the
+    live-segment/bot-invitation side rows via `store.delete_session` — the same
+    cascade #18's data-rights delete reuses. The subject's FPM voiceprint is NOT
+    touched (deleted separately via #1); only this meeting's local refs die."""
+    _require_meeting_owner(session_id, request)
+    existed = store.delete_session(session_id)
+    return {"deleted": existed, "session_id": session_id}
+
+
+@router.post("/sessions/{session_id}/retry-enrich")
+def retry_enrich(session_id: str, request: Request) -> dict:
+    """Owner-gated retry of a failed/stuck enrichment (Task #42). Resets the
+    status to `pending` and re-enqueues the enrich job (#16). No-op-safe to call
+    on an already-done meeting (it just re-derives)."""
+    session = _require_meeting_owner(session_id, request)
+    session.metadata.enrichment_status = "pending"
+    store.set_metadata(session_id, session.metadata)
+    from connectors.jobs import enqueue
+    enqueue.enrich(session_id)
+    return {"session_id": session_id, "status": "pending"}
 
 
 # ---------------------------------------------------------------------------
@@ -1627,6 +1683,18 @@ def _enrich_in_background(session_id: str) -> None:
     session = store.load_session(session_id)
     if session is None:
         logger.error("background enrich: session %s not found", session_id)
+        return
+
+    # Task #42 — empty-transcript fast-fail. A cancelled recording / silence-only
+    # capture lands as a session with no usable text; enriching it would burn an
+    # LLM call to produce nothing and leave the card spinning. Mark it failed
+    # immediately (no LLM call) so the UI shows "couldn't generate insights" +
+    # Retry/Delete. Retry re-enqueues, so a transient upstream can still recover.
+    if not any((seg.text or "").strip() for seg in session.raw_diarization):
+        session.metadata.enrichment_status = "failed"
+        store.set_metadata(session_id, session.metadata)
+        store.clear_insights_stale(session_id)
+        logger.info("enrich fast-failed for %s — empty transcript", session_id)
         return
 
     # The editable v2 draft (spaCy candidate detection) needs NOTHING from the LLM, so

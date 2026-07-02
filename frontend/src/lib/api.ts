@@ -165,6 +165,9 @@ export type Meeting = {
   title?: string | null;
   summary: string | null;
   is_processing?: boolean;
+  // Task #42 — lifecycle: "processing" | "failed" | "done". Drives the
+  // failed-card (Retry + Delete) vs the eternal spinner.
+  enrichment_state?: string;
 };
 
 export type OpenQuestion = {
@@ -450,6 +453,18 @@ export const meetings = {
     apiFetch<{ session_id: string; title: string | null; manual: boolean }>(
       `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/title`,
       { method: "PATCH", body: JSON.stringify({ title }) },
+    ),
+  // Task #42 — owner hard-delete a meeting (transcript + insights + audio + shares).
+  delete: (sessionId: string) =>
+    apiFetch<{ deleted: boolean; session_id: string }>(
+      `/api/transcripts/sessions/${encodeURIComponent(sessionId)}`,
+      { method: "DELETE" },
+    ),
+  // Task #42 — owner retry a failed/stuck enrichment (re-enqueues the job).
+  retryEnrich: (sessionId: string) =>
+    apiFetch<{ session_id: string; status: string }>(
+      `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/retry-enrich`,
+      { method: "POST" },
     ),
 };
 

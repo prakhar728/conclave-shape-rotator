@@ -17,7 +17,7 @@
  */
 "use client";
 
-import { ArrowLeft, Check, Clock, Copy, Share2 } from "lucide-react";
+import { ArrowLeft, Check, Clock, Copy, Share2, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
@@ -76,6 +76,19 @@ export default function MeetingPage({
   const seekTo = useCallback((seconds: number) => {
     playerRef.current?.seekTo(seconds);
   }, []);
+  // Task #42 — owner hard-delete this meeting, then return to the dashboard.
+  const [deleting, setDeleting] = useState(false);
+  async function handleDelete() {
+    if (!window.confirm("Delete this meeting? This can't be undone.")) return;
+    setDeleting(true);
+    try {
+      await meetingsApi.delete(id);
+      router.push("/dashboard");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Delete failed");
+      setDeleting(false);
+    }
+  }
   // Which sub-tab is shown: the summary/insights or the transcript.
   const [tab, setTab] = useState<"summary" | "transcript">("summary");
 
@@ -279,6 +292,18 @@ export default function MeetingPage({
                       rawDeleted={meeting.raw_transcript_deleted}
                     />
                   </IconPopover>
+                  {/* Task #42 — owner hard-delete this meeting. */}
+                  <button
+                    type="button"
+                    data-testid="delete-meeting"
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    aria-label="Delete meeting"
+                    title="Delete meeting"
+                    className="inline-flex size-8 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-destructive/40 hover:text-destructive disabled:opacity-50"
+                  >
+                    <Trash2 className="size-4" aria-hidden />
+                  </button>
                 </>
               ) : null}
           </div>

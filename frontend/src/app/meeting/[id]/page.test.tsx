@@ -270,4 +270,34 @@ describe("MeetingPage — Task #13 heal-on-open badge", () => {
     );
     expect(getMock.mock.calls.length).toBeGreaterThan(1); // initial load + ≥1 poll tick
   }, 12000);
+
+  it("Task #42 — owner sees a delete control that deletes + redirects to the dashboard", async () => {
+    vi.spyOn(auth, "me").mockResolvedValue(ME as never);
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: true, workspace_id: "ws1" }) as never,
+    );
+    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "no v2", "no v2"));
+    const delSpy = vi
+      .spyOn(meetings, "delete")
+      .mockResolvedValue({ deleted: true, session_id: "s1" });
+    window.confirm = vi.fn(() => true);
+
+    renderPage();
+    const btn = await screen.findByTestId("delete-meeting");
+    fireEvent.click(btn);
+    await waitFor(() => expect(delSpy).toHaveBeenCalledWith("s1"));
+    expect(pushMock).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("Task #42 — a non-owner does not see the delete control", async () => {
+    vi.spyOn(auth, "me").mockResolvedValue(ME as never);
+    vi.spyOn(meetings, "get").mockResolvedValue(
+      baseMeeting({ is_owner: false }) as never,
+    );
+    vi.spyOn(refine, "getDraft").mockRejectedValue(new ApiError(404, "no v2", "no v2"));
+
+    renderPage();
+    await screen.findByText("Meeting summary");
+    expect(screen.queryByTestId("delete-meeting")).toBeNull();
+  });
 });

@@ -14,13 +14,15 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { ArrowRight, Bot, FileText, ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { FailedMeetingCard } from "@/components/failed-meeting-card";
 import { OriginBadge } from "@/components/origin-badge";
 import { PageError, PageLoading } from "@/components/page-state";
+import { lifecycleOf } from "@/lib/meetingLifecycle";
 import { meetingTitle } from "@/lib/meetingTitle";
 import { meetingWhen } from "@/lib/meetingTime";
 import { RecordMeetingButton } from "@/components/record-meeting";
@@ -51,6 +53,18 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   // Widget data — best-effort, non-blocking (null = still loading).
   const [obligations, setObligations] = useState<KBObligation[] | null>(null);
+
+  // Task #42 — re-pull the meetings list after a delete/retry so the card
+  // disappears (delete) or flips back to processing (retry).
+  const refreshMeetings = useCallback(async () => {
+    if (!workspaceId) return;
+    try {
+      const m = await workspaces.meetings(workspaceId);
+      setMeetings(m.meetings);
+    } catch {
+      /* best-effort; the poll loop will catch up */
+    }
+  }, [workspaceId]);
 
   // Initial load + active-list polling so "Live now" reflects state changes
   // (status transitions, completions) without needing the user to refresh.
@@ -211,9 +225,18 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 gap-8 md:grid-cols-3">
               <div className="flex flex-col gap-8 md:col-span-2">
                 {meetings
-                  ?.filter((m) => m.is_processing)
+                  ?.filter((m) => lifecycleOf(m) === "processing")
                   .map((m) => (
                     <ProcessingCard key={m.session_id} meeting={m} />
+                  ))}
+                {meetings
+                  ?.filter((m) => lifecycleOf(m) === "failed")
+                  .map((m) => (
+                    <FailedMeetingCard
+                      key={m.session_id}
+                      meeting={m}
+                      onChanged={refreshMeetings}
+                    />
                   ))}
                 <RecentMeetings meetings={meetings} />
               </div>
@@ -229,9 +252,9 @@ export default function DashboardPage() {
   );
 }
 
-/** Recent meetings list. */
+/** Recent meetings list (done only — processing/failed render as their own cards). */
 function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
-  const done = meetings?.filter((m) => !m.is_processing);
+  const done = meetings?.filter((m) => lifecycleOf(m) === "done");
   return (
     <div className="rounded-xl border border-border bg-card p-6">
       <div className="mb-2 flex items-center justify-between">
@@ -546,3 +569,4 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     </Link>
   );
 }
+

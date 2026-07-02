@@ -842,11 +842,54 @@ def list_owned_transcript_sessions(owner_user_id: str) -> list[dict]:
 
 def delete_transcript_session(session_id: str) -> None:
     """Hard-delete a session row. Only the `--force` replace path uses this;
-    the normal write path is `save_transcript_session` (raw-write-once)."""
+    the normal write path is `save_transcript_session` (raw-write-once).
+
+    NOTE: this deletes ONLY the row (FK-cascade children go with it when
+    `foreign_keys=ON`). For a full owner "delete this meeting" use
+    `delete_session_cascade`, which also sweeps the non-FK side tables + audio.
+    """
     _get_conn().execute(
         "DELETE FROM transcript_sessions WHERE session_id = ?",
         (session_id,),
     )
+
+
+#: Task #42 — side tables that reference a session but carry NO `ON DELETE
+#: CASCADE` FK, so deleting the `transcript_sessions` row would orphan them.
+#: (session_id-keyed, then native_meeting_id-keyed.) The FK-cascade children —
+#: chunks, entity_mentions, obligations, meeting_corrections, transcript_v2 —
+#: are NOT listed here; they go automatically with the row. `entities`/`facts`
+#: are cross-session (deduped) and intentionally survive — only this meeting's
+#: mentions/obligations die.
+_SESSION_SIDE_TABLES = ("meeting_shares", "meeting_workspace_shares",
+                        "meeting_calendar_links", "ingest_metrics")
+_NATIVE_SIDE_TABLES = ("live_segments", "bot_invitations")
+
+
+def delete_session_cascade(session_id: str) -> bool:
+    """Hard-delete a meeting and everything the DB owns for it (Task #42).
+
+    Removes the row (→ FK-cascades KB mentions/obligations/chunks + v2 +
+    corrections), then sweeps the non-FK side tables (shares, calendar links,
+    ingest metrics, live-segment buffer, bot invitation) and the encrypted audio
+    on disk. Idempotent; returns True iff a session row existed. This is the
+    reusable primitive the owner delete endpoint AND #18's data-rights delete
+    call. The subject's FPM voiceprint is NOT touched (that's deleted via #1) —
+    only this meeting's local refs (resolved_speakers) die with the row.
+    """
+    conn = _get_conn()
+    existed = conn.execute(
+        "SELECT 1 FROM transcript_sessions WHERE session_id = ?", (session_id,)
+    ).fetchone() is not None
+    for tbl in _SESSION_SIDE_TABLES:
+        conn.execute(f"DELETE FROM {tbl} WHERE session_id = ?", (session_id,))
+    for tbl in _NATIVE_SIDE_TABLES:
+        conn.execute(f"DELETE FROM {tbl} WHERE native_meeting_id = ?", (session_id,))
+    # The row last, so its FK cascade fires with the side tables already clean.
+    conn.execute("DELETE FROM transcript_sessions WHERE session_id = ?", (session_id,))
+    # Encrypted audio + sha256 sidecars on disk (filesystem, outside the DB).
+    cleanup_session_audio(session_id)
+    return existed
 
 
 def _safe_audio_segment(value: str) -> str:

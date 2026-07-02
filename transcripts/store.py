@@ -86,6 +86,12 @@ def set_metadata(session_id: str, metadata: SessionMetadata) -> None:
     sqlite.update_transcript_metadata(session_id, metadata.model_dump())
 
 
+def delete_session(session_id: str) -> bool:
+    """Task #42 — hard-delete a meeting + all DB/audio it owns (reusable by the
+    owner delete endpoint and #18 data-rights delete). Returns True iff it existed."""
+    return sqlite.delete_session_cascade(session_id)
+
+
 def reresolve_voiceprint(
     voiceprint_id: str,
     name: Optional[str],
