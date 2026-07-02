@@ -41,22 +41,24 @@ describe("FailedMeetingCard", () => {
   });
 
   it("Delete confirms, deletes, and refreshes", async () => {
-    window.confirm = vi.fn(() => true);
     const spy = vi
       .spyOn(meetings, "delete")
       .mockResolvedValue({ deleted: true, session_id: "f1" });
     const onChanged = vi.fn();
     render(<FailedMeetingCard meeting={meeting} onChanged={onChanged} />);
     fireEvent.click(screen.getByTestId("failed-delete"));
+    // The in-app confirm dialog opens; confirm it.
+    fireEvent.click(await screen.findByTestId("confirm-ok"));
     await waitFor(() => expect(spy).toHaveBeenCalledWith("f1"));
     expect(onChanged).toHaveBeenCalled();
   });
 
-  it("Delete does nothing when the confirm is cancelled", () => {
-    window.confirm = vi.fn(() => false);
+  it("Delete does nothing when the confirm dialog is cancelled", async () => {
     const spy = vi.spyOn(meetings, "delete");
     render(<FailedMeetingCard meeting={meeting} onChanged={vi.fn()} />);
     fireEvent.click(screen.getByTestId("failed-delete"));
+    fireEvent.click(await screen.findByTestId("confirm-cancel"));
     expect(spy).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("confirm-dialog")).toBeNull(); // dialog dismissed
   });
 });

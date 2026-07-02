@@ -281,11 +281,11 @@ describe("MeetingPage — Task #13 heal-on-open badge", () => {
     const delSpy = vi
       .spyOn(meetings, "delete")
       .mockResolvedValue({ deleted: true, session_id: "s1" });
-    window.confirm = vi.fn(() => true);
-
     renderPage();
     const btn = await screen.findByTestId("delete-meeting");
     fireEvent.click(btn);
+    // The in-app confirm dialog opens; confirm it.
+    fireEvent.click(await screen.findByTestId("confirm-ok"));
     await waitFor(() => expect(delSpy).toHaveBeenCalledWith("s1"));
     expect(pushMock).toHaveBeenCalledWith("/dashboard");
   });

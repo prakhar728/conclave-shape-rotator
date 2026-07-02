@@ -168,13 +168,27 @@ describe("TranscriptPanel — speaker normalization + playhead follow", () => {
     expect(await screen.findByText("Speaker 2")).toBeInTheDocument();
   });
 
-  it("highlights the active segment (playhead-follows-text)", async () => {
+  it("highlights the turn containing the active span (playhead-follows-text)", async () => {
+    // Distinct speakers → two turns; active span index 1 → the second turn.
     const { container } = mountPanel(
-      [seg({ text: "one", start: 0 }), seg({ text: "two", start: 5 })],
+      [
+        seg({ speaker: "0", text: "one", start: 0 }),
+        seg({ speaker: "1", text: "two", start: 5 }),
+      ],
       1,
     );
     await screen.findByText("two");
     const active = container.querySelector('[data-active="true"]');
     expect(active).toHaveTextContent("two");
+  });
+
+  it("coalesces consecutive same-speaker spans into one turn block", async () => {
+    mountPanel([
+      seg({ speaker: "0", text: "hello", start: 0 }),
+      seg({ speaker: "0", text: "there", start: 1 }),
+    ]);
+    // One joined turn, one speaker header — not two fragments.
+    expect(await screen.findByText("hello there")).toBeInTheDocument();
+    expect(screen.getAllByText("Speaker 0")).toHaveLength(1);
   });
 });

@@ -30,6 +30,7 @@ import {
   useState,
 } from "react";
 
+import { useConfirm } from "@/components/confirm-dialog";
 import { meetings as meetingsApi } from "@/lib/api";
 
 const WAVEFORM_BARS = 96;
@@ -88,6 +89,7 @@ export const MeetingAudioPlayer = forwardRef<
 ) {
   const [gone, setGone] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const { confirm, dialog } = useConfirm();
   const [playing, setPlaying] = useState(false);
   const [muted, setMuted] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -190,9 +192,13 @@ export const MeetingAudioPlayer = forwardRef<
   );
 
   const onDelete = useCallback(async () => {
-    if (!window.confirm("Delete this meeting's audio? The transcript and insights stay.")) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Delete this meeting's audio?",
+      body: "The transcript and insights stay — only the recording is removed.",
+      confirmLabel: "Delete audio",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await meetingsApi.deleteAudio(sessionId);
@@ -200,7 +206,7 @@ export const MeetingAudioPlayer = forwardRef<
     } catch {
       setDeleting(false);
     }
-  }, [sessionId]);
+  }, [sessionId, confirm]);
 
   if (storeAudio === false || gone) return null;
 
@@ -209,6 +215,7 @@ export const MeetingAudioPlayer = forwardRef<
 
   return (
     <div className="flex items-center gap-4">
+      {dialog}
       <audio
         ref={audioRef}
         preload="metadata"

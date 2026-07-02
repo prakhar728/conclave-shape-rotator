@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { ApiError, meetings as meetingsApi, type TranscriptSegment } from "@/lib/api";
 import { speakerLabel } from "@/lib/speakerLabel";
+import { groupIntoTurns } from "@/lib/turns";
 
 type LoadState =
   | { kind: "loading" }
@@ -224,24 +225,35 @@ function Body({
   if (state.segments.length === 0) {
     return <Note>No transcript text was captured for this meeting.</Note>;
   }
+  // Task #37 — coalesce consecutive same-speaker spans into turns (shared util,
+  // mirrors the server projection). Edit/clip/seek still target the turn's spans.
+  const turns = groupIntoTurns(state.segments);
+  // Cumulative first-span index per turn (to map the playhead's active span → turn).
+  const turnSpanStart: number[] = [];
+  turns.forEach((t, i) => {
+    turnSpanStart.push(i === 0 ? 0 : turnSpanStart[i - 1] + turns[i - 1].spans.length);
+  });
   return (
     <ol className="flex flex-col gap-5">
-      {state.segments.map((seg, idx) => {
-        const pendingName = pending[seg.speaker];
+      {turns.map((turn, turnIdx) => {
+        const firstSpan = turnSpanStart[turnIdx];
+        const lastSpan = firstSpan + turn.spans.length; // exclusive
+        const pendingName = pending[turn.speaker as string];
         // Normalize the raw diarizer label to "Speaker N" when there's no name.
-        const display = seg.speaker_name ?? speakerLabel(seg.speaker);
-        // Task #3 — a recognized-but-not-yet-consented name to suggest. Only
-        // offer it while the speaker is still anonymous and the host hasn't
-        // already acted (no applied name, no in-flight tag of our own).
+        const display = turn.speaker_name ?? speakerLabel(turn.speaker);
         const proposedName =
-          !seg.speaker_name && !pendingName ? seg.proposed_name ?? null : null;
-        const isActive = idx === activeSegmentIndex;
+          !turn.speaker_name && !pendingName ? turn.proposed_name ?? null : null;
+        // The playhead's active span falls inside this turn's span range.
+        const isActive =
+          activeSegmentIndex != null &&
+          activeSegmentIndex >= firstSpan &&
+          activeSegmentIndex < lastSpan;
         return (
           <li
-            key={idx}
+            key={turnIdx}
             ref={(el) => {
-              if (el) segRefs.current.set(idx, el);
-              else segRefs.current.delete(idx);
+              if (el) segRefs.current.set(turnIdx, el);
+              else segRefs.current.delete(turnIdx);
             }}
             data-active={isActive || undefined}
             className={`-mx-2 rounded-md px-2 transition-colors ${
@@ -252,7 +264,7 @@ function Body({
               {taggable ? (
                 <button
                   type="button"
-                  onClick={() => openForm(idx)}
+                  onClick={() => openForm(turnIdx)}
                   className="text-sm font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 transition-colors hover:decoration-foreground"
                   title="Tag this speaker"
                 >
@@ -269,14 +281,14 @@ function Body({
                   Proposed: {proposedName}
                   <button
                     type="button"
-                    onClick={() => openForm(idx, proposedName)}
+                    onClick={() => openForm(turnIdx, proposedName)}
                     className="font-semibold underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Confirm
                   </button>
                   <button
                     type="button"
-                    onClick={() => openForm(idx, proposedName)}
+                    onClick={() => openForm(turnIdx, proposedName)}
                     className="underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Edit
@@ -288,17 +300,16 @@ function Body({
                   pending: {pendingName}
                 </span>
               ) : null}
-              {seg.start != null ? (
+              {turn.start != null ? (
                 <span className="font-mono text-xs text-muted-foreground/50">
-                  {formatTime(seg.start)}
+                  {formatTime(turn.start)}
                 </span>
               ) : null}
             </div>
-            {taggable && openIdx === idx ? (
+            {taggable && openIdx === turnIdx ? (
               <SpeakerTagForm
-                // Remount when the prefill changes so Confirm/Edit re-seeds the name.
                 key={formName}
-                label={seg.speaker}
+                label={turn.speaker as string}
                 busy={busy}
                 err={err}
                 initialName={formName}
@@ -306,33 +317,33 @@ function Body({
                 onSubmit={submitTag}
               />
             ) : null}
-            {onSeek && seg.start != null ? (
+            {onSeek && turn.start != null ? (
               <p
                 data-testid="seek-segment"
                 role="button"
                 tabIndex={0}
                 title="Jump the audio to here"
-                // Don't hijack drag-to-select: only seek on a plain click with no
-                // active text selection.
                 onClick={() => {
                   if (window.getSelection()?.toString()) return;
-                  onSeek(seg.start as number);
+                  onSeek(turn.start as number);
                 }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
                     e.preventDefault();
-                    onSeek(seg.start as number);
+                    onSeek(turn.start as number);
                   }
                 }}
-                className="mt-0.5 cursor-pointer rounded-sm text-sm leading-relaxed text-foreground/90 transition-colors hover:text-foreground"
+                className="mt-0.5 cursor-pointer whitespace-pre-line rounded-sm text-sm leading-relaxed text-foreground/90 transition-colors hover:text-foreground"
               >
-                {seg.text}
+                {turn.text}
               </p>
             ) : (
-              <p className="mt-0.5 text-sm leading-relaxed text-foreground/90">{seg.text}</p>
+              <p className="mt-0.5 whitespace-pre-line text-sm leading-relaxed text-foreground/90">
+                {turn.text}
+              </p>
             )}
-            {seg.start != null && seg.end != null ? (
-              <AudioSegmentPlayer sessionId={sessionId} start={seg.start} end={seg.end} />
+            {turn.start != null && turn.end != null ? (
+              <AudioSegmentPlayer sessionId={sessionId} start={turn.start} end={turn.end} />
             ) : null}
           </li>
         );

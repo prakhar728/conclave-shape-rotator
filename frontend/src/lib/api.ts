@@ -397,10 +397,26 @@ export type TranscriptSegment = {
   end: number | null;
 };
 
+// Task #37 — a coalesced speaker turn: consecutive same-speaker spans grouped for
+// display. Wraps its underlying `spans` so clips/edit/seek still target spans.
+export type TranscriptTurn = {
+  speaker: string;
+  speaker_name: string | null;
+  proposed_name?: string | null;
+  voiceprint_id?: string | null;
+  consented?: boolean | null;
+  start: number | null;
+  end: number | null;
+  text: string;
+  spans: TranscriptSegment[];
+};
+
 export type TranscriptView = {
   session_id: string;
   segment_count: number;
   segments: TranscriptSegment[];
+  // Task #37 — the same spans coalesced into speaker turns (server-computed).
+  turns?: TranscriptTurn[];
 };
 
 // --- P4 speaker tagging (trust handshake) ---------------------------------

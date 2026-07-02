@@ -28,6 +28,8 @@ import { PageError, PageLoading } from "@/components/page-state";
 import { fmt, useRecording, type LiveSeg } from "@/components/recording-provider";
 import { AIVoiceInput } from "@/components/ui/ai-voice-input";
 import { ApiError, auth, live, type MeResponse } from "@/lib/api";
+import { speakerLabel } from "@/lib/speakerLabel";
+import { groupIntoTurns } from "@/lib/turns";
 
 type SseState = "connecting" | "live" | "reconnecting";
 
@@ -184,10 +186,14 @@ export default function RecordingPage({
             </h2>
             {segs.length > 0 ? (
               <ol className="space-y-3">
-                {segs.map((s, i) => (
+                {/* Task #37 — coalesce consecutive same-speaker spans into turns; the
+                    open (last) turn GROWS as new spans stream, closes on a speaker flip. */}
+                {groupIntoTurns(segs).map((turn, i) => (
                   <li key={i} className="text-sm">
-                    <span className="font-semibold text-primary">{s.speaker}</span>
-                    <p className="mt-0.5 text-foreground">{s.text}</p>
+                    <span className="font-semibold text-primary">
+                      {speakerLabel(turn.speaker)}
+                    </span>
+                    <p className="mt-0.5 whitespace-pre-line text-foreground">{turn.text}</p>
                   </li>
                 ))}
               </ol>

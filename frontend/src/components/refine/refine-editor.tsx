@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { meetings as meetingsApi, refine, type V2Annotation, type V2Draft } from "@/lib/api";
 import { speakerLabel } from "@/lib/speakerLabel";
+import { speakerKey } from "@/lib/turns";
 
 import { tokenTint } from "./token-tints";
 
@@ -214,7 +215,7 @@ export function RefineEditor({
   }
 
   return (
-    <div data-testid="refine-editor" className="space-y-5">
+    <div data-testid="refine-editor" className="space-y-1">
       {saveError ? (
         <div
           data-testid="save-error"
@@ -226,9 +227,14 @@ export function RefineEditor({
           </button>
         </div>
       ) : null}
-      {draft.segments.map((seg) => {
+      {draft.segments.map((seg, idx) => {
         const states = statesForSegment(draft.annotations, seg.segment_id);
         const isActive = seg.segment_id === activeSegmentId;
+        // Task #37 — coalesce: only the FIRST span of a same-speaker run shows the
+        // speaker header; continuation spans render tokens directly under it, tight,
+        // so one person reads as a single turn (edits still target each span).
+        const isTurnStart =
+          idx === 0 || speakerKey(draft.segments[idx - 1]) !== speakerKey(seg);
         return (
           <div
             key={seg.segment_id}
@@ -238,23 +244,25 @@ export function RefineEditor({
             }}
             data-active={isActive || undefined}
             className={`-mx-2 rounded-md px-2 transition-colors ${
-              isActive ? "bg-accent/40" : ""
-            }`}
+              isTurnStart ? "mt-5 first:mt-0" : ""
+            } ${isActive ? "bg-accent/40" : ""}`}
           >
-            <div className="mb-0.5 flex items-center gap-2">
-              <button
-                data-speaker={seg.segment_id}
-                onClick={() => setAssigning(assigning === seg.segment_id ? null : seg.segment_id)}
-                className="text-sm font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 transition-colors hover:decoration-foreground"
-              >
-                {displayName(seg)}
-              </button>
-              {pending[seg.speaker_label] ? (
-                <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
-                  pending: {pending[seg.speaker_label]}
-                </span>
-              ) : null}
-            </div>
+            {isTurnStart ? (
+              <div className="mb-0.5 flex items-center gap-2">
+                <button
+                  data-speaker={seg.segment_id}
+                  onClick={() => setAssigning(assigning === seg.segment_id ? null : seg.segment_id)}
+                  className="text-sm font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 transition-colors hover:decoration-foreground"
+                >
+                  {displayName(seg)}
+                </button>
+                {pending[seg.speaker_label] ? (
+                  <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
+                    pending: {pending[seg.speaker_label]}
+                  </span>
+                ) : null}
+              </div>
+            ) : null}
 
             {assigning === seg.segment_id && (
               <div data-testid={`speaker-assign-${seg.segment_id}`} className="mb-2 space-y-2">

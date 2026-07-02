@@ -61,9 +61,11 @@ def test_approved_v2_contract_shape():  # C9-1 — exactly what Part 2 reads
     assert v2.status == "approved" and v2.approved_at is not None
     seg = v2.segments[0]
     assert all(hasattr(seg, f) for f in ("segment_id", "speaker_label", "speaker_name", "tokens"))
-    # the corrected-segments helper Part 2 also consumes
+    # the corrected-segments helper Part 2 also consumes: Part 2 reads speaker+text;
+    # start/end were added (#41 timestamps for the transcript DTO) and are ignored by
+    # the KB, so assert the contract is a SUPERSET of {speaker, text}, not exact.
     segs = store.v2_segments_or_raw("c9")
-    assert set(segs[0].keys()) == {"speaker", "text"}
+    assert {"speaker", "text"} <= set(segs[0].keys())
 
 
 def test_vocab_contract_shape():  # C9-2

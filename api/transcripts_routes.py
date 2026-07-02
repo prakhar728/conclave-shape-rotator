@@ -549,10 +549,16 @@ def to_transcript(session: Session) -> dict:
             "start": seg.get("start"),
             "end": seg.get("end"),
         })
+    # Task #37 — coalesce consecutive same-speaker spans into turns (a display
+    # projection). `segments` (spans) stay for edit/clip/seek; `turns` wrap them for
+    # rendering. Export (#18) and the editor inherit the same grouping.
+    from transcripts.turns import group_into_turns
+
     return {
         "session_id": session.session_id,
         "segment_count": len(segments),
         "segments": segments,
+        "turns": group_into_turns(segments),
     }
 
 

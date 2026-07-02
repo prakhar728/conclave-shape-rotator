@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { useConfirm } from "@/components/confirm-dialog";
 import { MeetingTitleHeading } from "@/components/meeting-title";
 import { OriginBadge } from "@/components/origin-badge";
 import { OwnerControls } from "@/components/owner-controls";
@@ -101,8 +102,15 @@ export default function MeetingPage({
   );
   // Task #42 — owner hard-delete this meeting, then return to the dashboard.
   const [deleting, setDeleting] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
   async function handleDelete() {
-    if (!window.confirm("Delete this meeting? This can't be undone.")) return;
+    const ok = await confirm({
+      title: "Delete this meeting?",
+      body: "The transcript, insights, and audio are permanently removed. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     setDeleting(true);
     try {
       await meetingsApi.delete(id);
@@ -267,6 +275,7 @@ export default function MeetingPage({
 
   return (
     <AppShell user={me.user}>
+      {confirmDialog}
       <main className="w-full px-6 py-10 md:px-8">
         <Link
           href="/dashboard"
