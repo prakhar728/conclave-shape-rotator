@@ -116,9 +116,13 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
     try:
         fpm_segs = await fpm_consent.identify_spans(vfte_ws, audio, segments, tag="offline",
                                                     meeting_id=native_id, host_user=host_user)
-    except Exception as e:  # noqa: BLE001 — identity is best-effort, never wedge the worker
-        logger.warning("diarize result: identify-spans for job %s failed: %s", job_id, e)
-        return "identify_failed"
+    except Exception as e:  # noqa: BLE001 — identity is best-effort, never wedge enrichment
+        logger.warning(
+            "diarize result: identify-spans for job %s failed: %s — reconciling WITHOUT "
+            "identity so the transcript + summary still land (speakers stay as labels)",
+            job_id, e,
+        )
+        fpm_segs = segments  # fall back to the diarized (identity-less) segments
 
     reconcile_identity(session_id, session, fpm_segs, authoritative=bool(authoritative))
     # Task #3 Part (c): notify the consented subjects recognized in this meeting (best-effort).
