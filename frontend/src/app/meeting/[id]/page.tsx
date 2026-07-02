@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { MeetingTitleHeading } from "@/components/meeting-title";
 import { OriginBadge } from "@/components/origin-badge";
 import { OwnerControls } from "@/components/owner-controls";
 import {
@@ -281,9 +282,15 @@ export default function MeetingPage({
                 </>
               ) : null}
           </div>
-          <h1 className="mt-4 font-heading text-2xl font-bold tracking-tight text-foreground md:text-3xl">
-            {meeting.summary || `${meeting.source} · ${meeting.date}`}
-          </h1>
+          <MeetingTitleHeading
+            sessionId={meeting.session_id}
+            title={meeting.title}
+            summary={meeting.summary}
+            isOwner={Boolean(meeting.is_owner)}
+            onRenamed={(t) =>
+              setMeeting((m) => (m ? { ...m, title: t } : m))
+            }
+          />
 
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <span title={when.title} data-testid="meeting-when">

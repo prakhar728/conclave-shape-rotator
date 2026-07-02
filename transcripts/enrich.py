@@ -35,9 +35,14 @@ from transcripts.prompts import (
     REDUCE_SYSTEM,
     REDUCE_USER,
     SINGLE_USER,
+    TITLE_SYSTEM,
+    TITLE_USER,
     chunk_system,
     single_system,
 )
+
+#: Task #40 — a title is 3–7 words; anything longer is truncated as a guard.
+_TITLE_MAX_WORDS = 7
 
 log = logging.getLogger(__name__)
 
@@ -271,6 +276,7 @@ def _reduce(partials: list[dict], *, llm: Any, model: Optional[str]) -> Derived:
     """
     partial_summaries = [str(p.get("summary") or "").strip() for p in partials]
     partial_summaries = [s for s in partial_summaries if s]
+    title: Optional[str] = None
     if partial_summaries:
         reduced = invoke_json(
             [
@@ -282,6 +288,9 @@ def _reduce(partials: list[dict], *, llm: Any, model: Optional[str]) -> Derived:
             required_keys=("summary",),
         )
         summary = str(reduced.get("summary") or "").strip() or None
+        # Task #40 — the title comes from the final (reduce) call, not per-chunk;
+        # optional key, absent on pre-title responses → None.
+        title = _sanitize_title(reduced.get("title"))
     else:
         summary = None
 
@@ -309,8 +318,50 @@ def _reduce(partials: list[dict], *, llm: Any, model: Optional[str]) -> Derived:
                 raw_topics.append(str(t).strip())
     topics = _dedup_topics(raw_topics)[:MAX_TOPICS] or None
 
-    return Derived(summary=summary, signals=signals, entities=entities,
+    return Derived(title=title, summary=summary, signals=signals, entities=entities,
                    topics=topics, graph_nodes=None)
+
+
+# ---------------------------------------------------------------------------
+# Task #40 — meeting title
+# ---------------------------------------------------------------------------
+
+def _sanitize_title(raw: Any) -> Optional[str]:
+    """Normalize a model-emitted title: collapse whitespace, strip surrounding
+    quotes + trailing punctuation, cap at ``_TITLE_MAX_WORDS`` words. Returns
+    None for empty/whitespace so callers fall back to the summary-first-line."""
+    if raw is None:
+        return None
+    text = " ".join(str(raw).split())
+    text = text.strip().strip("\"'“”‘’").strip()
+    # Drop trailing sentence punctuation the model sometimes adds despite the prompt.
+    text = text.rstrip(".!?,;:—- ").strip()
+    if not text:
+        return None
+    words = text.split()
+    if len(words) > _TITLE_MAX_WORDS:
+        text = " ".join(words[:_TITLE_MAX_WORDS])
+    return text or None
+
+
+def _generate_title(summary: str, *, llm: Any, model: Optional[str]) -> Optional[str]:
+    """One cheap LLM call: summary → a 3–7 word title. Best-effort — any LLM
+    failure (unavailable / bad output) returns None so the summary is never lost;
+    the UI then falls back to the summary's first line."""
+    try:
+        out = invoke_json(
+            [
+                SystemMessage(content=TITLE_SYSTEM),
+                HumanMessage(content=TITLE_USER(summary)),
+            ],
+            llm=llm,
+            model=model,
+            required_keys=("title",),
+        )
+    except (LLMUnavailable, LLMOutputError) as exc:
+        log.warning("title generation failed (%s) — falling back to no title", exc)
+        return None
+    return _sanitize_title(out.get("title"))
 
 
 # ---------------------------------------------------------------------------
@@ -385,8 +436,12 @@ def _to_derived(data: dict) -> Derived:
     # get the same dashboard chip treatment as multi-chunk ones.
     entities_stamped = _stamp_cohort_status(entities)
 
-    return Derived(summary=summary, signals=signals, entities=entities_stamped,
-                   topics=topics, graph_nodes=None)
+    # Task #40 — short title folded into the same single-chunk call (optional key;
+    # absent on pre-title responses → None → summary-first-line fallback on the FE).
+    title = _sanitize_title(data.get("title"))
+
+    return Derived(title=title, summary=summary, signals=signals,
+                   entities=entities_stamped, topics=topics, graph_nodes=None)
 
 
 def _coerce_cohort_status(value: Any) -> Optional[str]:

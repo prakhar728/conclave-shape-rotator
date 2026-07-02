@@ -21,6 +21,7 @@ import { ArrowRight, Bot, FileText, ShieldAlert, ShieldCheck } from "lucide-reac
 import { AppShell } from "@/components/app-shell";
 import { OriginBadge } from "@/components/origin-badge";
 import { PageError, PageLoading } from "@/components/page-state";
+import { meetingTitle } from "@/lib/meetingTitle";
 import { meetingWhen } from "@/lib/meetingTime";
 import { RecordMeetingButton } from "@/components/record-meeting";
 import { UploadTranscriptButton } from "@/components/upload-transcript";
@@ -254,7 +255,7 @@ function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
               <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm font-medium text-foreground">
-                  {m.summary ? truncate(m.summary, 90) : `${m.source} · ${m.date}`}
+                  {truncate(meetingTitle(m.title, m.summary), 90)}
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                   {(() => {

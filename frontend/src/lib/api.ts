@@ -160,6 +160,9 @@ export type Meeting = {
   // Task #38 — how the meeting was captured (in_person / google_meet / zoom /
   // teams / online / upload / demo / unknown). Drives the origin badge.
   origin?: string;
+  // Task #40 — short meeting title (owner rename or auto). Null for legacy
+  // meetings → the UI falls back to the summary's first line.
+  title?: string | null;
   summary: string | null;
   is_processing?: boolean;
 };
@@ -326,6 +329,8 @@ export type MeetingView = {
   source: string;
   // Task #38 — capture origin (see Meeting.origin).
   origin?: string;
+  // Task #40 — short meeting title (owner rename or auto; null → summary-first-line).
+  title?: string | null;
   summary: string | null;
   visibility: string;
   owner: string | null;
@@ -438,6 +443,13 @@ export const meetings = {
     apiFetch<{ deleted: boolean; session_id: string }>(
       `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/audio`,
       { method: "DELETE" },
+    ),
+  // Task #40 — owner rename. A blank title clears the manual override (reverts to
+  // the auto title / summary-first-line fallback). Returns the effective title.
+  rename: (sessionId: string, title: string) =>
+    apiFetch<{ session_id: string; title: string | null; manual: boolean }>(
+      `/api/transcripts/sessions/${encodeURIComponent(sessionId)}/title`,
+      { method: "PATCH", body: JSON.stringify({ title }) },
     ),
 };
 

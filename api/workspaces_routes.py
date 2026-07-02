@@ -116,6 +116,9 @@ def list_workspace_meetings(
             "source": s.metadata.source,
             # Task #38 — origin badge (in_person / google_meet / upload / demo / …).
             "origin": resolve_origin(s),
+            # Task #40 — short meeting title (owner rename wins over the auto title;
+            # None → FE falls back to the summary first line).
+            "title": s.metadata.manual_title or (s.derived.title if s.derived else None),
             "summary": summary,
             "is_processing": is_processing,
         })

@@ -271,6 +271,10 @@ def to_card(session: Session) -> dict:
         # derived from (source, platform) with a legacy bot_invitations fallback.
         # The frontend maps this to a quiet badge (label + lucide icon).
         "origin": resolve_origin(session),
+        # Task #40 — short meeting title. An owner rename (manual_title) wins over
+        # the LLM-generated derived.title; None → the FE falls back to the summary's
+        # first line (legacy meetings enriched before titles existed).
+        "title": m.manual_title or d.title,
         "summary": d.summary,
         "signal_count": len(d.signals or []),
         "entity_count": len(d.entities or []),
@@ -886,6 +890,47 @@ def delete_session_audio(session_id: str, request: Request) -> dict:
     except Exception:  # noqa: BLE001 — metadata flip is a UI nicety, not the deletion itself
         logger.exception("delete_session_audio: store_audio flip failed for %s", session_id)
     return {"deleted": removed, "session_id": session_id}
+
+
+# ---------------------------------------------------------------------------
+# Task #40 — owner rename. Sets `metadata.manual_title`, which WINS over the
+# LLM-generated `derived.title` and survives regeneration. An empty/blank title
+# clears the override (reverts to the auto title / summary-first-line fallback).
+# ---------------------------------------------------------------------------
+
+class _TitleUpdate(BaseModel):
+    title: str  # blank/whitespace clears the manual override
+
+
+@router.patch("/sessions/{session_id}/title")
+def rename_session(session_id: str, body: _TitleUpdate, request: Request) -> dict:
+    """Owner-gated meeting rename. Stores the manual title on metadata (not on
+    `derived`, so a later regen never clobbers it). Returns the effective title."""
+    session = store.load_session(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail=f"session {session_id!r} not found")
+
+    from auth.session import try_current_user
+    user = try_current_user(request)
+    if user is None:
+        raise HTTPException(status_code=401, detail="authentication required")
+
+    try:
+        ws_row = store.get_workspace_fields(session_id)
+    except Exception:  # noqa: BLE001
+        ws_row = None
+    owner_id = (ws_row or {}).get("owner_user_id")
+    if not owner_id or owner_id != user.get("id"):
+        raise HTTPException(status_code=403, detail="only the owner can rename this meeting")
+
+    cleaned = " ".join(body.title.split()).strip()
+    session.metadata.manual_title = cleaned or None
+    store.set_metadata(session_id, session.metadata)
+    effective = session.metadata.manual_title or (
+        session.derived.title if session.derived else None
+    )
+    return {"session_id": session_id, "title": effective,
+            "manual": session.metadata.manual_title is not None}
 
 
 # ---------------------------------------------------------------------------

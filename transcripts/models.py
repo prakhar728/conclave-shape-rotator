@@ -84,6 +84,11 @@ class SessionMetadata(BaseModel):
     #: SHA-256 prefix (first 8 chars) of the raw_intent compiled at enrich
     #: time — the intent analogue of team_context_version (A/B + provenance).
     meeting_intent_version: Optional[str] = None
+    #: Task #40 — an owner's manual meeting-title override. When set it WINS over
+    #: the LLM-generated `derived.title` at read time and survives regeneration
+    #: (mirrors "manual-intent-wins"). None → the auto title (or summary-first-line
+    #: fallback) is shown. JSON metadata, so no SQL migration.
+    manual_title: Optional[str] = None
     #: Task #13 — fingerprint of the speaker-name set the summary was built
     #: with: sha256(canonical_json(sorted {raw_label → resolved_name_or_null}))[:16].
     #: Stamped on every enrich (initial, #9 approve-regen, #13 heal). On read,
@@ -171,6 +176,13 @@ class Entity(BaseModel):
 class Derived(BaseModel):
     """Everything the pipeline produces. All None at Layer-1 insert."""
 
+    #: Task #40 — a short meeting title (3–7 words, sentence case, no trailing
+    #: punctuation), LLM-generated from the final summary during enrichment.
+    #: Distinct from `summary` (the paragraph body). Regenerated on every enrich
+    #: (so #9 approve→regen and #13 heal-on-open refresh it). None until enriched
+    #: → the UI falls back to the summary's first line. An owner rename is stored
+    #: separately on `SessionMetadata.manual_title` so regen never clobbers it.
+    title: Optional[str] = None
     summary: Optional[str] = None
     signals: Optional[list[Signal]] = None
     entities: Optional[list[Entity]] = None
