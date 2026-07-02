@@ -24,6 +24,7 @@ scripts/*
 !scripts/chunk_and_embed_existing.py
 !scripts/eval_search_quality.py
 !scripts/seed_demo.py
+!scripts/backfill_titles.py
 # Persistent eval harness (Phase 0/1): connective layer + dataset translators
 # + scorers are real, maintained artifacts. Dir-then-contents negation.
 !scripts/eval/
