@@ -19,6 +19,7 @@ import { useEffect, useState } from "react";
 import { ArrowRight, Bot, FileText, ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
+import { OriginBadge } from "@/components/origin-badge";
 import { PageError, PageLoading } from "@/components/page-state";
 import { RecordMeetingButton } from "@/components/record-meeting";
 import { UploadTranscriptButton } from "@/components/upload-transcript";
@@ -255,7 +256,9 @@ function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
                   {m.summary ? truncate(m.summary, 90) : `${m.source} · ${m.date}`}
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                  {m.date} · {m.source}
+                  <span>{m.date}</span>
+                  <span aria-hidden>·</span>
+                  <OriginBadge origin={m.origin} />
                   {isDemoSession(m.session_id) ? <DemoTag /> : null}
                 </div>
               </div>

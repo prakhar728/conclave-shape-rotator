@@ -20,6 +20,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from auth.session import require_current_user
 from infra import workspaces
+from infra.meeting_origin import resolve_origin
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,8 @@ def list_workspace_meetings(
             "session_id": s.session_id,
             "date": s.metadata.date,
             "source": s.metadata.source,
+            # Task #38 — origin badge (in_person / google_meet / upload / demo / …).
+            "origin": resolve_origin(s),
             "summary": summary,
             "is_processing": is_processing,
         })

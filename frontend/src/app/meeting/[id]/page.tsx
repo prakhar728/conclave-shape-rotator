@@ -23,6 +23,7 @@ import { useRouter } from "next/navigation";
 import { use, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
+import { OriginBadge } from "@/components/origin-badge";
 import { OwnerControls } from "@/components/owner-controls";
 import { MeetingAudioPlayer } from "@/components/meeting-audio-player";
 import { PageError, PageLoading } from "@/components/page-state";
@@ -271,7 +272,7 @@ export default function MeetingPage({
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
             <span>{meeting.date}</span>
             <span aria-hidden>·</span>
-            <span className="capitalize">{meeting.source}</span>
+            <OriginBadge origin={meeting.origin} />
             {durationSec > 0 ? (
               <>
                 <span aria-hidden>·</span>

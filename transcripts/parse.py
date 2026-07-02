@@ -126,6 +126,9 @@ def _metadata(norm: NormalizedInput, tags: Optional[list[str]]) -> SessionMetada
         location=prov.get("location"),
         started_at=prov.get("started_at"),
         ended_at=prov.get("ended_at"),
+        # `read_canonical` copies the capture platform into provenance (Task #38
+        # origin badge); pasted/otter uploads have no platform → stays None.
+        platform=prov.get("platform"),
     )
 
 

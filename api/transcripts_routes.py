@@ -24,6 +24,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
 
+from infra.meeting_origin import resolve_origin
 from transcripts import store
 from transcripts.models import Session
 
@@ -263,6 +264,10 @@ def to_card(session: Session) -> dict:
         "session_id": session.session_id,
         "date": m.date,
         "source": m.source,
+        # Task #38 — canonical origin ("in_person"/"google_meet"/"upload"/"demo"/…)
+        # derived from (source, platform) with a legacy bot_invitations fallback.
+        # The frontend maps this to a quiet badge (label + lucide icon).
+        "origin": resolve_origin(session),
         "summary": d.summary,
         "signal_count": len(d.signals or []),
         "entity_count": len(d.entities or []),

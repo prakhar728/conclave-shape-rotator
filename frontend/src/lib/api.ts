@@ -154,6 +154,9 @@ export type Meeting = {
   session_id: string;
   date: string;
   source: string;
+  // Task #38 — how the meeting was captured (in_person / google_meet / zoom /
+  // teams / online / upload / demo / unknown). Drives the origin badge.
+  origin?: string;
   summary: string | null;
   is_processing?: boolean;
 };
@@ -316,6 +319,8 @@ export type MeetingView = {
   session_id: string;
   date: string;
   source: string;
+  // Task #38 — capture origin (see Meeting.origin).
+  origin?: string;
   summary: string | null;
   visibility: string;
   owner: string | null;

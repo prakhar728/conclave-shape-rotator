@@ -50,6 +50,13 @@ class SessionMetadata(BaseModel):
     location: Optional[str] = None
     started_at: Optional[str] = None
     ended_at: Optional[str] = None
+    #: Capture platform carried through from the ingest canonical payload
+    #: (`inperson` for in-person diarization, `google_meet`/`zoom`/`teams` for
+    #: the online bot). None for pasted/uploaded transcripts and legacy
+    #: sessions created before this field existed. The origin badge (Task #38)
+    #: derives its in-person-vs-online label from this — `source` alone can't,
+    #: since both capture paths write the same ingest `source`.
+    platform: Optional[str] = None
     # --- Permissions (defined now, enforced at 1.5; live in JSON metadata
     # so no SQL migration is required — see IMPLEMENTATION_PLAN.md §D). ---
     visibility: str = "cohort"  # "cohort" | "owner-only"
