@@ -153,6 +153,9 @@ export const auth = {
 export type Meeting = {
   session_id: string;
   date: string;
+  // Task #39 — full server-stamped ingest timestamp (UTC ISO); null for legacy
+  // sessions that only have a date. Drives the time-of-day rendering.
+  created_at?: string | null;
   source: string;
   // Task #38 — how the meeting was captured (in_person / google_meet / zoom /
   // teams / online / upload / demo / unknown). Drives the origin badge.
@@ -318,6 +321,8 @@ export type Entity = {
 export type MeetingView = {
   session_id: string;
   date: string;
+  // Task #39 — full ingest timestamp (UTC ISO) for time-of-day; null for legacy.
+  created_at?: string | null;
   source: string;
   // Task #38 — capture origin (see Meeting.origin).
   origin?: string;

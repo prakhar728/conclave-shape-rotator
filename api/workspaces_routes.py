@@ -111,6 +111,8 @@ def list_workspace_meetings(
         meetings.append({
             "session_id": s.session_id,
             "date": s.metadata.date,
+            # Task #39 — full ingest timestamp for time-of-day on the dashboard card.
+            "created_at": s.created_at,
             "source": s.metadata.source,
             # Task #38 — origin badge (in_person / google_meet / upload / demo / …).
             "origin": resolve_origin(s),

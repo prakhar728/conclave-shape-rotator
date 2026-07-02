@@ -34,6 +34,7 @@ import { RefineEditor } from "@/components/refine/refine-editor";
 import { useRefineDraft } from "@/components/refine/use-refine-draft";
 import { RetentionControl } from "@/components/retention-control";
 import { TranscriptPanel } from "@/components/transcript-panel";
+import { meetingWhen } from "@/lib/meetingTime";
 import { cn } from "@/lib/utils";
 import {
   ApiError,
@@ -198,6 +199,10 @@ export default function MeetingPage({
       ? Math.max(0, ...segments.map((s) => s.end ?? 0))
       : 0;
 
+  // Task #39 — capture time-of-day (relative for recent, absolute otherwise);
+  // legacy sessions with no created_at degrade to the plain date.
+  const when = meetingWhen(meeting.created_at, meeting.date);
+
   async function copyTranscript() {
     if (!segments?.length) return;
     const text = segments
@@ -270,7 +275,9 @@ export default function MeetingPage({
           </h1>
 
           <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-            <span>{meeting.date}</span>
+            <span title={when.title} data-testid="meeting-when">
+              {when.label}
+            </span>
             <span aria-hidden>·</span>
             <OriginBadge origin={meeting.origin} />
             {durationSec > 0 ? (

@@ -263,6 +263,9 @@ def to_card(session: Session) -> dict:
     return {
         "session_id": session.session_id,
         "date": m.date,
+        # Task #39 — full server-stamped ingest timestamp (UTC ISO) for time-of-day
+        # rendering; None for legacy sessions with only a date (FE degrades to `date`).
+        "created_at": session.created_at,
         "source": m.source,
         # Task #38 — canonical origin ("in_person"/"google_meet"/"upload"/"demo"/…)
         # derived from (source, platform) with a legacy bot_invitations fallback.

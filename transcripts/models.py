@@ -188,6 +188,12 @@ class Session(BaseModel):
     raw_diarization: list[RawSegment]  # IMMUTABLE after storage
     metadata: SessionMetadata
     derived: Derived = Field(default_factory=Derived)
+    #: Server-stamped ingest timestamp (full UTC ISO, e.g. "2026-07-02T14:23:01.5Z"),
+    #: projected read-only from the `transcript_sessions.created_at` column at load
+    #: (Task #39 time-of-day). None for a freshly-constructed in-memory Session that
+    #: hasn't round-tripped through the store yet. Not written back on save — the DB
+    #: column is stamped once at insert and is authoritative.
+    created_at: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

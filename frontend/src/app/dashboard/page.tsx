@@ -21,6 +21,7 @@ import { ArrowRight, Bot, FileText, ShieldAlert, ShieldCheck } from "lucide-reac
 import { AppShell } from "@/components/app-shell";
 import { OriginBadge } from "@/components/origin-badge";
 import { PageError, PageLoading } from "@/components/page-state";
+import { meetingWhen } from "@/lib/meetingTime";
 import { RecordMeetingButton } from "@/components/record-meeting";
 import { UploadTranscriptButton } from "@/components/upload-transcript";
 import { useWorkspace } from "@/components/workspace-provider";
@@ -256,7 +257,12 @@ function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
                   {m.summary ? truncate(m.summary, 90) : `${m.source} · ${m.date}`}
                 </div>
                 <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                  <span>{m.date}</span>
+                  {(() => {
+                    const when = meetingWhen(m.created_at, m.date);
+                    return (
+                      <span title={when.title}>{when.label}</span>
+                    );
+                  })()}
                   <span aria-hidden>·</span>
                   <OriginBadge origin={m.origin} />
                   {isDemoSession(m.session_id) ? <DemoTag /> : null}

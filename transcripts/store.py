@@ -230,6 +230,9 @@ def _row_to_session(row: dict) -> Session:
         raw_diarization=[RawSegment(**s) for s in row["raw_diarization"]],
         metadata=SessionMetadata(**row["metadata"]),
         derived=Derived(**row["derived"]),
+        # Task #39 — project the server-stamped ingest timestamp read-only from the
+        # DB column so DTOs can render time-of-day (metadata.date is date-granular).
+        created_at=row.get("created_at"),
     )
 
 
