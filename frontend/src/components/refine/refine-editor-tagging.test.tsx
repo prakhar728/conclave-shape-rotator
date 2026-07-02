@@ -45,7 +45,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
 
   it("owners get the name+email tag form when a speaker is opened", () => {
     renderEditor();
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     expect(screen.getByTestId("speaker-tag-form")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Full name")).toBeInTheDocument();
     expect(screen.getByPlaceholderText("email@company.com")).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
 
   it("non-owners get no tag form", () => {
     renderEditor({ canTag: false });
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     expect(screen.queryByTestId("speaker-tag-form")).not.toBeInTheDocument();
   });
 
@@ -66,7 +66,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
       proposal_id: null,
     });
     renderEditor();
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Alice" } });
     fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
       target: { value: "alice@x.com" },
@@ -92,7 +92,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
       proposal_id: "p1",
     });
     renderEditor();
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Bob" } });
     fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
       target: { value: "bob@x.com" },
@@ -110,7 +110,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
       proposal_id: "p1",
     });
     renderEditor();
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Bob" } });
     fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
       target: { value: "bob@x.com" },
@@ -138,7 +138,7 @@ describe("RefineEditor — VFTE speaker tagging", () => {
       proposal_id: "p1",
     });
     renderEditor();
-    fireEvent.click(screen.getByText("speaker_1"));
+    fireEvent.click(screen.getByText("Speaker 1"));
     fireEvent.change(screen.getByPlaceholderText("Full name"), { target: { value: "Bob" } });
     fireEvent.change(screen.getByPlaceholderText("email@company.com"), {
       target: { value: "bob@x.com" },

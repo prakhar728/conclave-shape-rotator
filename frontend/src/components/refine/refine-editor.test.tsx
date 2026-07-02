@@ -38,13 +38,13 @@ describe("RefineEditor", () => {
   it("renders segments with the confirmed speaker name, falling back to the label (F1b)", () => {
     renderEditor();
     expect(screen.getByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("speaker_2")).toBeInTheDocument();
+    expect(screen.getByText("Speaker 2")).toBeInTheDocument();
     expect(screen.getByText("DStack")).toBeInTheDocument();
   });
 
-  it("Task #41 — shows a per-segment 'play from here' control that seeks by segment_id", () => {
+  it("Task #41 — single-click a word seeks to that word's segment (audio available)", () => {
     const onSeekSegment = vi.fn();
-    render(
+    const { container } = render(
       <RefineEditor
         draft={makeDraft()}
         sessionId="s1"
@@ -52,15 +52,47 @@ describe("RefineEditor", () => {
         onSeekSegment={onSeekSegment}
       />,
     );
-    const seeks = screen.getAllByTestId("seek-segment");
-    expect(seeks).toHaveLength(2); // one per segment
-    fireEvent.click(seeks[1]);
+    const word = container.querySelector('[data-token="0"][data-segment="1"]')!;
+    fireEvent.click(word);
     expect(onSeekSegment).toHaveBeenCalledWith(1);
   });
 
-  it("Task #41 — renders no seek control when audio is unavailable (no onSeekSegment)", () => {
-    renderEditor(); // no onSeekSegment
-    expect(screen.queryByTestId("seek-segment")).toBeNull();
+  it("Task #41 — double-click a word opens the editor (does not just seek)", () => {
+    const onSeekSegment = vi.fn();
+    const { container } = render(
+      <RefineEditor
+        draft={makeDraft()}
+        sessionId="s1"
+        onDraftChange={vi.fn()}
+        onSeekSegment={onSeekSegment}
+      />,
+    );
+    const word = container.querySelector('[data-token="3"][data-segment="0"]')!;
+    fireEvent.doubleClick(word);
+    // The inline edit input for that token appears.
+    expect(container.querySelector('[data-token-input="3"]')).toBeInTheDocument();
+  });
+
+  it("Task #41 — with no audio, a single click edits the word (no seek control needed)", () => {
+    const { container } = renderEditor(); // no onSeekSegment
+    expect(screen.queryByTestId("seek-segment")).toBeNull(); // the old ▶ is gone
+    const word = container.querySelector('[data-token="0"][data-segment="0"]')!;
+    fireEvent.click(word);
+    expect(container.querySelector('[data-token-input="0"]')).toBeInTheDocument();
+  });
+
+  it("Playhead-follows-text — the active segment is highlighted", () => {
+    const { container } = render(
+      <RefineEditor
+        draft={makeDraft()}
+        sessionId="s1"
+        onDraftChange={vi.fn()}
+        activeSegmentId={1}
+      />,
+    );
+    const active = container.querySelector('[data-active="true"]');
+    expect(active).toBeInTheDocument();
+    expect(active).toHaveTextContent("sounds good"); // segment 1's tokens
   });
 
   it("applies the right token-state tints (F1c)", () => {
@@ -132,7 +164,7 @@ describe("RefineEditor", () => {
   it("shows speaker suggestions and assigns on chip click (F2c/FE-4)", async () => {
     const assignSpy = vi.spyOn(refine, "assignSpeaker").mockResolvedValue({ v2: makeDraft() });
     const { onChange } = renderEditor();
-    fireEvent.click(screen.getByText("speaker_2")); // open assign for segment 1
+    fireEvent.click(screen.getByText("Speaker 2")); // open assign for segment 1
     await waitFor(() => expect(document.querySelector('[data-speaker-chip="Carol"]')).toBeTruthy());
     fireEvent.click(document.querySelector('[data-speaker-chip="Carol"]')!);
     expect(assignSpy).toHaveBeenCalledWith("s1", 1, "Carol");

@@ -77,6 +77,28 @@ export default function MeetingPage({
   const seekTo = useCallback((seconds: number) => {
     playerRef.current?.seekTo(seconds);
   }, []);
+  // Playhead-follows-text: the transcript segment currently under the playhead.
+  // Mapped from the player's time; setState only fires when the index changes,
+  // so ~4×/sec time updates don't re-render the page (only segment boundaries do).
+  const [activeSegId, setActiveSegId] = useState<number | null>(null);
+  const onPlayerTime = useCallback(
+    (t: number) => {
+      const segs = segments;
+      if (!segs || !segs.length) return;
+      let idx: number | null = null;
+      let best = -Infinity;
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i].start;
+        if (s == null || s > t) continue;
+        if (s >= best) {
+          best = s;
+          idx = i;
+        }
+      }
+      setActiveSegId((prev) => (prev === idx ? prev : idx));
+    },
+    [segments],
+  );
   // Task #42 — owner hard-delete this meeting, then return to the dashboard.
   const [deleting, setDeleting] = useState(false);
   async function handleDelete() {
@@ -460,6 +482,7 @@ export default function MeetingPage({
                 isOwner={Boolean(meeting.is_owner)}
                 storeAudio={meeting.store_audio}
                 onAvailabilityChange={setAudioReady}
+                onTimeUpdate={onPlayerTime}
               />
             </div>
             {meeting.is_owner && draft && !preparing ? (
@@ -473,9 +496,10 @@ export default function MeetingPage({
                   onDraftChange={(d) => {
                     setDraft(d);
                   }}
-                  // Task #41 — seek from a segment's speaker row. The editor is
-                  // token-based (no per-segment start), so resolve segment_id →
-                  // the raw segment's start here (segment_id mirrors raw index).
+                  // Task #41 — single-click a word seeks the audio to that word's
+                  // segment; double-click opens the editor. The editor is token-based
+                  // (no per-segment start), so resolve segment_id → the raw segment's
+                  // start here (segment_id mirrors raw index).
                   onSeekSegment={
                     audioReady
                       ? (segmentId) => {
@@ -484,6 +508,8 @@ export default function MeetingPage({
                         }
                       : undefined
                   }
+                  // Playhead-follows-text: highlight the segment under the playhead.
+                  activeSegmentId={activeSegId}
                 />
                 <RefineActions
                   draft={draft}
@@ -505,6 +531,8 @@ export default function MeetingPage({
                 reloadKey={reloadKey}
                 // Task #41 — click a segment to seek+play, only when audio is available.
                 onSeek={audioReady ? seekTo : undefined}
+                // Playhead-follows-text: highlight the segment under the playhead.
+                activeSegmentIndex={activeSegId}
               />
             )}
           </div>

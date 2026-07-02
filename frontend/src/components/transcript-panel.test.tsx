@@ -138,3 +138,43 @@ describe("TranscriptPanel — click-to-seek (Task #41)", () => {
     expect(screen.queryByTestId("seek-segment")).toBeNull();
   });
 });
+
+describe("TranscriptPanel — speaker normalization + playhead follow", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mountPanel(
+    segments: TranscriptSegment[],
+    activeSegmentIndex?: number | null,
+  ) {
+    vi.spyOn(meetings, "transcript").mockResolvedValue({
+      session_id: "s1",
+      segment_count: segments.length,
+      segments,
+    });
+    return render(
+      <TranscriptPanel
+        sessionId="s1"
+        canView={true}
+        canTag={false}
+        activeSegmentIndex={activeSegmentIndex}
+      />,
+    );
+  }
+
+  it("normalizes a bare diarizer index to 'Speaker N'", async () => {
+    mountPanel([seg({ speaker: "2", text: "hi" })]);
+    expect(await screen.findByText("Speaker 2")).toBeInTheDocument();
+  });
+
+  it("highlights the active segment (playhead-follows-text)", async () => {
+    const { container } = mountPanel(
+      [seg({ text: "one", start: 0 }), seg({ text: "two", start: 5 })],
+      1,
+    );
+    await screen.findByText("two");
+    const active = container.querySelector('[data-active="true"]');
+    expect(active).toHaveTextContent("two");
+  });
+});

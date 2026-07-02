@@ -77,9 +77,13 @@ export const MeetingAudioPlayer = forwardRef<
     // <audio> metadata loads, false when the player self-hides / opts out). Lets
     // the meeting page make transcript segments seek-clickable only when useful.
     onAvailabilityChange?: (available: boolean) => void;
+    // Playhead-follows-text: the current playback time (seconds), on every
+    // `timeupdate` (~4×/sec). The meeting page maps it to the active segment and
+    // only re-renders when that segment changes, so this stays cheap.
+    onTimeUpdate?: (seconds: number) => void;
   }
 >(function MeetingAudioPlayer(
-  { sessionId, isOwner = false, storeAudio, onAvailabilityChange },
+  { sessionId, isOwner = false, storeAudio, onAvailabilityChange, onTimeUpdate },
   ref,
 ) {
   const [gone, setGone] = useState(false);
@@ -212,7 +216,11 @@ export const MeetingAudioPlayer = forwardRef<
         onError={() => setGone(true)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          const t = e.currentTarget.currentTime;
+          setCurrent(t);
+          onTimeUpdate?.(t); // playhead-follows-text
+        }}
         onLoadedMetadata={(e) => {
           setDuration(e.currentTarget.duration);
           onAvailabilityChange?.(true); // Task #41 — audio is playable/seekable

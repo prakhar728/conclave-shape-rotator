@@ -22,10 +22,11 @@
  */
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { ApiError, meetings as meetingsApi, type TranscriptSegment } from "@/lib/api";
+import { speakerLabel } from "@/lib/speakerLabel";
 
 type LoadState =
   | { kind: "loading" }
@@ -40,6 +41,7 @@ export function TranscriptPanel({
   canTag = false,
   reloadKey = 0,
   onSeek,
+  activeSegmentIndex = null,
 }: {
   sessionId: string;
   canView: boolean;
@@ -52,6 +54,8 @@ export function TranscriptPanel({
   // meeting audio player to that segment's start and plays. Undefined = no audio,
   // segments are not seek-clickable (no dead affordance).
   onSeek?: (seconds: number) => void;
+  // Playhead-follows-text: index of the segment currently under the playhead.
+  activeSegmentIndex?: number | null;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [openIdx, setOpenIdx] = useState<number | null>(null);
@@ -149,6 +153,7 @@ export function TranscriptPanel({
         busy={busy}
         err={err}
         onSeek={onSeek}
+        activeSegmentIndex={activeSegmentIndex}
       />
     </section>
   );
@@ -168,6 +173,7 @@ function Body({
   busy,
   err,
   onSeek,
+  activeSegmentIndex,
 }: {
   sessionId: string;
   state: LoadState;
@@ -182,7 +188,17 @@ function Body({
   busy: boolean;
   err: string | null;
   onSeek?: (seconds: number) => void;
+  activeSegmentIndex?: number | null;
 }) {
+  // Playhead-follows-text: scroll the active segment into view as audio plays.
+  const segRefs = useRef<Map<number, HTMLLIElement>>(new Map());
+  useEffect(() => {
+    if (activeSegmentIndex == null) return;
+    segRefs.current
+      .get(activeSegmentIndex)
+      ?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [activeSegmentIndex]);
+
   if (!canView) {
     return (
       <Note>
@@ -212,14 +228,26 @@ function Body({
     <ol className="flex flex-col gap-5">
       {state.segments.map((seg, idx) => {
         const pendingName = pending[seg.speaker];
-        const display = seg.speaker_name ?? seg.speaker;
+        // Normalize the raw diarizer label to "Speaker N" when there's no name.
+        const display = seg.speaker_name ?? speakerLabel(seg.speaker);
         // Task #3 — a recognized-but-not-yet-consented name to suggest. Only
         // offer it while the speaker is still anonymous and the host hasn't
         // already acted (no applied name, no in-flight tag of our own).
         const proposedName =
           !seg.speaker_name && !pendingName ? seg.proposed_name ?? null : null;
+        const isActive = idx === activeSegmentIndex;
         return (
-          <li key={idx}>
+          <li
+            key={idx}
+            ref={(el) => {
+              if (el) segRefs.current.set(idx, el);
+              else segRefs.current.delete(idx);
+            }}
+            data-active={isActive || undefined}
+            className={`-mx-2 rounded-md px-2 transition-colors ${
+              isActive ? "bg-accent/40" : ""
+            }`}
+          >
             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               {taggable ? (
                 <button

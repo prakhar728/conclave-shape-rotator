@@ -788,6 +788,37 @@ def _slice_wav(data: bytes, start: Optional[float], end: Optional[float]) -> byt
         return data
 
 
+def _audio_response(audio: bytes, request: Request):
+    """Serve WAV bytes with HTTP Range support so the `<audio>` element can SEEK
+    (Task #41). Without `Accept-Ranges`/206 partial content, `preload="metadata"`
+    can't jump to an unbuffered offset — setting `currentTime` silently no-ops,
+    which breaks both the click-to-seek ▶ and the waveform scrubber. A request
+    with no/invalid Range still gets the full 200 (+ `Accept-Ranges`)."""
+    from fastapi.responses import Response
+
+    total = len(audio)
+    rng = request.headers.get("range")
+    if not rng or not rng.strip().lower().startswith("bytes="):
+        return Response(content=audio, media_type="audio/wav",
+                        headers={"Accept-Ranges": "bytes"})
+    try:
+        spec = rng.split("=", 1)[1].split(",")[0].strip()
+        s, _, e = spec.partition("-")
+        start_b = int(s) if s else 0
+        end_b = int(e) if e else total - 1
+        end_b = min(end_b, total - 1)
+        if start_b < 0 or start_b > end_b or start_b >= total:
+            raise ValueError
+    except ValueError:
+        return Response(status_code=416, media_type="audio/wav",
+                        headers={"Content-Range": f"bytes */{total}", "Accept-Ranges": "bytes"})
+    chunk = audio[start_b:end_b + 1]
+    return Response(content=chunk, status_code=206, media_type="audio/wav",
+                    headers={"Accept-Ranges": "bytes",
+                             "Content-Range": f"bytes {start_b}-{end_b}/{total}",
+                             "Content-Length": str(len(chunk))})
+
+
 @router.get("/sessions/{session_id}/audio")
 def get_session_audio(
     session_id: str,
@@ -858,9 +889,11 @@ def get_session_audio(
     if not audio:
         raise HTTPException(status_code=404, detail="no stored audio for this meeting")
     if start is not None or end is not None:
-        audio = _slice_wav(audio, start, end)
+        # A bounded per-segment clip (#3 / segment player) — no seeking needed.
+        return Response(content=_slice_wav(audio, start, end), media_type="audio/wav")
 
-    return Response(content=audio, media_type="audio/wav")
+    # The full recording — Range-enabled so the player can seek (Task #41).
+    return _audio_response(audio, request)
 
 
 @router.delete("/sessions/{session_id}/audio")

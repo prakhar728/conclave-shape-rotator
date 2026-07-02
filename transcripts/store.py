@@ -515,20 +515,31 @@ def approve_v2(session_id: str) -> TranscriptV2:
 
 
 def v2_segments_or_raw(session_id: str) -> list[dict]:
-    """Segment source for the KB build: the **approved** v2 (corrected tokens +
-    confirmed speaker) when present, else the immutable raw.
+    """Segment source for the KB build + the transcript DTO: the **approved** v2
+    (corrected tokens + confirmed speaker) when present, else the immutable raw.
 
     Draft (un-approved) v2 is deliberately NOT used — the KB only ever builds
-    from human-approved corrections. Returns `[{speaker, text}]`, the shape
-    `kb_pipeline.index_session` already consumes.
-    """
-    v2 = load_v2(session_id)
-    if v2 is not None and v2.status == "approved":
-        return [
-            {"speaker": (seg.speaker_name or seg.speaker_label), "text": seg.text}
-            for seg in v2.segments
-        ]
+    from human-approved corrections. Returns `[{speaker, text, start, end}]`; the
+    KB (`kb_pipeline.index_session`) reads `speaker`/`text` and ignores the rest,
+    while `to_transcript` needs `start`/`end` for the timestamp display, the
+    per-segment clip player, and click-to-seek (Task #41). `V2Segment` itself has
+    no timestamps, so the approved-v2 path carries them from the raw segment at
+    the matching index (v2 `segment_id` mirrors the raw index)."""
     session = load_session(session_id)
     if session is None:
         return []
-    return [{"speaker": s.speaker, "text": s.text} for s in session.raw_diarization]
+    raw = session.raw_diarization
+    v2 = load_v2(session_id)
+    if v2 is not None and v2.status == "approved":
+        out = []
+        for seg in v2.segments:
+            r = raw[seg.segment_id] if 0 <= seg.segment_id < len(raw) else None
+            out.append({
+                "speaker": (seg.speaker_name or seg.speaker_label),
+                "text": seg.text,
+                "start": r.start if r else None,
+                "end": r.end if r else None,
+            })
+        return out
+    return [{"speaker": s.speaker, "text": s.text, "start": s.start, "end": s.end}
+            for s in raw]

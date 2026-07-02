@@ -1,10 +1,10 @@
 "use client";
 
-import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
 import { meetings as meetingsApi, refine, type V2Annotation, type V2Draft } from "@/lib/api";
+import { speakerLabel } from "@/lib/speakerLabel";
 
 import { tokenTint } from "./token-tints";
 
@@ -33,11 +33,14 @@ type Props = {
   workspaceId?: string | null;
   canTag?: boolean;
   resolvedSpeakers?: Record<string, unknown>;
-  // Task #41 — when set (audio available), a per-segment "play from here" control
-  // seeks the audio to that segment. The editor is token-based (words are for
-  // editing/tagging), so seek lives on an explicit affordance, not the word click.
-  // The page resolves segment_id → the raw start time (segment_id mirrors raw index).
+  // Task #41 — when set (audio available): SINGLE-click a word seeks the audio to
+  // that word's segment (+ play); DOUBLE-click opens the inline editor. No debounce
+  // — a double-click harmlessly seeks then edits. When absent (no audio), a single
+  // click edits, as before. The page resolves segment_id → the raw start time.
   onSeekSegment?: (segmentId: number) => void;
+  // Playhead-follows-text: the segment id currently under the audio playhead,
+  // highlighted + scrolled into view.
+  activeSegmentId?: number | null;
 };
 
 export function RefineEditor({
@@ -48,6 +51,7 @@ export function RefineEditor({
   canTag = false,
   resolvedSpeakers,
   onSeekSegment,
+  activeSegmentId = null,
 }: Props) {
   // The single SELECTED token. Clicking ANY word selects it and opens an inline panel
   // (edit + tag) — so tagging is available on every word (including ones you just
@@ -67,6 +71,15 @@ export function RefineEditor({
   const [tagBusy, setTagBusy] = useState(false);
   const [tagErr, setTagErr] = useState<string | null>(null);
   const taggable = Boolean(canTag && workspaceId);
+
+  // Playhead-follows-text: keep per-segment DOM refs so the active one can be
+  // scrolled into view. Skip the scroll while the user is editing a word so it
+  // never yanks the page out from under them.
+  const segRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  useEffect(() => {
+    if (activeSegmentId == null || selected) return;
+    segRefs.current.get(activeSegmentId)?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [activeSegmentId, selected]);
 
   useEffect(() => {
     if (resolvedSpeakers) setResolved(resolvedSpeakers);
@@ -97,11 +110,12 @@ export function RefineEditor({
   };
 
   // Display name precedence: a manual v2 assignment wins; else the VFTE-resolved
-  // identity for this label; else the raw diarizer label.
+  // identity for this label; else a normalized "Speaker N" from the raw diarizer
+  // label (engines emit "0"/"speaker0"/"Speaker 0" — show one consistent form).
   const displayName = (seg: V2Draft["segments"][number]): string =>
     seg.speaker_name ??
     (resolved[seg.speaker_label] as { name?: string } | undefined)?.name ??
-    seg.speaker_label;
+    speakerLabel(seg.speaker_label);
 
   // Tag a whole speaker (by label) with name+email → VFTE consent binding. Confirmed
   // self/dev tags flip the name in place; tagging someone else is "pending" until they
@@ -214,8 +228,19 @@ export function RefineEditor({
       ) : null}
       {draft.segments.map((seg) => {
         const states = statesForSegment(draft.annotations, seg.segment_id);
+        const isActive = seg.segment_id === activeSegmentId;
         return (
-          <div key={seg.segment_id}>
+          <div
+            key={seg.segment_id}
+            ref={(el) => {
+              if (el) segRefs.current.set(seg.segment_id, el);
+              else segRefs.current.delete(seg.segment_id);
+            }}
+            data-active={isActive || undefined}
+            className={`-mx-2 rounded-md px-2 transition-colors ${
+              isActive ? "bg-accent/40" : ""
+            }`}
+          >
             <div className="mb-0.5 flex items-center gap-2">
               <button
                 data-speaker={seg.segment_id}
@@ -228,19 +253,6 @@ export function RefineEditor({
                 <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
                   pending: {pending[seg.speaker_label]}
                 </span>
-              ) : null}
-              {onSeekSegment ? (
-                <button
-                  type="button"
-                  data-testid="seek-segment"
-                  data-segment={seg.segment_id}
-                  onClick={() => onSeekSegment(seg.segment_id)}
-                  title="Play from here"
-                  aria-label="Play from here"
-                  className="text-muted-foreground/60 transition-colors hover:text-foreground"
-                >
-                  <Play className="size-3" fill="currentColor" strokeWidth={0} />
-                </button>
               ) : null}
             </div>
 
@@ -370,8 +382,17 @@ export function RefineEditor({
                       data-token={i}
                       data-segment={seg.segment_id}
                       data-state={state ?? ""}
-                      onClick={() => setSelected({ seg: seg.segment_id, tok: i })}
-                      className={`tok cursor-pointer rounded-none px-0.5 ${tokenTint(state)}`}
+                      // With audio: single-click SEEKS to this word's segment, double-click
+                      // EDITS. Without audio: single-click edits (as before). No debounce —
+                      // a double-click seeks (harmless) then edits.
+                      onClick={() =>
+                        onSeekSegment
+                          ? onSeekSegment(seg.segment_id)
+                          : setSelected({ seg: seg.segment_id, tok: i })
+                      }
+                      onDoubleClick={() => setSelected({ seg: seg.segment_id, tok: i })}
+                      title={onSeekSegment ? "Click to play from here · double-click to edit" : undefined}
+                      className={`tok cursor-pointer rounded-none px-0.5 transition-colors hover:bg-accent/60 ${tokenTint(state)}`}
                     >
                       {tok}
                     </span>{" "}
