@@ -342,54 +342,10 @@ function Body({
                 {turn.text}
               </p>
             )}
-            {turn.start != null && turn.end != null ? (
-              <AudioSegmentPlayer sessionId={sessionId} start={turn.start} end={turn.end} />
-            ) : null}
           </li>
         );
       })}
     </ol>
-  );
-}
-
-/**
- * Per-segment clip player (Task #30). Lazily reveals an <audio> element pointed at the
- * decrypt-on-read `?start=&end=` clip endpoint — preload="none" so nothing is fetched
- * until the user plays. Cookie auth is same-origin. This is the component #3 reuses in
- * the "Is this you?" box. Only rendered when the segment has a start AND end time.
- */
-function AudioSegmentPlayer({
-  sessionId,
-  start,
-  end,
-}: {
-  sessionId: string;
-  start: number;
-  end: number;
-}) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="mt-2 inline-flex items-center gap-1 text-[0.7rem] text-muted-foreground transition hover:text-foreground"
-        title="Play this segment"
-      >
-        ▶ Play clip
-      </button>
-    );
-  }
-  return (
-    <audio
-      controls
-      autoPlay
-      preload="none"
-      src={meetingsApi.audioUrl(sessionId, { start, end })}
-      className="mt-2 h-8 w-full max-w-xs"
-    >
-      Your browser does not support audio playback.
-    </audio>
   );
 }
 
