@@ -46,12 +46,15 @@ export function OwnerControls({
   initialVisibility,
   initialSharedToWorkspace = false,
   initialOwnerOnly = false,
+  bare = false,
 }: {
   sessionId: string;
   initialVisibility: Visibility;
   // Task #32 — whole-workspace share + confidential lock state.
   initialSharedToWorkspace?: boolean;
   initialOwnerOnly?: boolean;
+  // `bare` drops the outer card (the caller — e.g. a popover — frames it).
+  bare?: boolean;
 }) {
   const [visibility, setVisibility] = useState<Visibility>(initialVisibility);
   const [shares, setShares] = useState<MeetingShare[] | null>(null);
@@ -155,7 +158,7 @@ export function OwnerControls({
   }
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-card p-5">
+    <section className={bare ? "" : "mt-8 rounded-lg border border-border bg-card p-5"}>
       <div className="flex items-center justify-between gap-4">
         <div>
           <h2 className="text-sm font-medium">Sharing</h2>
@@ -264,7 +267,7 @@ export function OwnerControls({
                     {sharedArtifacts(s).map((label) => (
                       <span
                         key={label}
-                        className="rounded bg-muted px-1.5 py-0.5"
+                        className="rounded-none bg-muted px-1.5 py-0.5"
                       >
                         {label}
                       </span>

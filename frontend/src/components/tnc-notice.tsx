@@ -29,7 +29,7 @@ export function TncNotice() {
   if (!t) return null;
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-card p-5">
+    <section className="mt-8 rounded-none border border-border bg-card p-5">
       <h2 className="text-sm font-medium">Terms &amp; Conditions</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         Version <span className="font-mono">{t.version}</span>

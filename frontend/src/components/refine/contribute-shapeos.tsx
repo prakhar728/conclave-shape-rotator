@@ -71,14 +71,14 @@ export function ContributeShapeOS({
             setErr(null);
             setConfirming(true);
           }}
-          className="rounded border border-border px-4 py-1.5 text-sm font-semibold transition-colors hover:border-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-none border border-border px-4 py-1.5 text-sm font-semibold transition-colors hover:border-foreground hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-40"
         >
           Contribute to Shape Rotator OS
         </button>
       ) : (
         <div
           data-testid="contribute-shapeos-confirm"
-          className="rounded-xl border border-border bg-card p-4"
+          className="rounded-none border border-border bg-card p-4"
         >
           <p className="text-xs font-semibold uppercase tracking-wide text-foreground">
             Share with the Shape Rotator OS cohort?
@@ -93,14 +93,14 @@ export function ContributeShapeOS({
               data-testid="contribute-shapeos-confirm-btn"
               disabled={busy}
               onClick={contribute}
-              className="rounded bg-foreground px-4 py-1.5 text-sm font-semibold text-background disabled:opacity-40"
+              className="rounded-none bg-foreground px-4 py-1.5 text-sm font-semibold text-background disabled:opacity-40"
             >
               {busy ? "Posting…" : "Yes, contribute"}
             </button>
             <button
               disabled={busy}
               onClick={() => setConfirming(false)}
-              className="rounded border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
+              className="rounded-none border border-border px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground disabled:opacity-40"
             >
               Cancel
             </button>

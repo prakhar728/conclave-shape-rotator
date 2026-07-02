@@ -197,7 +197,7 @@ export function RefineEditor({
       {saveError ? (
         <div
           data-testid="save-error"
-          className="flex items-center justify-between rounded border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          className="flex items-center justify-between rounded-none border border-destructive bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
           <span>{saveError}</span>
           <button onClick={() => setSaveError(null)} className="ml-2 underline">
@@ -208,17 +208,17 @@ export function RefineEditor({
       {draft.segments.map((seg) => {
         const states = statesForSegment(draft.annotations, seg.segment_id);
         return (
-          <div key={seg.segment_id} className="rounded-md border border-border p-3">
-            <div className="mb-1 flex items-center gap-2">
+          <div key={seg.segment_id}>
+            <div className="mb-0.5 flex items-center gap-2">
               <button
                 data-speaker={seg.segment_id}
                 onClick={() => setAssigning(assigning === seg.segment_id ? null : seg.segment_id)}
-                className="text-xs font-bold uppercase tracking-wide text-muted-foreground underline-offset-2 hover:underline"
+                className="text-sm font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 transition-colors hover:decoration-foreground"
               >
                 {displayName(seg)}
               </button>
               {pending[seg.speaker_label] ? (
-                <span className="rounded-full border border-amber-500/60 px-2 py-0.5 text-[0.65rem] text-amber-600">
+                <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
                   pending: {pending[seg.speaker_label]}
                 </span>
               ) : null}
@@ -235,7 +235,7 @@ export function RefineEditor({
                         key={name}
                         data-speaker-chip={name}
                         onClick={() => assignSpeaker(seg.segment_id, name)}
-                        className="rounded-full border border-border px-2 py-0.5 text-xs hover:bg-accent"
+                        className="rounded-md border border-border px-2 py-0.5 text-xs hover:bg-secondary"
                       >
                         {name}
                       </button>
@@ -264,7 +264,7 @@ export function RefineEditor({
                     <span
                       key={i}
                       data-token-edit={i}
-                      className="relative mx-0.5 inline-flex items-baseline gap-1 rounded bg-accent/50 px-1 align-baseline ring-1 ring-foreground/30"
+                      className="relative mx-0.5 inline-flex items-baseline gap-1 rounded-none bg-accent/50 px-1 align-baseline ring-1 ring-foreground/30"
                       onBlur={(e) => {
                         // Only close/commit when focus leaves the WHOLE panel — moving
                         // between the input, the tag menu, and the vocab dropdown must not dismiss it.
@@ -277,7 +277,7 @@ export function RefineEditor({
                         autoFocus
                         value={editValue}
                         data-token-input={i}
-                        className="w-24 rounded border border-foreground px-1 text-sm"
+                        className="w-24 rounded-none border border-foreground px-1 text-sm"
                         onChange={(e) => {
                           const val = e.target.value;
                           setEditValue(val);
@@ -301,7 +301,7 @@ export function RefineEditor({
                       {vocabHints.length > 0 && (
                         <span
                           data-testid="vocab-suggestions"
-                          className="absolute left-0 top-full z-10 mt-0.5 flex flex-col rounded border border-border bg-background shadow"
+                          className="absolute left-0 top-full z-10 mt-0.5 flex flex-col rounded-none border border-border bg-background"
                         >
                           {vocabHints.map((term) => (
                             <button
@@ -331,7 +331,7 @@ export function RefineEditor({
                           if (!e.target.value) return;
                           commitToken(seg.segment_id, i, editValue, e.target.value);
                         }}
-                        className="rounded border border-dashed border-border text-[10px] text-muted-foreground"
+                        className="rounded-none border border-dashed border-border text-[10px] text-muted-foreground"
                       >
                         <option value="">tag…</option>
                         {ENTITY_TYPES.map((t) => (
@@ -351,7 +351,7 @@ export function RefineEditor({
                       data-segment={seg.segment_id}
                       data-state={state ?? ""}
                       onClick={() => setSelected({ seg: seg.segment_id, tok: i })}
-                      className={`tok cursor-pointer rounded px-0.5 ${tokenTint(state)}`}
+                      className={`tok cursor-pointer rounded-none px-0.5 ${tokenTint(state)}`}
                     >
                       {tok}
                     </span>{" "}

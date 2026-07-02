@@ -77,7 +77,7 @@ export function DataExportControl() {
   }
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-card p-5">
+    <section className="mt-8 rounded-none border border-border bg-card p-5">
       <h2 className="text-sm font-medium">Download my data</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         Export a ZIP of everything Conclave holds for the meetings you own —
@@ -92,7 +92,7 @@ export function DataExportControl() {
           checked={includeAudio}
           onChange={(e) => setIncludeAudio(e.target.checked)}
           disabled={busy}
-          className="h-4 w-4 rounded border-border"
+          className="h-4 w-4 rounded-none border-border"
         />
         Include audio recordings (larger; prepared in the background)
       </label>

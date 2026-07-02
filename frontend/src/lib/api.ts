@@ -114,6 +114,21 @@ export type MeResponse = {
   workspace: Workspace | null;
 };
 
+// --- Attestation (TDX) ------------------------------------------------------
+// The backend returns a real hex TDX quote inside a Phala CVM, or a
+// "stub_attestation_quote_*" string when not in a TEE (local dev) or when the
+// dstack agent is unreachable. The UI must render honestly off that signal.
+export type Attestation = { quote: string; verify_url: string };
+
+export const attestation = {
+  get: () => apiFetch<Attestation>("/api/attestation"),
+};
+
+/** True only for a real hardware quote (not a local/unreachable stub). */
+export function isAttested(a: Attestation | null | undefined): boolean {
+  return !!a?.quote && !a.quote.startsWith("stub_");
+}
+
 export const auth = {
   sendOtp: (email: string) =>
     apiFetch<{ ok: boolean }>("/api/auth/v1/send-otp", {

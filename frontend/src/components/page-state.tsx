@@ -1,12 +1,12 @@
 /**
  * Shared full-page fetch states (UI-NOW.md §3, auth-loading/empty/error
  * P1): every fetch-gated page used to hand-roll a centered "Loading…" /
- * destructive paragraph. One emerald-spinner vocabulary instead, so the
- * app feels coherent while it talks to the enclave.
+ * destructive paragraph. One spinner vocabulary instead, so the app feels
+ * coherent while it talks to the enclave.
  */
 import type { ReactNode } from "react";
 
-/** Emerald ring spinner — quiet, on-brand, no dependency. */
+/** Ring spinner — quiet, on-brand, no dependency. */
 export function Spinner({ className = "size-4" }: { className?: string }) {
   return (
     <span

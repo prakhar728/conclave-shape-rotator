@@ -8,6 +8,7 @@
  */
 "use client";
 
+import { Settings } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -88,9 +89,12 @@ export default function SettingsPage() {
   return (
     <AppShell user={me.user}>
       <main className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <Settings className="size-6 shrink-0 text-muted-foreground" aria-hidden />
+          Settings
+        </h1>
 
-        <section className="mt-8 rounded-lg border border-border bg-card p-5">
+        <section className="mt-8 rounded-none border border-border bg-card p-5">
           <h2 className="text-sm font-medium">Transcript retention</h2>
           <p className="mt-1 text-xs text-muted-foreground">
             Choose how long to keep the raw transcript of your meetings. When a
@@ -109,7 +113,7 @@ export default function SettingsPage() {
             }}
             disabled={busy}
             aria-label="Default transcript retention"
-            className="mt-4 h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+            className="mt-4 h-9 w-full rounded-none border border-border bg-background px-2 text-sm text-foreground"
           >
             {RETENTION_OPTIONS.map((o) => (
               <option key={String(o.value)} value={o.value === null ? "null" : String(o.value)}>

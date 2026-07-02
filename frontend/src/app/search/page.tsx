@@ -3,6 +3,7 @@
  */
 "use client";
 
+import { Search } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
@@ -20,6 +21,17 @@ import {
   type MeResponse,
   type SearchResult,
 } from "@/lib/api";
+
+// Starter queries shown on the empty search page — click to run. Phrased as the
+// natural things people look up across meetings; they double as good /ask prompts.
+const EXAMPLE_QUERIES = [
+  "action items",
+  "decisions we made",
+  "open questions",
+  "next steps",
+  "deadlines mentioned",
+  "what did we say about pricing",
+];
 
 export default function SearchPage() {
   return (
@@ -91,7 +103,7 @@ function SearchPageInner() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-10">
         <form
           className="mb-8"
           onSubmit={(e) => {
@@ -104,7 +116,7 @@ function SearchPageInner() {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             placeholder="Search across your meetings…"
-            className="h-12 w-full rounded-none border-2 border-foreground bg-background px-4 text-sm font-semibold tracking-wide outline-none transition-all shadow-[3px_3px_0px_0px_rgba(0,0,0,1)] dark:shadow-[3px_3px_0px_0px_rgba(255,255,255,1)] focus:shadow-[1px_1px_0px_0px_rgba(0,0,0,1)] dark:focus:shadow-[1px_1px_0px_0px_rgba(255,255,255,1)] focus:translate-x-0.5 focus:translate-y-0.5"
+            className="h-12 w-full rounded-none border-2 border-foreground bg-background px-4 text-sm font-semibold tracking-wide outline-none transition-all focus:translate-x-0.5 focus:translate-y-0.5"
             autoFocus
           />
         </form>
@@ -115,7 +127,7 @@ function SearchPageInner() {
             {answer === null ? (
               <button
                 onClick={runAsk}
-                className="rounded-none border border-foreground bg-primary px-5 py-3 text-xs font-bold uppercase tracking-widest text-primary-foreground shadow-sm transition-all hover:bg-muted-foreground active:scale-98"
+                className="rounded-none border border-foreground bg-primary px-5 py-3 text-xs font-bold uppercase tracking-widest text-primary-foreground transition-all hover:bg-muted-foreground active:scale-98"
               >
                 ✨ Ask your meetings this question
               </button>
@@ -163,13 +175,31 @@ function SearchPageInner() {
         ) : null}
 
         {q.trim() === "" ? (
-          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
-            Type a query to search across your meetings.
-          </p>
+          <div>
+            <p className="mb-3 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Type a query, or try one of these
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {EXAMPLE_QUERIES.map((ex) => (
+                <button
+                  key={ex}
+                  type="button"
+                  onClick={() => {
+                    setInput(ex);
+                    router.push(`/search?q=${encodeURIComponent(ex)}`);
+                  }}
+                  className="rounded-none border border-border bg-card px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground hover:text-foreground"
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
         ) : results === null ? (
           <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Searching…</p>
         ) : results.length === 0 ? (
           <div className="rounded-none border border-dashed border-border p-10 text-center">
+            <Search className="mx-auto mb-3 size-8 text-muted-foreground/40" aria-hidden />
             <p className="text-sm font-bold uppercase tracking-wide">No results for “{q}”</p>
             <p className="mt-1.5 text-xs text-muted-foreground uppercase tracking-wider font-semibold">
               Search covers transcripts of meetings in your workspace.
@@ -181,7 +211,7 @@ function SearchPageInner() {
               {results.length} result{results.length === 1 ? "" : "s"} for “{q}”
             </p>
             {/* Brutalist list outline */}
-            <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
+            <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card">
               {results.map((r) => (
                 <li key={r.chunk_id}>
                   <Link

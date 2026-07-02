@@ -45,8 +45,8 @@ describe("MeetingAudioPlayer", () => {
     const { rerender } = render(
       <MeetingAudioPlayer sessionId="s9" storeAudio={true} isOwner={true} />,
     );
-    expect(screen.getByText("Delete audio")).toBeTruthy();
+    expect(screen.getByLabelText("Delete audio")).toBeTruthy();
     rerender(<MeetingAudioPlayer sessionId="s9" storeAudio={true} isOwner={false} />);
-    expect(screen.queryByText("Delete audio")).toBeNull();
+    expect(screen.queryByLabelText("Delete audio")).toBeNull();
   });
 });

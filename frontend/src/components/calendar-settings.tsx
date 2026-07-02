@@ -166,7 +166,7 @@ export function CalendarSettings() {
   }
 
   return (
-    <section className="mt-8 rounded-lg border border-border bg-card p-5">
+    <section className="mt-8 rounded-none border border-border bg-card p-5">
       <h2 className="text-sm font-medium">Google Calendar</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         Connect your calendar so Conclave can automatically send a recording bot
@@ -195,7 +195,7 @@ export function CalendarSettings() {
             </Button>
           </div>
 
-          <label className="mt-4 flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2.5">
+          <label className="mt-4 flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2.5">
             <span className="min-w-0">
               <span className="block text-xs font-medium text-foreground">
                 Auto-record all my meetings
@@ -240,7 +240,7 @@ export function CalendarSettings() {
                 No upcoming meetings found.
               </p>
             ) : (
-              <ul className="mt-2 divide-y divide-border rounded-md border border-border">
+              <ul className="mt-2 divide-y divide-border rounded-none border border-border">
                 {events.map((ev) => {
                   const hasMeet = Boolean(ev.hangout_link);
                   return (

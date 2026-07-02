@@ -37,7 +37,7 @@ export function RefineDebugPanel({
   return (
     <aside
       data-testid="debug-panel"
-      className="mt-6 rounded-md border border-dashed border-border bg-muted/30 p-3 text-xs"
+      className="mt-6 rounded-none border border-dashed border-border bg-muted/30 p-3 text-xs"
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="font-bold uppercase tracking-wide text-muted-foreground">
@@ -46,7 +46,7 @@ export function RefineDebugPanel({
         <button
           data-testid="debug-refresh"
           onClick={load}
-          className="rounded border border-border px-2 py-0.5 hover:bg-accent"
+          className="rounded-none border border-border px-2 py-0.5 hover:bg-accent"
         >
           Refresh
         </button>

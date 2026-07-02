@@ -9,6 +9,7 @@
  */
 "use client";
 
+import { HelpCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -67,7 +68,8 @@ export default function QuestionsPage() {
     <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
+            <HelpCircle className="size-6 shrink-0 text-muted-foreground" aria-hidden />
             Open questions
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -101,7 +103,7 @@ export default function QuestionsPage() {
                             {q.said_by.map((name) => (
                               <span
                                 key={name}
-                                className="rounded-full border border-border px-2 py-0.5 text-foreground"
+                                className="rounded-none border border-border px-2 py-0.5 text-foreground"
                               >
                                 {name}
                               </span>
@@ -131,7 +133,8 @@ export default function QuestionsPage() {
 
 function EmptyState({ hasWorkspace }: { hasWorkspace: boolean }) {
   return (
-    <div className="rounded-lg border border-dashed border-border p-10 text-center">
+    <div className="rounded-none border border-dashed border-border p-10 text-center">
+      <HelpCircle className="mx-auto mb-3 size-8 text-muted-foreground/40" aria-hidden />
       <p className="text-sm font-medium">You&apos;re all caught up</p>
       <p className="mt-1 text-xs text-muted-foreground">
         {hasWorkspace

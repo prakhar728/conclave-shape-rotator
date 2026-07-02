@@ -8,6 +8,7 @@
  */
 "use client";
 
+import { Tags } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -84,9 +85,12 @@ export default function EntitiesPage() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">Entities</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
+            <Tags className="size-6 shrink-0 text-muted-foreground" aria-hidden />
+            Entities
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {visible === null
               ? "Loading…"
@@ -99,13 +103,13 @@ export default function EntitiesPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Filter by name…"
-            className="h-8 w-48 rounded-md border border-border bg-background px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="h-8 w-48 rounded-none border border-border bg-background px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
           />
           {TYPES.map((t) => (
             <button
               key={t}
               onClick={() => setTypeFilter(typeFilter === t ? null : t)}
-              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+              className={`rounded-none border px-3 py-1 text-xs capitalize transition-colors ${
                 typeFilter === t
                   ? entityTint(t)
                   : "border-border text-muted-foreground hover:text-foreground"
@@ -119,7 +123,8 @@ export default function EntitiesPage() {
         {visible === null ? (
           <p className="text-sm text-muted-foreground">Loading entities…</p>
         ) : visible.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <div className="rounded-none border border-dashed border-border p-10 text-center">
+            <Tags className="mx-auto mb-3 size-8 text-muted-foreground/40" aria-hidden />
             <p className="text-sm font-medium">No entities yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Entities appear here once the knowledge pipeline processes
@@ -127,9 +132,9 @@ export default function EntitiesPage() {
             </p>
           </div>
         ) : (
-          /* Editorial Vault: compact hairline ledger rows; the type chip
+          /* Compact hairline ledger rows: the type chip
              carries the entity color language, counts go mono. */
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card">
             {visible.map((e) => (
               <li key={e.id}>
                 <Link
@@ -138,7 +143,7 @@ export default function EntitiesPage() {
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span
-                      className={`shrink-0 rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(e.category)}`}
+                      className={`shrink-0 rounded-none border px-2 py-0.5 text-xs capitalize ${entityTint(e.category)}`}
                     >
                       {e.category}
                     </span>

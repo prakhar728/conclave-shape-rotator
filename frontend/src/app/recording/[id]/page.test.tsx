@@ -97,7 +97,11 @@ describe("RecordingPage", () => {
       storeAudio: true,
     };
     renderPage();
-    await waitFor(() => expect(screen.getByText("Recording")).toBeInTheDocument());
+    // The AIVoiceInput spinner is both the recording indicator and the stop
+    // control (no separate "RECORDING" headline anymore).
+    await waitFor(() =>
+      expect(screen.getByLabelText("Stop recording")).toBeInTheDocument(),
+    );
     expect(screen.getByText("hi")).toBeInTheDocument();
     // Owner drives from the provider WS — no duplicate SSE subscription.
     expect(live.open).not.toHaveBeenCalled();

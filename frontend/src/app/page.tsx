@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowDown, Check } from "lucide-react";
+import { ArrowDown } from "lucide-react";
 
 import { Wordmark } from "@/components/wordmark";
 
@@ -40,11 +40,11 @@ export default function Home() {
             {/* Left Column: Big Headlines */}
             <div className="lg:col-span-12 flex flex-col justify-between">
               <div>
-                {/* Massive Typography matching Screenshot 1 */}
-                <h1 className="font-heading text-6xl font-black leading-[0.9] tracking-tighter text-foreground sm:text-7xl md:text-8xl lg:text-[7.5rem] uppercase">
-                  *Ideas Worth<br />
-                  <span className="text-muted-foreground/30">Keeping</span><br />
-                  Secret&reg;
+                {/* Hero headline */}
+                <h1 className="font-heading text-4xl font-black leading-[0.9] tracking-tighter text-foreground sm:text-5xl md:text-6xl lg:text-7xl uppercase">
+                  Total Recall<br />
+                  <span className="text-muted-foreground/30">Zero</span><br />
+                  Exposure&reg;
                 </h1>
               </div>
 
@@ -52,10 +52,10 @@ export default function Home() {
               <div className="mt-16 flex flex-col gap-8 sm:flex-row sm:items-end justify-between">
                 <div className="max-w-md">
                   <p className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-1">
-                    Conclave &bull; Privacy-first knowledge layer
+                    Conclave &bull; Confidential team memory
                   </p>
                   <p className="text-lg font-medium leading-relaxed text-foreground">
-                    Invite the bot, get transcripts, obligations, and a searchable memory of everything said — processed entirely inside an attested hardware enclave. Not even the operator can see it.
+                    Every conversation, whether a meeting bot or a room mic, becomes private, searchable team memory: transcripts, decisions, obligations, a knowledge graph. Processed inside an attested TEE where not even the operator can read it.
                   </p>
                   
                   <div className="mt-8 flex flex-wrap gap-4">
@@ -76,7 +76,7 @@ export default function Home() {
 
                 <div className="flex flex-col items-center sm:items-end gap-3 self-start sm:self-auto">
                   <span className="text-xs font-bold tracking-widest uppercase text-muted-foreground">(SCROLL)</span>
-                  <div className="flex h-14 w-14 items-center justify-center rounded-full border border-border bg-card shadow-sm transition hover:bg-secondary">
+                  <div className="flex h-14 w-14 items-center justify-center rounded-none border border-border bg-card transition hover:bg-secondary">
                     <ArrowDown className="h-6 w-6 text-foreground stroke-[2.5]" />
                   </div>
                 </div>
@@ -94,17 +94,17 @@ export default function Home() {
           <div className="grid grid-cols-1 gap-12 lg:grid-cols-12 lg:gap-8">
             <div className="lg:col-span-4">
               <h2 className="text-xs font-bold tracking-widest uppercase text-muted-foreground">
-                Think bigger with us.
+                Not a notetaker.
               </h2>
             </div>
             
             <div className="lg:col-span-8">
               <p className="font-heading text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-4xl md:text-5xl">
-                Align your organization and brand around the future you&apos;re building. Privacy is not a promise, it&apos;s a cryptographic certainty.
+                Conclave is confidential team memory. It remembers every conversation, turns it into decisions and obligations you can act on, and proves no one outside your team can read a word.
               </p>
-              
+
               <p className="mt-6 text-base leading-relaxed text-muted-foreground md:text-lg">
-                Conclave partners with security-conscious leaders, engineering teams, and enterprises to capture knowledge without risking leakage. We deliver high-fidelity meeting memory, action indicators, and searchable summaries under a strict zero-knowledge architecture.
+                Built for teams that can&apos;t afford a leak: legal, journalism, and anyone handling privileged conversations. Privacy here isn&apos;t a policy; it&apos;s enforced in hardware and verifiable with cryptographic proofs.
               </p>
             </div>
           </div>
@@ -116,17 +116,17 @@ export default function Home() {
             <div className="mb-12 flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2">
-                  OUR CAPABILITIES & FEATURE SET
+                  HOW CONCLAVE WORKS
                 </p>
                 <h3 className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl">
-                  Features <span className="text-muted-foreground/35">Overview</span>
+                  Three <span className="text-muted-foreground/35">Layers</span>
                 </h3>
               </div>
               <Link
                 href="/meeting/example-conclave-demo"
                 className="text-xs font-bold tracking-widest uppercase border-b border-foreground pb-0.5 self-start md:self-auto hover:text-muted-foreground hover:border-muted-foreground transition-all"
               >
-                Read all articles &rarr;
+                Browse an example &rarr;
               </Link>
             </div>
 
@@ -134,54 +134,54 @@ export default function Home() {
               {/* Feature 1 */}
               <div className="border border-border bg-card p-8 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-2">
                 <div>
-                  <div className="mb-6 inline-block rounded-full bg-yellow-100 px-3 py-1 text-xs font-bold text-yellow-800 tracking-wide uppercase">
-                    Core Module
+                  <div className="mb-6 inline-block rounded-none bg-signal-warn/15 px-3 py-1 text-xs font-bold text-signal-warn tracking-wide uppercase">
+                    Capture
                   </div>
                   <h4 className="font-heading text-2xl font-bold uppercase tracking-tight text-foreground mb-4">
-                    High-Fidelity Transcription
+                    Record Any Room
                   </h4>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Invite our secure bot to Zoom, Google Meet, or Teams. Capture multi-speaker diariarized recordings, converted directly inside confidential VMs.
+                    Invite the bot to Google Meet, Teams, or Zoom, or record an in-person meeting from a single mic. Live diarization separates speakers and transcribes as you talk.
                   </p>
                 </div>
                 <div className="mt-8 border-t border-border pt-4 text-xs font-bold tracking-widest uppercase">
-                  01 // ENCLAVE AUDIO
+                  01 // CAPTURE
                 </div>
               </div>
 
               {/* Feature 2 */}
               <div className="border border-border bg-card p-8 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-2">
                 <div>
-                  <div className="mb-6 inline-block rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-800 tracking-wide uppercase font-sans">
-                    Enrichment
+                  <div className="mb-6 inline-block rounded-none bg-signal-positive/15 px-3 py-1 text-xs font-bold text-signal-positive tracking-wide uppercase">
+                    Intelligence
                   </div>
                   <h4 className="font-heading text-2xl font-bold uppercase tracking-tight text-foreground mb-4">
-                    Signal Extraction
+                    Turn Talk Into Memory
                   </h4>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Our enclave-resident LLM processes the text to extract speakers, critical entities, action items, and obligations without exposing plaintext to third-party APIs.
+                    An enclave-resident model distills every conversation into a summary, action items, decisions, open questions, and a linked knowledge graph, searchable across all your meetings. Plaintext never leaves the TEE.
                   </p>
                 </div>
                 <div className="mt-8 border-t border-border pt-4 text-xs font-bold tracking-widest uppercase">
-                  02 // MACHINE SIGNALS
+                  02 // INTELLIGENCE
                 </div>
               </div>
 
               {/* Feature 3 */}
               <div className="border border-border bg-card p-8 flex flex-col justify-between transition-transform duration-300 hover:-translate-y-2">
                 <div>
-                  <div className="mb-6 inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-bold text-blue-800 tracking-wide uppercase">
-                    Knowledge Layer
+                  <div className="mb-6 inline-block rounded-none bg-signal-entity/15 px-3 py-1 text-xs font-bold text-signal-entity tracking-wide uppercase">
+                    Trust
                   </div>
                   <h4 className="font-heading text-2xl font-bold uppercase tracking-tight text-foreground mb-4">
-                    Confidential Memory
+                    Own Your Voice
                   </h4>
                   <p className="text-sm leading-relaxed text-muted-foreground">
-                    Search, filter, and chat with your team&apos;s meetings index. Your semantic knowledge remains completely isolated and visible only to authenticated workspace members.
+                    Speakers are recognized only with consent. Voiceprints are user-owned and sealed: hear your clips before you agree, export them anytime, and get a signed proof when they&apos;re deleted.
                   </p>
                 </div>
                 <div className="mt-8 border-t border-border pt-4 text-xs font-bold tracking-widest uppercase">
-                  03 // SECURE VECTOR INDEX
+                  03 // CONSENT
                 </div>
               </div>
             </div>
@@ -192,10 +192,10 @@ export default function Home() {
         <section id="process" className="mx-auto max-w-7xl px-6 py-20 md:px-12 md:py-32">
           <div className="mb-16 text-center">
             <p className="text-xs font-bold tracking-widest uppercase text-muted-foreground mb-2">
-              CRYPTOGRAPHIC DATA LIFECYCLE
+              FROM ROOM TO MEMORY
             </p>
             <h3 className="font-heading text-4xl font-black uppercase tracking-tight sm:text-5xl">
-              The Security Process
+              How It Works
             </h3>
           </div>
 
@@ -204,7 +204,7 @@ export default function Home() {
               <span className="font-mono text-xs font-bold text-muted-foreground block mb-2">STAGE 01</span>
               <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Record</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Invite the bot to your meeting or upload audio. Audio streams directly over TLS to the confidential VM.
+                Invite the bot to a call or record the room. Audio streams over TLS straight into the confidential VM.
               </p>
             </div>
             
@@ -212,29 +212,29 @@ export default function Home() {
               <span className="font-mono text-xs font-bold text-muted-foreground block mb-2">STAGE 02</span>
               <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Attest</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Hardware remote attestation verifies the enclave&apos;s signature, guaranteeing that memory is fully sealed.
+                Intel TDX remote attestation proves the enclave is sealed before a single byte is processed.
               </p>
             </div>
 
             <div className="relative border-t-4 border-foreground pt-6">
               <span className="font-mono text-xs font-bold text-muted-foreground block mb-2">STAGE 03</span>
-              <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Enrich</h4>
+              <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Remember</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                The local model runs inside the secure VM, extracting obligations and entities from transcripts.
+                Inside the TEE: diarize, transcribe, and extract decisions, obligations, and a knowledge graph. The model runs only here.
               </p>
             </div>
 
             <div className="relative border-t-4 border-foreground pt-6">
               <span className="font-mono text-xs font-bold text-muted-foreground block mb-2">STAGE 04</span>
-              <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Decrypt</h4>
+              <h4 className="font-heading text-xl font-bold uppercase tracking-tight mb-3">Control</h4>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Encrypted transcripts are decrypted client-side only for verified team users in the workspace.
+                You decide who sees what. Share per artifact, export your data, set retention, and prove deletions with signed receipts.
               </p>
             </div>
           </div>
         </section>
 
-        {/* ── Bold CTA section matching Screenshot 4 / Motto style ── */}
+        {/* ── Bold CTA section ── */}
         <section className="bg-foreground text-background py-20 md:py-36">
           <div className="mx-auto max-w-5xl px-6 text-center">
             <h2 className="font-heading text-5xl font-black leading-none tracking-tighter sm:text-6xl md:text-7xl uppercase mb-8">
@@ -242,13 +242,13 @@ export default function Home() {
               Reveal Nothing.
             </h2>
             <p className="mx-auto max-w-xl text-lg text-background/60 leading-relaxed mb-10">
-              The operator provably cannot access your meetings. We secure your data using hardware attestation, not corporate promises.
+              The operator provably cannot read your meetings. Trust is enforced by hardware attestation and signed cryptographic proofs, not by our promises.
             </p>
             <Link
               href="/login"
               className="inline-flex h-14 items-center justify-center bg-background px-10 text-xs font-bold uppercase tracking-widest text-foreground transition hover:bg-muted"
             >
-              Get Conclave Now
+              Start for free
             </Link>
           </div>
         </section>
@@ -318,7 +318,7 @@ export default function Home() {
           {/* Bottom row */}
           <div className="mt-12 flex flex-col gap-6 sm:flex-row sm:items-center sm:justify-between text-xs text-background/50">
             <div>
-              &copy; 2005—2026 Conclave&reg; | Intel VM attested | Privacy guaranteed
+              &copy; 2005-2026 Conclave&reg; | Intel VM attested | Privacy guaranteed
             </div>
             <div className="flex gap-6">
               <a href="#" className="hover:text-background/80 transition-colors">Twitter</a>

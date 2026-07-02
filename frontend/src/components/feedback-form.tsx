@@ -57,7 +57,7 @@ export function FeedbackForm({
     return (
       <div
         data-testid="feedback-success"
-        className="rounded-lg border border-border bg-card p-5"
+        className="rounded-none border border-border bg-card p-5"
       >
         <h2 className="text-sm font-medium">Thanks for the feedback.</h2>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -81,7 +81,7 @@ export function FeedbackForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="rounded-lg border border-border bg-card p-5"
+      className="rounded-none border border-border bg-card p-5"
     >
       <label className="block text-sm font-medium" htmlFor="feedback-category">
         Type
@@ -92,7 +92,7 @@ export function FeedbackForm({
         onChange={(e) => setCategory(e.target.value as FeedbackCategory)}
         disabled={busy}
         aria-label="Feedback type"
-        className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
+        className="mt-2 h-9 w-full rounded-none border border-border bg-background px-2 text-sm text-foreground"
       >
         {CATEGORY_OPTIONS.map((o) => (
           <option key={o.value} value={o.value}>
@@ -118,7 +118,7 @@ export function FeedbackForm({
         rows={6}
         placeholder="A feature you wish existed, a bug you hit, anything…"
         aria-label="Feedback body"
-        className="mt-2 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground"
+        className="mt-2 w-full resize-y rounded-none border border-border bg-background px-3 py-2 text-sm text-foreground"
       />
 
       {pageContext ? (

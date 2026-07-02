@@ -7,7 +7,7 @@
 export const TOKEN_TINT: Record<string, string> = {
   known: "tok-known bg-signal-positive/15 text-signal-positive",
   candidate: "tok-candidate bg-signal-entity/15 text-signal-entity",
-  oov: "tok-oov bg-amber-100 text-amber-800",
+  oov: "tok-oov bg-signal-warn/15 text-signal-warn",
 };
 
 export function tokenTint(state: string | null | undefined): string {

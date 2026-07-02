@@ -50,6 +50,15 @@ class MockAudioContext {
   createMediaStreamSource() {
     return { connect: (x: unknown) => x };
   }
+  createAnalyser() {
+    return {
+      fftSize: 0,
+      smoothingTimeConstant: 0,
+      frequencyBinCount: 64,
+      getByteFrequencyData: () => {},
+      connect: (x: unknown) => x,
+    };
+  }
 }
 
 class MockAudioWorkletNode {
@@ -138,18 +147,20 @@ describe("RecordingProvider", () => {
     expect(screen.getByTestId("segs").textContent).toBe("1");
   });
 
-  it("MUTATION TARGET — cancel sends the end-frame and fully tears down (no leak)", async () => {
+  it("MUTATION TARGET — cancel aborts WITHOUT finalizing and fully tears down (no leak)", async () => {
     renderProvider();
     await startAndConnect();
     expect(screen.getByTestId("status").textContent).toBe("recording");
 
     fireEvent.click(screen.getByText("cancel"));
 
-    // Empty end-frame sent so capture treats it as meeting-end…
-    expect(wsSend).toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    // Cancel must NOT send the empty end-frame — that is stop's meeting-end signal
+    // and would push a canceled recording into the transcription pipeline.
+    expect(wsSend).not.toHaveBeenCalledWith(expect.any(ArrayBuffer));
+    // Instead it closes with the dedicated abort code so capture skips finalize…
+    expect(wsClose).toHaveBeenCalledWith(4001, "canceled");
     // …and every transport handle is released — this is what the mutation-audit
     // breaks (skip a close/stop → these go RED).
-    expect(wsClose).toHaveBeenCalled();
     expect(trackStop).toHaveBeenCalled();
     expect(ctxClose).toHaveBeenCalled();
     expect(screen.getByTestId("status").textContent).toBe("idle");

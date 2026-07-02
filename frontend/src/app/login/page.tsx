@@ -92,7 +92,7 @@ function LoginInner() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 shadow-lg shadow-black/5">
+        <div className="rounded-none border border-border bg-card p-6">
         {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>
@@ -204,7 +204,7 @@ function GoogleButton({ next }: { next: string }) {
   return (
     <a
       href={href}
-      className="inline-flex h-10 w-full items-center justify-center gap-3 rounded-lg border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
+      className="inline-flex h-10 w-full items-center justify-center gap-3 rounded-none border border-border bg-background px-4 text-sm font-medium hover:bg-muted"
     >
       {/* Google "G" — inline SVG so we don't ship a dependency for one icon. */}
       <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true">

@@ -74,10 +74,10 @@ export function FeedbackInbox() {
         {items.map((it) => (
           <li
             key={it.id}
-            className="rounded-lg border border-border bg-card p-4"
+            className="rounded-none border border-border bg-card p-4"
           >
             <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <span className="rounded border border-border px-1.5 py-0.5 font-medium text-foreground">
+              <span className="rounded-none border border-border px-1.5 py-0.5 font-medium text-foreground">
                 {CATEGORY_LABEL[it.category] ?? it.category}
               </span>
               <span className="font-mono">{it.user_email}</span>

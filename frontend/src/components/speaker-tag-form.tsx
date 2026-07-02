@@ -39,7 +39,7 @@ export function SpeakerTagForm({
   return (
     <div
       data-testid="speaker-tag-form"
-      className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border p-2"
+      className="mt-2 flex flex-wrap items-center gap-2 rounded-none border border-dashed border-border p-2"
     >
       <span className="text-[0.7rem] uppercase tracking-wide text-muted-foreground">
         Who is {label}?
@@ -48,26 +48,26 @@ export function SpeakerTagForm({
         value={name}
         onChange={(e) => setName(e.target.value)}
         placeholder="Full name"
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
+        className="rounded-none border border-border bg-background px-2 py-1 text-xs"
       />
       <input
         value={email}
         onChange={(e) => setEmail(e.target.value)}
         placeholder="email@company.com"
-        className="rounded border border-border bg-background px-2 py-1 text-xs"
+        className="rounded-none border border-border bg-background px-2 py-1 text-xs"
       />
       <button
         type="button"
         disabled={!ready || busy}
         onClick={() => onSubmit(label, name.trim(), email.trim(), emailTranscript)}
-        className="rounded bg-foreground px-3 py-1 text-xs font-semibold text-background disabled:opacity-40"
+        className="rounded-none bg-foreground px-3 py-1 text-xs font-semibold text-background disabled:opacity-40"
       >
         {busy ? "Tagging…" : "Tag"}
       </button>
       <button
         type="button"
         onClick={onCancel}
-        className="rounded border border-border px-3 py-1 text-xs"
+        className="rounded-none border border-border px-3 py-1 text-xs"
       >
         Cancel
       </button>

@@ -1,5 +1,5 @@
 /**
- * In-person Record — orange pill CTA + a small pre-flight config dialog.
+ * In-person Record — icon-button CTA + a small pre-flight config dialog.
  *
  * Task #14: the live capture session (mic / AudioWorklet / capture WebSocket) no
  * longer lives in this modal — it moved to the global `RecordingProvider` so a
@@ -42,7 +42,7 @@ export function RecordMeetingButton({
         aria-label="Record meeting"
         title="Record meeting"
         className={cn(
-          "inline-flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all hover:bg-muted-foreground active:scale-95",
+          "inline-flex size-10 items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-secondary",
           className,
         )}
       >
@@ -84,7 +84,7 @@ function RecordDialog({
         role="dialog"
         aria-modal="true"
         aria-label="Record meeting"
-        className="flex w-full max-w-lg flex-col rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        className="flex w-full max-w-lg flex-col rounded-none border border-border bg-card p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between">
@@ -99,7 +99,7 @@ function RecordDialog({
           </div>
           <button
             onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition hover:text-foreground"
+            className="flex size-8 shrink-0 items-center justify-center rounded-none bg-secondary text-muted-foreground transition hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -121,7 +121,7 @@ function RecordDialog({
             onChange={(e) => setAgenda(e.target.value)}
             rows={2}
             placeholder="What's this meeting about? e.g. decide Q3 pricing; focus on the launch date."
-            className="w-full resize-none rounded-2xl border border-border bg-background/60 px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+            className="w-full resize-none rounded-none border border-border bg-background/60 px-4 py-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
           />
           <p className="mt-1 text-[11px] text-muted-foreground">
             Steers the summary and insights toward what matters to you.
@@ -129,7 +129,7 @@ function RecordDialog({
         </div>
 
         {/* Store-audio toggle (Task #30) — in-person default ON. */}
-        <label className="mt-4 flex items-center gap-3 rounded-2xl border border-border bg-background/60 px-4 py-3">
+        <label className="mt-4 flex items-center gap-3 rounded-none border border-border bg-background/60 px-4 py-3">
           <input
             type="checkbox"
             checked={storeAudio}
@@ -147,13 +147,13 @@ function RecordDialog({
         <div className="mt-6 flex items-center justify-end gap-3">
           <button
             onClick={onClose}
-            className="rounded-full px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+            className="rounded-none px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
             Cancel
           </button>
           <button
             onClick={begin}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 active:scale-95"
+            className="inline-flex items-center gap-2 rounded-none bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground transition hover:bg-primary/90 active:scale-95"
           >
             <Mic className="size-4" aria-hidden />
             Start recording

@@ -83,7 +83,7 @@ export function TncGate({ children }: { children: React.ReactNode }) {
           aria-label="Terms & Conditions"
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
         >
-          <div className="w-full max-w-lg rounded-lg border border-border bg-card p-6 shadow-lg">
+          <div className="w-full max-w-lg rounded-none border border-border bg-card p-6">
             <h2 className="text-lg font-semibold">Before you continue</h2>
             <pre className="mt-4 max-h-[50vh] overflow-y-auto whitespace-pre-wrap font-sans text-sm text-muted-foreground">
               {copy.text}
@@ -95,7 +95,7 @@ export function TncGate({ children }: { children: React.ReactNode }) {
               <button
                 onClick={handleAccept}
                 disabled={busy}
-                className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                className="inline-flex h-9 items-center rounded-none bg-primary px-4 text-sm font-medium text-primary-foreground disabled:opacity-50"
               >
                 {busy ? "Recording…" : "I accept"}
               </button>

@@ -29,10 +29,13 @@ export function RetentionControl({
   sessionId,
   initialOverride,
   rawDeleted = false,
+  bare = false,
 }: {
   sessionId: string;
   initialOverride: string | null | undefined;
   rawDeleted?: boolean;
+  // `bare` drops the outer card (the caller frames it, e.g. a popover).
+  bare?: boolean;
 }) {
   const [selection, setSelection] = useState<Selection>(
     overrideToSelection(initialOverride),
@@ -74,7 +77,7 @@ export function RetentionControl({
   }
 
   return (
-    <section className="mt-4 rounded-lg border border-border bg-card p-5">
+    <section className={bare ? "" : "mt-4 rounded-lg border border-border bg-card p-5"}>
       <h2 className="text-sm font-medium">Retention for this meeting</h2>
       <p className="mt-1 text-xs text-muted-foreground">
         Overrides your account default. Auto-delete removes only the raw
@@ -95,7 +98,7 @@ export function RetentionControl({
           }}
           disabled={busy}
           aria-label="Retention for this meeting"
-          className="h-9 rounded-md border border-border bg-background px-2 text-xs text-foreground"
+          className="h-9 rounded-none border border-border bg-background px-2 text-xs text-foreground"
         >
           <option value="inherit">Use account default</option>
           <option value="keep_forever">Keep forever</option>

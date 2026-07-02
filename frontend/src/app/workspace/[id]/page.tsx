@@ -106,7 +106,7 @@ export default function WorkspacePage({
         </div>
 
         {meetings.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <div className="rounded-none border border-dashed border-border p-10 text-center">
             <p className="text-sm font-medium">No meetings yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Invite the Conclave bot to your next Meet to see it here.

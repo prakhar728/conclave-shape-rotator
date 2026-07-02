@@ -16,7 +16,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { Bot, FileText, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, FileText, ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { AppShell } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
@@ -25,11 +25,14 @@ import { UploadTranscriptButton } from "@/components/upload-transcript";
 import { useWorkspace } from "@/components/workspace-provider";
 import {
   ApiError,
+  attestation,
   auth,
   bots,
+  isAttested,
   kb,
   workspaces,
   type ActiveInvitation,
+  type Attestation,
   type KBObligation,
   type Meeting,
   type MeResponse,
@@ -139,10 +142,10 @@ export default function DashboardPage() {
           {/* Brutalist Greeting Header */}
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-border pb-6">
             <div>
-              <h1 className="font-heading text-3xl font-black uppercase tracking-tight md:text-4xl text-foreground">
+              <h1 className="font-heading text-2xl font-bold tracking-tight md:text-3xl text-foreground">
                 {greeting()}, {me.user.email.split("@")[0]}
               </h1>
-              <p className="mt-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              <p className="mt-1 text-sm text-muted-foreground">
                 Overview for {todayLabel()} · Confidential Enclave active
               </p>
             </div>
@@ -157,7 +160,7 @@ export default function DashboardPage() {
                 href="/invite"
                 aria-label="Invite bot"
                 title="Invite bot"
-                className="inline-flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all hover:bg-muted-foreground active:scale-95"
+                className="inline-flex size-10 items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-secondary"
               >
                 <Bot className="size-5" aria-hidden />
               </Link>
@@ -170,7 +173,7 @@ export default function DashboardPage() {
                 {active.map((a) => (
                   <li
                     key={a.invitation_id}
-                    className="flex items-center justify-between rounded-none border border-foreground bg-card px-5 py-3 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)]"
+                    className="flex items-center justify-between rounded-none border border-foreground bg-card px-5 py-3"
                   >
                     <div className="flex items-center gap-3">
                       <span className="relative flex h-2 w-2" aria-hidden>
@@ -223,49 +226,43 @@ export default function DashboardPage() {
   );
 }
 
-/** Motto Brutalist "Recently Viewed" widget */
+/** Recent meetings list. */
 function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
   const done = meetings?.filter((m) => !m.is_processing);
   return (
-    <div className="rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
-      <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
-        <h4 className="flex items-center gap-2 font-heading text-lg font-black uppercase tracking-tight">
-          <FileText className="size-4 text-foreground" aria-hidden />
-          Recent meetings
-        </h4>
-        <span className="text-[10px] font-bold tracking-widest text-muted-foreground uppercase">
-          {done ? `${done.length} TOTAL` : ""}
-        </span>
+    <div className="rounded-xl border border-border bg-card p-6">
+      <div className="mb-2 flex items-center justify-between">
+        <h4 className="text-base font-bold tracking-tight">Recent meetings</h4>
+        {done ? (
+          <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
+            {done.length} total
+          </span>
+        ) : null}
       </div>
       {done === null || done === undefined ? (
-        <p className="p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loading meetings…</p>
+        <p className="py-3 text-sm text-muted-foreground">Loading meetings…</p>
       ) : (
-        <div className="space-y-3">
+        <div className="-mx-2 divide-y divide-border">
           {done.map((m) => (
             <Link
               key={m.session_id}
               href={`/meeting/${m.session_id}`}
-              className="group flex items-center justify-between rounded-none border border-border bg-secondary/55 p-3.5 transition hover:border-foreground hover:bg-card"
+              className="group flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-secondary/50"
             >
-              <div className="flex min-w-0 items-center gap-3">
-                <div className="flex size-9 shrink-0 items-center justify-center rounded-none border border-border bg-card text-foreground shadow-sm">
-                  <FileText className="size-4" aria-hidden />
+              <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-foreground">
+                  {m.summary ? truncate(m.summary, 90) : `${m.source} · ${m.date}`}
                 </div>
-                <div className="min-w-0">
-                  <div className="truncate text-xs font-bold uppercase tracking-wide">
-                    {m.summary
-                      ? truncate(m.summary, 90)
-                      : `${m.source} — ${m.date}`}
-                  </div>
-                  <div className="flex items-center gap-2 mt-0.5 text-[10px] font-mono text-muted-foreground">
-                    {m.date} &bull; {m.source}
-                    {isDemoSession(m.session_id) ? <DemoTag /> : null}
-                  </div>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                  {m.date} · {m.source}
+                  {isDemoSession(m.session_id) ? <DemoTag /> : null}
                 </div>
               </div>
-              <span className="text-muted-foreground/60 transition-transform group-hover:translate-x-1">
-                &rarr;
-              </span>
+              <ArrowRight
+                className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
+                aria-hidden
+              />
             </Link>
           ))}
         </div>
@@ -274,30 +271,65 @@ function RecentMeetings({ meetings }: { meetings: Meeting[] | null }) {
   );
 }
 
-/** Enclave Status Card with a bold brutalist frame */
+/**
+ * Enclave status card — reflects the REAL attestation state. Green
+ * "Operator-Blind / Attested Environment" only when the backend returns a real
+ * TDX quote; otherwise an honest amber "Local Mode / Not Attested" (running
+ * outside a TEE, e.g. local dev, or the dstack agent is unreachable).
+ */
 function EnclaveCard() {
+  const [att, setAtt] = useState<Attestation | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    attestation
+      .get()
+      .then((a) => !cancelled && setAtt(a))
+      .catch(() => {})
+      .finally(() => !cancelled && setLoaded(true));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const attested = isAttested(att);
+
   return (
-    <div className="group relative flex h-48 flex-col justify-between rounded-none border-2 border-foreground bg-foreground p-6 text-background shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)] transition hover:translate-y-px">
+    <div className="flex h-48 flex-col justify-between rounded-xl bg-foreground p-6 text-background">
       <div>
-        <div className="mb-3 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-widest text-background/50">
-          <ShieldCheck className="size-3.5 text-attested" aria-hidden />
-          Enclave Verified
+        <div className="mb-3 flex items-center gap-1.5 text-xs font-medium text-background/60">
+          {attested ? (
+            <ShieldCheck className="size-4 text-attested" aria-hidden />
+          ) : (
+            <ShieldAlert className="size-4 text-signal-warn" aria-hidden />
+          )}
+          {!loaded ? "Checking…" : attested ? "Enclave verified" : "Not attested"}
         </div>
-        <div className="font-heading text-2xl font-black uppercase tracking-tight">
-          Operator-Blind
+        <div className="font-heading text-2xl font-bold tracking-tight">
+          {attested ? "Operator-blind" : "Local mode"}
         </div>
       </div>
       <div>
-        <div className="mb-2 flex items-center justify-between text-[10px] font-mono text-background/70">
-          <span>Intel TDX · Hardware Seal</span>
+        <div className="mb-2 text-xs text-background/60">
+          {attested ? "Intel TDX · hardware seal" : "No hardware seal · local dev"}
         </div>
-        <div className="flex items-center gap-2 text-[10px]">
-          <span className="relative flex h-2 w-2" aria-hidden>
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-attested opacity-60" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-attested" />
-          </span>
-          <span className="font-bold uppercase tracking-wider text-background/95">
-            Attested Environment
+        <div className="flex items-center gap-2 text-sm">
+          {attested ? (
+            <span className="relative flex size-2" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-attested opacity-60" />
+              <span className="relative inline-flex size-2 rounded-full bg-attested" />
+            </span>
+          ) : (
+            <span
+              className={`size-2 rounded-full ${loaded ? "bg-signal-warn" : "bg-background/40"}`}
+              aria-hidden
+            />
+          )}
+          <span className="font-medium text-background/90">
+            {!loaded
+              ? "Checking attestation"
+              : attested
+                ? "Attested environment"
+                : "Development, not attested"}
           </span>
         </div>
       </div>
@@ -305,44 +337,40 @@ function EnclaveCard() {
   );
 }
 
-/** Motto Brutalist "Up Next" widget */
+/** "Up next" — open obligations. */
 function UpNext({ obligations }: { obligations: KBObligation[] | null }) {
   const open =
     obligations?.filter((o) => o.status_inferred === "open").slice(0, 4) ?? [];
   return (
-    <div className="flex flex-1 flex-col rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
-      <div className="mb-6 flex items-center justify-between border-b border-border pb-4">
-        <h4 className="font-heading text-lg font-black uppercase tracking-tight">
-          Up next
-        </h4>
-        <span className="flex size-5 items-center justify-center border border-foreground bg-secondary text-[10px] font-bold">
+    <div className="flex flex-1 flex-col rounded-xl border border-border bg-card p-6">
+      <div className="mb-4 flex items-center justify-between">
+        <h4 className="text-base font-bold tracking-tight">Up next</h4>
+        <span className="rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground">
           {obligations === null ? "…" : open.length}
         </span>
       </div>
       {obligations === null ? (
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loading…</p>
+        <p className="text-sm text-muted-foreground">Loading…</p>
       ) : open.length === 0 ? (
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Nothing open — caught up.
-        </p>
+        <p className="text-sm text-muted-foreground">Nothing open, all caught up.</p>
       ) : (
-        <div className="flex-1 space-y-4">
+        <div className="flex-1 space-y-3">
           {open.map((o) => (
             <Link
               key={o.id}
               href={`/meeting/${o.session_id}`}
               className="group flex items-start gap-3"
             >
-              <div
-                className="mt-0.5 size-4 shrink-0 rounded-none border-2 border-foreground bg-card transition-colors group-hover:bg-secondary"
+              <span
+                className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/40"
                 aria-hidden
               />
               <div className="min-w-0">
-                <span className="line-clamp-2 text-xs font-bold uppercase tracking-wide text-foreground/80 transition group-hover:text-foreground">
+                <span className="line-clamp-2 text-sm text-foreground/80 transition group-hover:text-foreground">
                   {o.description}
                 </span>
                 {o.importance != null && o.importance >= 7 ? (
-                  <span className="mt-1.5 inline-block rounded-full bg-red-100 dark:bg-red-900/30 px-2 py-0.5 text-[9px] font-bold text-destructive uppercase tracking-wider">
+                  <span className="mt-1 inline-block rounded-md bg-destructive/10 px-2 py-0.5 text-[10px] font-medium text-destructive">
                     High priority
                   </span>
                 ) : null}
@@ -353,9 +381,9 @@ function UpNext({ obligations }: { obligations: KBObligation[] | null }) {
       )}
       <Link
         href="/obligations"
-        className="mt-6 border-t border-border pt-4 text-[10px] font-bold tracking-widest text-muted-foreground transition hover:text-foreground uppercase"
+        className="mt-6 flex items-center gap-1 border-t border-border pt-4 text-sm font-medium text-muted-foreground transition hover:text-foreground"
       >
-        VIEW ALL &rarr;
+        View all <ArrowRight className="size-4" aria-hidden />
       </Link>
     </div>
   );
@@ -369,7 +397,7 @@ function greeting(): string {
   return "Good evening";
 }
 
-/** "Monday, Oct 24"-style label (Vantage greeting subtext). */
+/** "Monday, Oct 24"-style label for the greeting subtext. */
 function todayLabel(): string {
   return new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -397,7 +425,7 @@ function DemoTag() {
 function EmptyState() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="rounded-none border border-border bg-card p-8 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
+      <div className="rounded-none border border-border bg-card p-8">
         <p className="font-heading text-2xl font-black uppercase tracking-tight">
           Welcome to Conclave
         </p>
@@ -419,7 +447,7 @@ function EmptyState() {
         <li>
           <Link
             href={`/meeting/${EXAMPLE_SESSION_ID}`}
-            className="group flex h-full flex-col justify-between rounded-none border border-border bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)] transition hover:border-foreground"
+            className="group flex h-full flex-col justify-between rounded-none border border-border bg-card p-6 transition hover:border-foreground"
           >
             <p className="text-sm font-bold uppercase tracking-wide leading-snug transition-colors group-hover:text-primary">
               Walkthrough of how a Conclave meeting card looks once your bot
@@ -479,24 +507,32 @@ function ProcessingCard({ meeting }: { meeting: Meeting }) {
     return () => clearInterval(id);
   }, []);
   return (
-    <div className="rounded-none border border-primary bg-card p-6 shadow-sm">
-      <div className="flex items-center gap-3">
-        <span
-          className="inline-block h-2.5 w-2.5 animate-pulse rounded-none bg-primary"
+    <Link
+      href={`/meeting/${meeting.session_id}`}
+      className="group block rounded-xl border border-border bg-card p-6 transition-colors hover:border-foreground/30 hover:bg-secondary/30"
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            className="inline-block size-2 shrink-0 animate-pulse rounded-full bg-primary"
+            aria-hidden
+          />
+          <p className="animate-shimmer-text truncate text-sm font-medium">
+            {PROCESSING_MESSAGES[phraseIdx]}
+          </p>
+        </div>
+        <ArrowRight
+          className="size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-foreground"
           aria-hidden
         />
-        <p className="animate-shimmer-text text-sm font-bold uppercase tracking-wider">
-          {PROCESSING_MESSAGES[phraseIdx]}
-        </p>
       </div>
-      <p className="mt-3 font-mono text-[10px] font-bold text-muted-foreground uppercase">
-        {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
+      <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+        {meeting.date} · {meeting.source} · {meeting.session_id}
       </p>
       <p className="mt-2 text-xs text-muted-foreground">
-        This card refreshes itself when the LLM finishes — usually under two
-        minutes. You can close this tab; the meeting will be ready when you
-        come back.
+        Insights are still generating. The transcript is ready now, open it and the
+        summary fills in automatically (usually under two minutes).
       </p>
-    </div>
+    </Link>
   );
 }

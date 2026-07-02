@@ -5,6 +5,7 @@
  */
 "use client";
 
+import { CalendarDays } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
@@ -37,7 +38,10 @@ export default function CalendarPage() {
   return (
     <AppShell user={me.user}>
       <main className="mx-auto max-w-2xl px-6 py-10">
-        <h1 className="text-2xl font-bold tracking-tight">Calendar</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+          <CalendarDays className="size-6 shrink-0 text-muted-foreground" aria-hidden />
+          Calendar
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Connect your Google Calendar and choose which meetings Conclave should
           automatically send a recording bot to.

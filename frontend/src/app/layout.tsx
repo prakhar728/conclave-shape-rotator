@@ -18,7 +18,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata: Metadata = {
   title: "Conclave",
   description:
-    "A privacy-preserving knowledge layer for your team's conversations.",
+    "Confidential team memory — every meeting remembered, searchable, and provably private inside an attested TEE.",
 };
 
 export default function RootLayout({

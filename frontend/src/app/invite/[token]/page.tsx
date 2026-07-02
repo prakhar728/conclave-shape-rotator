@@ -74,7 +74,7 @@ export default function AcceptInvitePage({
       </p>
       <Link
         href={`/workspace/${workspace.id}`}
-        className="mt-6 inline-block rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background"
+        className="mt-6 inline-block rounded-none bg-foreground px-4 py-2 text-sm font-medium text-background"
       >
         Open workspace
       </Link>

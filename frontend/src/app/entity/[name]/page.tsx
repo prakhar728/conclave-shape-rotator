@@ -73,7 +73,7 @@ export default function EntityDetailPage() {
     <AppShell user={me.user}>
       <main className="mx-auto max-w-3xl px-6 py-10">
         {notFound ? (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <div className="rounded-none border border-dashed border-border p-10 text-center">
             <p className="text-sm font-medium">Entity not found</p>
             <p className="mt-1 text-xs text-muted-foreground">
               It may not appear in any meeting you can see.{" "}
@@ -92,12 +92,12 @@ export default function EntityDetailPage() {
                   {detail.entity.canonical_name}
                 </h1>
                 <span
-                  className={`rounded-full border px-2 py-0.5 text-xs capitalize ${entityTint(detail.entity.category)}`}
+                  className={`rounded-none border px-2 py-0.5 text-xs capitalize ${entityTint(detail.entity.category)}`}
                 >
                   {detail.entity.category}
                 </span>
                 {detail.entity.category === "person" && detail.entity.role ? (
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
+                  <span className="rounded-none border border-border px-2 py-0.5 text-xs capitalize text-muted-foreground">
                     {detail.entity.role}
                   </span>
                 ) : null}
@@ -131,7 +131,7 @@ export default function EntityDetailPage() {
               {detail.meetings.length === 0 ? (
                 <p className="text-sm text-muted-foreground">None visible.</p>
               ) : (
-                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card">
                   {detail.meetings.map((m) => (
                     <li key={m.session_id}>
                       <Link
@@ -161,14 +161,14 @@ export default function EntityDetailPage() {
                   None currently owned by this entity.
                 </p>
               ) : (
-                <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+                <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card">
                   {detail.obligations.map((o) => (
                     <li key={o.id} className="px-5 py-3.5">
                       <p className="text-sm leading-relaxed">
                         {o.description}
                       </p>
                       <p className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
-                        <span className="rounded-full border border-border px-2 py-0.5 capitalize">
+                        <span className="rounded-none border border-border px-2 py-0.5 capitalize">
                           {o.type.replace("_", " ")}
                         </span>
                         <span className="capitalize">{o.status_inferred}</span>

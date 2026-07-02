@@ -8,6 +8,7 @@
  */
 "use client";
 
+import { ListChecks } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -102,9 +103,10 @@ export default function ObligationsPage() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
+            <ListChecks className="size-6 shrink-0 text-muted-foreground" aria-hidden />
             Obligations
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -119,7 +121,7 @@ export default function ObligationsPage() {
             <button
               key={t}
               onClick={() => setTypeFilter(typeFilter === t ? null : t)}
-              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+              className={`rounded-none border px-3 py-1 text-xs capitalize transition-colors ${
                 typeFilter === t
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"
@@ -133,7 +135,7 @@ export default function ObligationsPage() {
             <button
               key={s}
               onClick={() => setStatusFilter(statusFilter === s ? null : s)}
-              className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+              className={`rounded-none border px-3 py-1 text-xs capitalize transition-colors ${
                 statusFilter === s
                   ? "border-primary bg-primary text-primary-foreground"
                   : "border-border text-muted-foreground hover:text-foreground"
@@ -147,7 +149,8 @@ export default function ObligationsPage() {
         {visible === null ? (
           <p className="text-sm text-muted-foreground">Loading obligations…</p>
         ) : visible.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border p-10 text-center">
+          <div className="rounded-none border border-dashed border-border p-10 text-center">
+            <ListChecks className="mx-auto mb-3 size-8 text-muted-foreground/40" aria-hidden />
             <p className="text-sm font-medium">Nothing here yet</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Obligations appear once the knowledge pipeline processes your
@@ -155,9 +158,9 @@ export default function ObligationsPage() {
             </p>
           </div>
         ) : (
-          /* Editorial Vault: hairline rows; the type chip carries the color,
+          /* Hairline rows: the type chip carries the color,
              the description carries the typography. */
-          <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+          <ul className="divide-y divide-border overflow-hidden rounded-none border border-border bg-card">
             {visible.map((o) => (
               <li key={o.id}>
                 <Link
@@ -169,14 +172,14 @@ export default function ObligationsPage() {
                   </p>
                   <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span
-                      className={`rounded-full border px-2 py-0.5 capitalize ${
+                      className={`rounded-none border px-2 py-0.5 capitalize ${
                         TYPE_CHIP[o.type] ?? "border-border text-foreground"
                       }`}
                     >
                       {o.type.replace("_", " ")}
                     </span>
                     <span
-                      className={`rounded-full border px-2 py-0.5 capitalize ${
+                      className={`rounded-none border px-2 py-0.5 capitalize ${
                         STATUS_PILL[o.status_inferred] ??
                         "border-border text-muted-foreground"
                       }`}
@@ -198,11 +201,11 @@ export default function ObligationsPage() {
                     {o.importance ? (
                       <span className="ml-auto inline-flex items-center gap-1.5">
                         <span
-                          className="h-1 w-12 overflow-hidden rounded-full bg-muted"
+                          className="h-1 w-12 overflow-hidden rounded-none bg-muted"
                           aria-hidden
                         >
                           <span
-                            className="block h-full rounded-full bg-primary"
+                            className="block h-full rounded-none bg-primary"
                             style={{
                               width: `${o.importance * 10}%`,
                             }}

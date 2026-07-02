@@ -1,35 +1,40 @@
 /**
- * Signed-in app chrome — Vantage language (user-supplied reference,
- * 2026-06-04): stone-50 sidebar with a workspace profile chip, white
- * bordered+shadowed active nav item with orange icon, uppercase section
- * labels, orange pill CTA, and the attested badge + sign-out pinned to
- * the bottom. No topbar — pages own their headers (see PageHeader).
+ * Signed-in app chrome — Motto Brutalist. A workspace switcher, bordered active
+ * nav items, uppercase section labels, a sharp Invite-bot CTA, and the
+ * feedback/settings/sign-out block pinned to the bottom. Pages own their headers
+ * (see PageHeader).
  *
- * Layout contract: the content column is `flex min-h-screen flex-col`;
- * full-bleed pages (graph) claim leftover viewport with `flex-1`, normal
- * pages render a <main> that scrolls with the body.
+ * Responsive:
+ *  - md+ : a sidebar that COLLAPSES to an icon rail (toggle persisted in
+ *    localStorage; labels hidden, `title` tooltips kept).
+ *  - <md : a slim top bar with a hamburger that opens the same nav as a
+ *    slide-in drawer.
  *
- * Logout hits POST /api/auth/v1/logout which revokes server-side and
- * clears the cookie — the next protected-route hit gets bounced by
- * middleware.ts to /login.
+ * Logout hits POST /api/auth/v1/logout which revokes server-side and clears the
+ * cookie — the next protected-route hit gets bounced by middleware.ts to /login.
  */
 "use client";
 
 import {
   Calendar,
   Check,
+  ChevronLeft,
+  ChevronRight,
   ChevronsUpDown,
   Inbox,
   LayoutGrid,
   ListChecks,
   LogOut,
+  Menu,
   MessageSquare,
   Plus,
   Search,
   Settings,
   Share2,
   Tags,
+  X,
 } from "lucide-react";
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -49,6 +54,8 @@ const NAV = [
   { href: "/graph", label: "Graph", icon: Share2 },
 ] as const;
 
+const COLLAPSE_KEY = "conclave.sidebar_collapsed";
+
 export function AppShell({
   user,
   children,
@@ -58,6 +65,30 @@ export function AppShell({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  // Restore the desktop collapse preference (SSR-safe: runs client-only).
+  useEffect(() => {
+    try {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
+    } catch {
+      // private mode / no storage — default expanded
+    }
+  }, []);
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v;
+      try {
+        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }
 
   async function handleLogout() {
     try {
@@ -70,137 +101,233 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* ── Sidebar (Brutalist style) ── */}
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-border bg-sidebar p-4 md:flex">
-        <WorkspaceSwitcher />
-
-        <RecordingIndicator />
-
-        <nav className="space-y-1.5">
-          {NAV.map(({ href, label, icon: Icon }) => {
-            const active = pathname.startsWith(href);
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
-                  active
-                    ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
-                    : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
-                )}
-              >
-                <Icon
-                  className="size-3.5"
-                  aria-hidden
-                />
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        <div className="mt-6 flex items-center gap-2">
-          <Link
-            href="/invite"
-            className="flex flex-1 items-center justify-center gap-2 rounded-none border border-foreground bg-primary px-3 py-2.5 text-xs font-bold uppercase tracking-widest text-primary-foreground transition-all hover:bg-muted-foreground active:scale-98"
-          >
-            <Plus className="size-3.5" aria-hidden />
-            Invite bot
-          </Link>
-          <Link
-            href="/calendar"
-            title="Calendar"
-            aria-label="Calendar"
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-none border border-border bg-card shadow-sm transition hover:bg-secondary",
-              pathname.startsWith("/calendar")
-                ? "text-primary border-foreground"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Calendar className="size-4" aria-hidden />
-          </Link>
-        </div>
-
-        <div className="mt-auto space-y-3 border-t border-border pt-4">
-          <Link
-            href={`/feedback?from=${encodeURIComponent(pathname)}`}
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
-              pathname.startsWith("/feedback")
-                ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
-            )}
-          >
-            <MessageSquare className="size-3.5" aria-hidden />
-            Feedback
-          </Link>
-          {user.is_admin ? (
-            <Link
-              href="/admin/feedback"
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
-                pathname.startsWith("/admin/feedback")
-                  ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
-                  : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
-              )}
-            >
-              <Inbox className="size-3.5" aria-hidden />
-              Feedback inbox
-            </Link>
-          ) : null}
-          <Link
-            href="/settings"
-            className={cn(
-              "flex items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider transition-all",
-              pathname.startsWith("/settings")
-                ? "border border-foreground bg-primary text-primary-foreground font-black shadow-sm"
-                : "text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent",
-            )}
-          >
-            <Settings
-              className="size-3.5"
-              aria-hidden
-            />
-            Settings
-          </Link>
-          <p className="truncate px-3 text-[10px] font-mono tracking-tight text-muted-foreground">
-            {user.email}
-          </p>
-          <button
-            onClick={handleLogout}
-            className="flex w-full items-center gap-2.5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground hover:bg-secondary hover:text-foreground border border-transparent transition-all"
-          >
-            <LogOut className="size-3.5" aria-hidden />
-            Sign out
-          </button>
-        </div>
+      {/* ── Desktop sidebar (collapsible) ── */}
+      <aside
+        className={cn(
+          "sticky top-0 z-30 hidden h-screen shrink-0 flex-col border-r border-border bg-sidebar p-4 transition-[width] duration-200 md:flex",
+          collapsed ? "w-[4.5rem]" : "w-60",
+        )}
+      >
+        <SidebarBody
+          user={user}
+          pathname={pathname}
+          collapsed={collapsed}
+          onLogout={handleLogout}
+        />
+        {/* Collapse handle — a small arrow riding the divider line, no box. */}
+        <button
+          onClick={toggleCollapsed}
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          title={collapsed ? "Expand" : "Collapse"}
+          className="absolute right-0 top-1/2 z-40 flex size-6 -translate-y-1/2 translate-x-1/2 items-center justify-center rounded-full bg-background text-muted-foreground ring-1 ring-border transition hover:bg-foreground hover:text-background hover:ring-foreground"
+        >
+          {collapsed ? (
+            <ChevronRight className="size-3.5" aria-hidden />
+          ) : (
+            <ChevronLeft className="size-3.5" aria-hidden />
+          )}
+        </button>
       </aside>
 
       {/* ── Content column ── */}
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        {/* Mobile-only slim bar (sidebar is hidden <md). */}
+        {/* Mobile-only slim bar with a hamburger (sidebar is hidden <md). */}
         <header className="flex items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
-          <Link href="/dashboard" className="flex items-center gap-2">
-            <span className="flex size-7 items-center justify-center rounded-none border border-foreground bg-foreground text-sm font-black text-background">
-              C
-            </span>
-            <span className="text-sm font-bold tracking-tight">Conclave</span>
-          </Link>
           <div className="flex items-center gap-3">
-            <RecordingIndicator compact />
             <button
-              onClick={handleLogout}
-              className="text-xs font-bold tracking-wider uppercase text-muted-foreground"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open menu"
+              className="flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground transition-all hover:bg-muted-foreground active:scale-95"
             >
-              Sign out
+              <Menu className="size-5" aria-hidden />
             </button>
+            <Link href="/dashboard" className="flex items-center gap-2">
+              <Image
+                src="/logo.png"
+                alt="Conclave logo"
+                width={28}
+                height={28}
+                className="size-7 rounded-none object-contain"
+              />
+              <span className="text-sm font-bold tracking-tight">Conclave</span>
+            </Link>
           </div>
+          <RecordingIndicator compact />
         </header>
         {children}
       </div>
+
+      {/* ── Mobile drawer ── */}
+      {mobileOpen ? (
+        <div className="fixed inset-0 z-[80] md:hidden">
+          <div
+            className="absolute inset-0 bg-foreground/40 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-72 max-w-[85%] flex-col border-r border-foreground bg-sidebar p-4">
+            <div className="mb-4 flex items-center justify-between">
+              <span className="text-xs font-black uppercase tracking-widest text-muted-foreground">
+                Menu
+              </span>
+              <button
+                onClick={() => setMobileOpen(false)}
+                aria-label="Close menu"
+                className="flex size-8 items-center justify-center rounded-none border border-border bg-card transition hover:bg-secondary"
+              >
+                <X className="size-4" aria-hidden />
+              </button>
+            </div>
+            <SidebarBody
+              user={user}
+              pathname={pathname}
+              collapsed={false}
+              onLogout={handleLogout}
+              onNavigate={() => setMobileOpen(false)}
+            />
+          </aside>
+        </div>
+      ) : null}
     </div>
+  );
+}
+
+/**
+ * The sidebar contents, shared by the desktop rail and the mobile drawer.
+ * `collapsed` renders an icon-only rail (labels hidden, tooltips kept);
+ * `onNavigate` (mobile) closes the drawer on any link tap; `onToggle` (desktop)
+ * shows the collapse/expand control.
+ */
+function SidebarBody({
+  user,
+  pathname,
+  collapsed,
+  onLogout,
+  onNavigate,
+}: {
+  user: User;
+  pathname: string;
+  collapsed: boolean;
+  onLogout: () => void;
+  onNavigate?: () => void;
+}) {
+  return (
+    <>
+      <div className="mb-8">
+        <WorkspaceSwitcher collapsed={collapsed} />
+      </div>
+
+      <RecordingIndicator compact={collapsed} />
+
+      <nav className="space-y-1.5">
+        {NAV.map(({ href, label, icon: Icon }) => (
+          <NavRow
+            key={href}
+            href={href}
+            label={label}
+            Icon={Icon}
+            active={pathname.startsWith(href)}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ))}
+      </nav>
+
+      <div className="mt-4 border-t border-border pt-4">
+        <Link
+          href="/invite"
+          onClick={onNavigate}
+          title={collapsed ? "Invite bot" : undefined}
+          className={cn(
+            "flex items-center gap-3 rounded-lg py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground",
+            collapsed ? "justify-center px-0" : "px-3",
+          )}
+        >
+          <Plus className="size-4 shrink-0" aria-hidden />
+          {!collapsed && "Invite bot"}
+        </Link>
+      </div>
+
+      <div className="mt-auto space-y-3 border-t border-border pt-4">
+        <NavRow
+          href={`/feedback?from=${encodeURIComponent(pathname)}`}
+          label="Feedback"
+          Icon={MessageSquare}
+          active={pathname.startsWith("/feedback")}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        {user.is_admin ? (
+          <NavRow
+            href="/admin/feedback"
+            label="Feedback inbox"
+            Icon={Inbox}
+            active={pathname.startsWith("/admin/feedback")}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ) : null}
+        <NavRow
+          href="/settings"
+          label="Settings"
+          Icon={Settings}
+          active={pathname.startsWith("/settings")}
+          collapsed={collapsed}
+          onNavigate={onNavigate}
+        />
+        {!collapsed ? (
+          <p className="truncate px-3 text-xs text-muted-foreground">
+            {user.email}
+          </p>
+        ) : null}
+        <button
+          onClick={onLogout}
+          title={collapsed ? "Sign out" : undefined}
+          className={cn(
+            "flex w-full items-center gap-3 rounded-lg py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground",
+            collapsed ? "justify-center px-0" : "px-3",
+          )}
+        >
+          <LogOut className="size-3.5 shrink-0" aria-hidden />
+          {!collapsed && "Sign out"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+/** One nav row — icon + label, or icon-only (with tooltip) when collapsed. */
+function NavRow({
+  href,
+  label,
+  Icon,
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  Icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  active: boolean;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <Link
+      href={href}
+      onClick={onNavigate}
+      title={collapsed ? label : undefined}
+      className={cn(
+        "flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors",
+        collapsed ? "justify-center px-0" : "px-3",
+        active
+          ? "bg-secondary text-foreground font-semibold"
+          : "text-muted-foreground hover:bg-secondary/60 hover:text-foreground",
+      )}
+    >
+      <Icon className="size-4 shrink-0" aria-hidden />
+      {!collapsed && <span className="truncate">{label}</span>}
+    </Link>
   );
 }
 
@@ -227,10 +354,11 @@ function RecordingIndicator({ compact = false }: { compact?: boolean }) {
       <Link
         href={`/recording/${recording.id}`}
         aria-label="Return to live recording"
-        className="inline-flex items-center gap-1.5 rounded-full border border-destructive bg-destructive/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive"
+        title={ending ? "Ending meeting…" : "Recording"}
+        className="mb-3 inline-flex items-center justify-center gap-1.5 rounded-none border border-destructive bg-destructive/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-destructive"
       >
         <span className="size-2 animate-pulse rounded-full bg-destructive" />
-        {ending ? "Ending" : fmt(recording.seconds)}
+        {ending ? "End" : fmt(recording.seconds)}
       </Link>
     );
   }
@@ -248,9 +376,10 @@ function RecordingIndicator({ compact = false }: { compact?: boolean }) {
 }
 
 /**
- * Sidebar workspace switcher: simple dropdown menu with brutalist border style.
+ * Sidebar workspace switcher: brutalist dropdown. Collapses to a logo-only
+ * button (the dropdown still opens with full workspace names).
  */
-function WorkspaceSwitcher() {
+function WorkspaceSwitcher({ collapsed = false }: { collapsed?: boolean }) {
   const { workspaces, workspace, selectWorkspace, createWorkspace } =
     useWorkspace();
   const [open, setOpen] = useState(false);
@@ -282,29 +411,41 @@ function WorkspaceSwitcher() {
   }
 
   return (
-    <div ref={boxRef} className="relative mb-8">
+    <div ref={boxRef} className="relative min-w-0 flex-1">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-none border border-border bg-card p-2.5 text-left transition hover:bg-secondary hover:border-foreground"
+        title={collapsed ? (workspace?.name ?? "Conclave") : undefined}
+        className={cn(
+          "flex w-full items-center gap-3 rounded-lg p-2.5 text-left transition hover:bg-secondary/60",
+          collapsed && "justify-center p-1.5",
+        )}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
-        <span className="flex size-8 shrink-0 items-center justify-center rounded-none border border-foreground bg-foreground text-sm font-black text-background shadow-sm">
-          C
-        </span>
-        <span className="min-w-0 flex-1 truncate text-xs font-black uppercase tracking-wider">
-          {workspace?.name ?? (workspaces === null ? "…" : "Conclave")}
-        </span>
-        <ChevronsUpDown
-          className="size-3.5 shrink-0 text-muted-foreground"
-          aria-hidden
+        <Image
+          src="/logo.png"
+          alt="Conclave logo"
+          width={32}
+          height={32}
+          className="size-8 shrink-0 rounded-lg object-contain"
         />
+        {!collapsed && (
+          <>
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+              {workspace?.name ?? (workspaces === null ? "…" : "Conclave")}
+            </span>
+            <ChevronsUpDown
+              className="size-3.5 shrink-0 text-muted-foreground"
+              aria-hidden
+            />
+          </>
+        )}
       </button>
 
       {open ? (
         <div
           role="listbox"
-          className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-none border border-foreground bg-card p-1 shadow-md"
+          className="absolute left-0 top-full z-50 mt-1.5 min-w-52 origin-top overflow-hidden rounded-lg border border-border bg-card p-1 animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150"
         >
           {(workspaces ?? []).map((w) => (
             <button
@@ -315,7 +456,7 @@ function WorkspaceSwitcher() {
                 selectWorkspace(w.id);
                 setOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-none px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider transition hover:bg-secondary"
+              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm font-medium transition hover:bg-secondary"
             >
               <span className="min-w-0 flex-1 truncate">{w.name}</span>
               {w.id === workspace?.id ? (
@@ -326,7 +467,7 @@ function WorkspaceSwitcher() {
           <button
             onClick={handleCreate}
             disabled={busy}
-            className="flex w-full items-center gap-2 rounded-none border-t border-border px-2 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50"
+            className="mt-1 flex w-full items-center gap-2 rounded-md border-t border-border px-2 py-2 text-left text-sm font-medium text-muted-foreground transition hover:bg-secondary hover:text-foreground disabled:opacity-50"
           >
             <Plus className="size-3.5" aria-hidden />
             {busy ? "Creating…" : "New workspace"}
@@ -338,9 +479,8 @@ function WorkspaceSwitcher() {
 }
 
 /**
- * Vantage-style page header: serif headline + optional subtext, with
- * round icon-button actions on the right (global search lives here now
- * that there's no topbar).
+ * Page header: bold headline + optional subtext, with icon-button actions on
+ * the right (global search lives here now that there is no topbar).
  */
 export function PageHeader({
   title,

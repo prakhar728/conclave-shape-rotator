@@ -73,10 +73,10 @@ export function SearchBox({ workspaceId }: { workspaceId: string }) {
         }}
         onFocus={() => results && setOpen(true)}
         placeholder="Search meetings…"
-        className="h-8 w-56 rounded-md border border-border bg-background px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+        className="h-8 w-56 rounded-none border border-border bg-background px-2 text-sm outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
       />
       {open && results !== null ? (
-        <div className="absolute left-0 top-9 z-50 w-96 rounded-md border border-border bg-background shadow-lg">
+        <div className="absolute left-0 top-9 z-50 w-96 rounded-none border border-border bg-background">
           {results.length === 0 ? (
             <p className="p-3 text-xs text-muted-foreground">No matches.</p>
           ) : (

@@ -1,8 +1,9 @@
 /**
- * Conclave wordmark — Vantage language: dark circle with a serif initial
- * + bold name. (Vantage uses a white circle on dark nav; we invert on
- * light surfaces and flip via the `inverted` prop on dark ones.)
+ * Conclave wordmark — the waveform logo mark + bold name. The logo is a
+ * self-contained sharp mark (white frame) that reads on light or dark; the
+ * `inverted` prop only flips the wordmark text color for dark surfaces.
  */
+import Image from "next/image";
 import Link from "next/link";
 
 import { cn } from "@/lib/utils";
@@ -21,17 +22,17 @@ export function Wordmark({
 }) {
   const inner = (
     <span className={cn("flex items-center gap-2.5", className)}>
-      <span
+      <Image
+        src="/logo.png"
+        alt="Conclave logo"
+        width={40}
+        height={40}
+        priority
         className={cn(
-          "flex items-center justify-center rounded-full font-bold shadow-sm",
-          inverted
-            ? "bg-background text-foreground"
-            : "bg-foreground text-background",
-          size === "lg" ? "size-10 text-2xl" : "size-8 text-lg",
+          "rounded-none object-contain",
+          size === "lg" ? "size-10" : "size-8",
         )}
-      >
-        C
-      </span>
+      />
       <span
         className={cn(
           "font-bold tracking-tight",

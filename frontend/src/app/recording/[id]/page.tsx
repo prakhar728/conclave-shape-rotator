@@ -10,26 +10,23 @@
  *     for a second viewer with access. That path shows the server-buffered
  *     segments + a clear "recording ended / disconnected" state (no mic control).
  *
- * Meta: elapsed mm:ss · status · speaker count · rolling segment count.
- * Stop → "ending — post-processing" → on the finalize `done` signal, auto-redirect
- * to /meeting/[id] (the #9 inline editor). Cancel/abandon fully tears the session
+ * The header is a single voice widget (`AIVoiceInput`): its spinning square is
+ * the recording indicator AND the stop control, the mono timer is the elapsed
+ * clock, and the bars are the live mic amplitude (from the provider's analyser).
+ * Stop → "Finalizing" → on the finalize `done` signal, auto-redirect to
+ * /meeting/[id] (the #9 inline editor). Cancel/abandon fully tears the session
  * down (no leaked AudioContext / mic tracks). No `beforeunload` warning.
  */
 "use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useMemo, useState } from "react";
-
-import { Square } from "lucide-react";
+import { use, useEffect, useState } from "react";
 
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { PageError, PageLoading } from "@/components/page-state";
-import {
-  fmt,
-  useRecording,
-  type LiveSeg,
-} from "@/components/recording-provider";
+import { fmt, useRecording, type LiveSeg } from "@/components/recording-provider";
+import { AIVoiceInput } from "@/components/ui/ai-voice-input";
 import { ApiError, auth, live, type MeResponse } from "@/lib/api";
 
 type SseState = "connecting" | "live" | "reconnecting";
@@ -100,12 +97,8 @@ export default function RecordingPage({
   }, [active?.status, id, router]);
 
   const segs = owned ? active!.segs : sseSegs;
-  const speakerCount = useMemo(
-    () => new Set(segs.map((s) => s.speaker)).size,
-    [segs],
-  );
   // Owner: the live ticker. Non-owner: no start time, so approximate from the
-  // latest segment end (seconds-from-start) — good enough for the meta line.
+  // latest segment end (seconds-from-start) — good enough for the header clock.
   const elapsed = owned
     ? active!.seconds
     : segs.length
@@ -115,9 +108,24 @@ export default function RecordingPage({
   if (loadError) return <PageError message={loadError} />;
   if (!me) return <PageLoading />;
 
-  const status: RecordingStatus | "disconnected" = owned
-    ? active!.status
-    : "disconnected";
+  const micActive =
+    owned &&
+    (active!.status === "starting" ||
+      active!.status === "recording" ||
+      active!.status === "ending");
+  const canStop =
+    owned && (active!.status === "recording" || active!.status === "starting");
+  const statusText = owned
+    ? active!.status === "starting"
+      ? "Requesting mic"
+      : active!.status === "recording"
+        ? "Listening"
+        : active!.status === "ending"
+          ? "Finalizing"
+          : active!.status === "done"
+            ? "Opening meeting"
+            : ""
+    : "";
 
   return (
     <AppShell user={me.user}>
@@ -125,201 +133,83 @@ export default function RecordingPage({
         <div className="mx-auto w-full max-w-3xl px-6 py-8 md:py-10">
           <PageHeader
             title="Live recording"
-            subtitle={
-              <span className="font-mono text-[11px]">{id}</span>
-            }
+            subtitle={<span className="font-mono text-[11px]">{id}</span>}
           />
 
-          {/* ── Status card + controls ── */}
-          <div className="rounded-none border border-foreground bg-card p-6 shadow-[4px_4px_0px_0px_rgba(0,0,0,0.15)] dark:shadow-[4px_4px_0px_0px_rgba(255,255,255,0.15)]">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <StatusHeadline status={status} sseState={sseState} />
-              {owned &&
-              (active!.status === "recording" || active!.status === "starting") ? (
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={rec.cancel}
-                    className="rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider text-muted-foreground transition hover:text-foreground"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={rec.stop}
-                    className="inline-flex items-center gap-2 rounded-full bg-destructive px-5 py-2.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg transition hover:opacity-90 active:scale-95"
-                    aria-label="Stop recording"
-                  >
-                    <Square className="size-4 fill-current" />
-                    Stop
-                  </button>
-                </div>
-              ) : null}
-              {owned && active!.status === "ending" ? (
-                <span className="font-mono text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Finalizing — redirecting when ready…
-                </span>
+          {/* ── Voice widget: indicator + timer + live amplitude + stop ── */}
+          {owned && active!.status === "error" ? (
+            <div className="rounded-xl border border-destructive/50 bg-destructive/5 px-5 py-4 text-center">
+              <p className="text-sm font-medium text-destructive">Recording stopped</p>
+              {active!.error ? (
+                <p className="mt-1 text-xs text-muted-foreground">{active!.error}</p>
               ) : null}
             </div>
-
-            {/* Meta line */}
-            <dl className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Meta label="Elapsed">
-                <span className="font-mono tabular-nums">{fmt(elapsed)}</span>
-              </Meta>
-              <Meta label="Status">{statusLabel(status, sseState)}</Meta>
-              <Meta label="Speakers">{speakerCount}</Meta>
-              <Meta label="Segments">{segs.length}</Meta>
-            </dl>
-
-            {owned && active!.error ? (
-              <p className="mt-4 rounded-none border border-destructive bg-destructive/10 px-4 py-3 text-xs text-destructive">
-                {active!.error}
+          ) : owned ? (
+            <div className="flex flex-col items-center gap-2 rounded-2xl bg-muted/50 py-8 shadow-sm">
+              <AIVoiceInput
+                active={micActive}
+                elapsedSeconds={elapsed}
+                getLevels={rec.getAudioLevels}
+                statusText={statusText}
+                ariaLabel={canStop ? "Stop recording" : undefined}
+                onToggle={canStop ? rec.stop : undefined}
+                visualizerBars={56}
+              />
+              {canStop ? (
+                <button
+                  onClick={rec.cancel}
+                  className="text-xs text-muted-foreground transition hover:text-foreground"
+                >
+                  Cancel
+                </button>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-1 rounded-2xl bg-muted/50 py-10 text-center shadow-sm">
+              <span className="font-mono text-sm tabular-nums text-muted-foreground">
+                {fmt(elapsed)}
+              </span>
+              <p className="text-sm font-medium text-foreground">Disconnected view</p>
+              <p className="max-w-sm px-6 text-xs text-muted-foreground">
+                {sseState === "live" ? "Replaying the buffered live transcript. " : "Reconnecting. "}
+                Mic control lives in the tab that started the recording.
               </p>
-            ) : null}
-
-            {!owned ? (
-              <p className="mt-4 rounded-none border border-border bg-secondary/50 px-4 py-3 text-xs text-muted-foreground">
-                This view isn&apos;t holding the live mic — you reloaded, or opened
-                it on another device. It&apos;s replaying the enclave&apos;s buffered
-                live transcript; mic control lives in the tab that started the
-                recording.
-              </p>
-            ) : null}
-          </div>
+            </div>
+          )}
 
           {/* ── Live segments ── */}
-          <div className="mt-6">
+          <div className="mt-8 border-t border-border/60 pt-6">
+            <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Live transcript
+            </h2>
             {segs.length > 0 ? (
-              <div className="rounded-none border border-border bg-card p-4">
-                <ol className="space-y-2">
-                  {segs.map((s, i) => (
-                    <li key={i} className="text-xs">
-                      <span className="font-bold text-primary">{s.speaker}</span>
-                      <span className="ml-2 font-mono text-[10px] text-muted-foreground">
-                        {s.start.toFixed(1)}–{s.end.toFixed(1)}s
-                      </span>
-                      <p className="mt-0.5 text-foreground">{s.text}</p>
-                    </li>
-                  ))}
-                </ol>
-              </div>
+              <ol className="space-y-3">
+                {segs.map((s, i) => (
+                  <li key={i} className="text-sm">
+                    <span className="font-semibold text-primary">{s.speaker}</span>
+                    <p className="mt-0.5 text-foreground">{s.text}</p>
+                  </li>
+                ))}
+              </ol>
             ) : (
-              <p className="rounded-none border border-dashed border-input bg-secondary/40 px-4 py-8 text-center text-xs text-muted-foreground">
+              <p className="rounded-xl bg-muted/40 px-4 py-10 text-center text-sm text-muted-foreground">
                 {owned
-                  ? "Listening to the room — segments will stream in as people talk."
+                  ? "Listening to the room. Segments will stream in as people talk."
                   : "No buffered segments yet. If the meeting already finalized, open it from the dashboard."}
               </p>
             )}
           </div>
 
-          <div className="mt-6">
+          <div className="mt-8">
             <Link
               href="/dashboard"
-              className="text-xs font-bold uppercase tracking-widest text-muted-foreground transition hover:text-foreground"
+              className="text-xs text-muted-foreground transition hover:text-foreground"
             >
-              &larr; Back to dashboard
+              Back to dashboard
             </Link>
           </div>
         </div>
       </main>
     </AppShell>
-  );
-}
-
-type RecordingStatus = NonNullable<
-  ReturnType<typeof useRecording>["recording"]
->["status"];
-
-function StatusHeadline({
-  status,
-  sseState,
-}: {
-  status: RecordingStatus | "disconnected";
-  sseState: SseState;
-}) {
-  if (status === "recording" || status === "starting") {
-    return (
-      <div className="flex items-center gap-3">
-        <span className="size-3 animate-pulse rounded-full bg-destructive" />
-        <h2 className="font-heading text-2xl font-black uppercase tracking-tight">
-          Recording
-        </h2>
-      </div>
-    );
-  }
-  if (status === "ending") {
-    return (
-      <div className="flex items-center gap-3">
-        <span className="size-3 animate-pulse rounded-full bg-primary" />
-        <h2 className="font-heading text-2xl font-black uppercase tracking-tight">
-          Ending — post-processing
-        </h2>
-      </div>
-    );
-  }
-  if (status === "done") {
-    return (
-      <h2 className="font-heading text-2xl font-black uppercase tracking-tight">
-        Done — opening meeting…
-      </h2>
-    );
-  }
-  if (status === "error") {
-    return (
-      <h2 className="font-heading text-2xl font-black uppercase tracking-tight text-destructive">
-        Recording stopped
-      </h2>
-    );
-  }
-  // disconnected (non-owner view)
-  return (
-    <div className="flex items-center gap-3">
-      <span
-        className={
-          sseState === "live"
-            ? "size-3 animate-pulse rounded-full bg-attested"
-            : "size-3 rounded-full bg-muted-foreground"
-        }
-      />
-      <h2 className="font-heading text-2xl font-black uppercase tracking-tight">
-        Disconnected view
-      </h2>
-    </div>
-  );
-}
-
-function statusLabel(
-  status: RecordingStatus | "disconnected",
-  sseState: SseState,
-): string {
-  switch (status) {
-    case "starting":
-      return "Requesting mic…";
-    case "recording":
-      return "Listening";
-    case "ending":
-      return "Finalizing";
-    case "done":
-      return "Complete";
-    case "error":
-      return "Stopped";
-    case "disconnected":
-      return sseState === "live" ? "Buffered (live)" : "Reconnecting…";
-  }
-}
-
-function Meta({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-none border border-border bg-secondary/40 px-3 py-2">
-      <dt className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-0.5 text-sm font-bold text-foreground">{children}</dd>
-    </div>
   );
 }

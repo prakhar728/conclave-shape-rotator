@@ -201,7 +201,7 @@ function Body({
     return <Note>No transcript text was captured for this meeting.</Note>;
   }
   return (
-    <ol className="flex flex-col gap-3">
+    <ol className="flex flex-col gap-5">
       {state.segments.map((seg, idx) => {
         const pendingName = pending[seg.speaker];
         const display = seg.speaker_name ?? seg.speaker;
@@ -211,56 +211,53 @@ function Body({
         const proposedName =
           !seg.speaker_name && !pendingName ? seg.proposed_name ?? null : null;
         return (
-          <li
-            key={idx}
-            className="rounded-xl border border-border bg-card p-4 shadow-sm"
-          >
-            <p className="text-xs font-medium text-muted-foreground">
+          <li key={idx}>
+            <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
               {taggable ? (
                 <button
                   type="button"
                   onClick={() => openForm(idx)}
-                  className="underline decoration-dotted underline-offset-2 hover:text-foreground"
+                  className="text-sm font-semibold text-foreground underline decoration-dotted decoration-muted-foreground/40 underline-offset-2 transition-colors hover:decoration-foreground"
                   title="Tag this speaker"
                 >
                   {display}
                 </button>
               ) : (
-                display
+                <span className="text-sm font-semibold text-foreground">{display}</span>
               )}
               {taggable && proposedName ? (
                 <span
                   data-testid="proposed-chip"
-                  className="ml-2 inline-flex items-center gap-1.5 rounded-full border border-sky-500/60 px-2 py-0.5 text-[0.65rem] text-sky-600"
+                  className="inline-flex items-center gap-1.5 rounded-md border border-signal-entity/50 px-2 py-0.5 text-[0.7rem] text-signal-entity"
                 >
                   Proposed: {proposedName}
                   <button
                     type="button"
                     onClick={() => openForm(idx, proposedName)}
-                    className="font-semibold underline decoration-dotted underline-offset-2 hover:text-sky-800"
+                    className="font-semibold underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Confirm
                   </button>
                   <button
                     type="button"
                     onClick={() => openForm(idx, proposedName)}
-                    className="underline decoration-dotted underline-offset-2 hover:text-sky-800"
+                    className="underline decoration-dotted underline-offset-2 hover:text-foreground"
                   >
                     Edit
                   </button>
                 </span>
               ) : null}
               {pendingName ? (
-                <span className="ml-2 rounded-full border border-amber-500/60 px-2 py-0.5 text-[0.65rem] text-amber-600">
+                <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
                   pending: {pendingName}
                 </span>
               ) : null}
               {seg.start != null ? (
-                <span className="ml-2 font-mono text-[0.7rem] opacity-70">
+                <span className="font-mono text-xs text-muted-foreground/50">
                   {formatTime(seg.start)}
                 </span>
               ) : null}
-            </p>
+            </div>
             {taggable && openIdx === idx ? (
               <SpeakerTagForm
                 // Remount when the prefill changes so Confirm/Edit re-seeds the name.
@@ -273,7 +270,7 @@ function Body({
                 onSubmit={submitTag}
               />
             ) : null}
-            <p className="mt-1 text-sm leading-relaxed">{seg.text}</p>
+            <p className="mt-0.5 text-sm leading-relaxed text-foreground/90">{seg.text}</p>
             {seg.start != null && seg.end != null ? (
               <AudioSegmentPlayer sessionId={sessionId} start={seg.start} end={seg.end} />
             ) : null}
@@ -337,7 +334,7 @@ function Note({
       className={
         tone === "error"
           ? "text-xs text-destructive"
-          : "rounded-lg border border-dashed border-border p-4 text-xs text-muted-foreground"
+          : "rounded-none border border-dashed border-border p-4 text-xs text-muted-foreground"
       }
     >
       {children}

@@ -38,7 +38,7 @@ export function RefineActions({
       {draft.insights_stale ? (
         <span
           data-testid="stale-badge"
-          className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground"
+          className="inline-flex items-center gap-1 rounded-none border border-border px-2 py-0.5 text-xs text-muted-foreground"
         >
           ⟳ Insights update when you approve
         </span>
@@ -51,7 +51,7 @@ export function RefineActions({
           data-testid="approve-btn"
           disabled={busy || approved}
           onClick={approve}
-          className="rounded bg-foreground px-4 py-1.5 text-sm font-semibold text-background disabled:opacity-40"
+          className="rounded-none bg-foreground px-4 py-1.5 text-sm font-semibold text-background disabled:opacity-40"
         >
           {approved ? "Approved" : busy ? "Approving…" : "Approve & build"}
         </button>

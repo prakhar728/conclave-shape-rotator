@@ -172,7 +172,7 @@ export default function MembersPage({
             {members.map((m) => (
               <li
                 key={m.user_id}
-                className="flex items-center justify-between gap-3 rounded border border-border px-3 py-2 text-sm"
+                className="flex items-center justify-between gap-3 rounded-none border border-border px-3 py-2 text-sm"
               >
                 <span>
                   {m.email ?? m.user_id}
@@ -206,7 +206,7 @@ export default function MembersPage({
               {invites.map((i) => (
                 <li
                   key={i.id}
-                  className="flex items-center justify-between gap-3 rounded border border-dashed border-border px-3 py-2 text-sm text-muted-foreground"
+                  className="flex items-center justify-between gap-3 rounded-none border border-dashed border-border px-3 py-2 text-sm text-muted-foreground"
                 >
                   <span>{i.email}</span>
                   <span className="text-xs">invited</span>

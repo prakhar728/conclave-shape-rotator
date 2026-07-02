@@ -1,5 +1,5 @@
 /**
- * Transcript upload — orange pill CTA + modal (Vantage language).
+ * Transcript upload — sharp icon-button CTA + modal.
  *
  * Two paths in one surface: drag-drop / file-pick a .txt/.json (read
  * client-side via FileReader — the API takes JSON text, no multipart),
@@ -32,7 +32,7 @@ export function UploadTranscriptButton({
         aria-label="Upload transcript"
         title="Upload transcript"
         className={cn(
-          "inline-flex size-10 items-center justify-center rounded-none border border-foreground bg-primary text-primary-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] dark:shadow-[2px_2px_0px_0px_rgba(255,255,255,1)] transition-all hover:bg-muted-foreground active:scale-95",
+          "inline-flex size-10 items-center justify-center rounded-lg border border-border bg-card text-foreground transition-colors hover:bg-secondary",
           className,
         )}
       >
@@ -123,7 +123,7 @@ function UploadModal({
         role="dialog"
         aria-modal="true"
         aria-label="Upload transcript"
-        className="w-full max-w-lg rounded-3xl border border-border bg-card p-6 shadow-2xl"
+        className="w-full max-w-lg rounded-none border border-border bg-card p-6"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-5 flex items-start justify-between">
@@ -138,7 +138,7 @@ function UploadModal({
           </div>
           <button
             onClick={onClose}
-            className="flex size-8 shrink-0 items-center justify-center rounded-full bg-secondary text-muted-foreground transition hover:text-foreground"
+            className="flex size-8 shrink-0 items-center justify-center rounded-none bg-secondary text-muted-foreground transition hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -148,7 +148,7 @@ function UploadModal({
         {duplicate ? (
           <div
             data-testid="duplicate-notice"
-            className="mb-4 rounded-2xl border border-border bg-secondary/50 p-4"
+            className="mb-4 rounded-none border border-border bg-secondary/50 p-4"
           >
             <p className="text-sm font-semibold">Already imported</p>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -169,13 +169,13 @@ function UploadModal({
                       : `/meeting/${duplicate.sessionId}/refine`,
                   )
                 }
-                className="rounded-full bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground"
+                className="rounded-none bg-primary px-4 py-1.5 text-xs font-bold text-primary-foreground"
               >
                 {duplicate.v2Status === "approved" ? "View transcript →" : "Open editor →"}
               </button>
               <button
                 onClick={() => setDuplicate(null)}
-                className="rounded-full px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
+                className="rounded-none px-4 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground"
               >
                 Upload a different one
               </button>
@@ -198,7 +198,7 @@ function UploadModal({
           }}
           onClick={() => fileInput.current?.click()}
           className={cn(
-            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed p-6 text-center transition",
+            "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-none border-2 border-dashed p-6 text-center transition",
             dragOver
               ? "border-primary bg-primary/5"
               : "border-input bg-secondary/50 hover:border-primary/50",
@@ -255,7 +255,7 @@ function UploadModal({
           placeholder={"Ada Lovelace  0:01\nWe should ship the importer by Friday.\n\nGrace Hopper  0:14\nAgreed — I'll review the parser tomorrow."}
           rows={5}
           disabled={busy}
-          className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="w-full rounded-none border border-input bg-background px-3 py-2 font-mono text-xs leading-relaxed placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         />
 
         <input
@@ -263,7 +263,7 @@ function UploadModal({
           onChange={(e) => setIntent(e.target.value)}
           placeholder="Focus / intent (optional) — what should the notes focus on?"
           disabled={busy}
-          className="mt-3 w-full rounded-xl border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="mt-3 w-full rounded-none border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         />
 
         {error ? (
@@ -274,14 +274,14 @@ function UploadModal({
           <button
             onClick={onClose}
             disabled={busy}
-            className="rounded-full px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
+            className="rounded-none px-4 py-2 text-xs font-medium text-muted-foreground transition hover:text-foreground"
           >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={busy || !text.trim()}
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:bg-primary/90 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-none bg-primary px-6 py-2.5 text-xs font-bold text-primary-foreground transition-all hover:bg-primary/90 active:scale-95 disabled:pointer-events-none disabled:opacity-50"
           >
             {busy ? "Uploading…" : "Upload & process"}
           </button>

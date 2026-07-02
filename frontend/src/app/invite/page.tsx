@@ -12,6 +12,7 @@
  */
 "use client";
 
+import { Bot } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
@@ -122,7 +123,8 @@ export default function InvitePage() {
     <AppShell user={me.user}>
       <main className="mx-auto max-w-2xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
+            <Bot className="size-6 shrink-0 text-muted-foreground" aria-hidden />
             Invite the bot
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
@@ -162,7 +164,7 @@ export default function InvitePage() {
                 Attendees (optional)
               </label>
               <textarea
-                className="mt-2 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="mt-2 w-full rounded-none border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
                 value={attendees}
                 onChange={(e) => setAttendees(e.target.value)}
@@ -179,7 +181,7 @@ export default function InvitePage() {
                 Focus / intent (optional)
               </label>
               <textarea
-                className="mt-2 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="mt-2 w-full rounded-none border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 rows={3}
                 value={intent}
                 onChange={(e) => setIntent(e.target.value)}
@@ -230,7 +232,7 @@ function LivePanel({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-card p-6">
+    <div className="rounded-none border border-border bg-card p-6">
       <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
         Meet code
       </p>
@@ -256,14 +258,14 @@ function LivePanel({
       <div className="mt-6 flex flex-wrap gap-3">
         <Link
           href="/dashboard"
-          className="inline-flex h-8 items-center rounded-lg border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
+          className="inline-flex h-8 items-center rounded-none border border-border bg-background px-3 text-sm font-medium hover:bg-muted"
         >
           Back to dashboard
         </Link>
         {live.status === "completed" ? (
           <Link
             href={`/meeting/${live.sessionId}`}
-            className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
+            className="inline-flex h-8 items-center rounded-none bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/80"
           >
             View meeting
           </Link>
@@ -272,7 +274,7 @@ function LivePanel({
           <button
             onClick={handleStop}
             disabled={stopping}
-            className="inline-flex h-8 items-center rounded-lg border border-destructive/40 bg-destructive/10 px-3 text-sm font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50"
+            className="inline-flex h-8 items-center rounded-none border border-destructive/40 bg-destructive/10 px-3 text-sm font-medium text-destructive hover:bg-destructive/20 disabled:opacity-50"
           >
             {stopping ? "Stopping…" : "Stop bot"}
           </button>

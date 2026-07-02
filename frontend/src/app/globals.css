@@ -58,7 +58,7 @@
 
 :root {
   /* ───── Motto Brutalist (monochromatic light mode with cyber green accents) ───── */
-  --background: #F0F0F1;            /* cool grey architectural canvas */
+  --background: #FFFFFF;            /* flat white canvas — separate with borders, not fills */
   --foreground: #000000;            /* stark black ink */
   --card: #FFFFFF;                  /* clean white card contrast */
   --card-foreground: #000000;
@@ -82,7 +82,7 @@
   --chart-4: #059669;
   --chart-5: #6B7280;
   --radius: 0.125rem;               /* sharp brutalist corners */
-  --sidebar: #F0F0F1;
+  --sidebar: #FFFFFF;
   --sidebar-foreground: #000000;
   --sidebar-primary: #000000;
   --sidebar-primary-foreground: #FFFFFF;
@@ -147,8 +147,8 @@
   --radius: 0.125rem;
 }
 
-/* Warm glow atmosphere (Vantage hero): a soft primary-tinted bloom from
-   the top of the canvas. Used on full-bleed pages (landing, login). */
+/* Soft primary-tinted radial bloom from the top of the canvas. Used on
+   full-bleed pages (landing, login). */
 @utility bg-vault-atmosphere {
   background:
     radial-gradient(
@@ -159,15 +159,8 @@
     var(--background);
 }
 
-/* Vantage's signature dotted-grid workspace canvas. */
-@utility bg-dotted-grid {
-  background-color: var(--card);
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
-  background-size: 20px 20px;
-}
-
-/* Emerald text shimmer for in-enclave "thinking" states (UI-NOW.md §3,
-   search/ask loading). Sweeps primary through muted text via bg-clip. */
+/* Text shimmer for "thinking"/loading states (search & /ask loading).
+   Sweeps primary through muted text via bg-clip. */
 @utility animate-shimmer-text {
   background: linear-gradient(
     90deg,

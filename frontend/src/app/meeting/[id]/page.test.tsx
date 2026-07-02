@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── next/navigation ──────────────────────────────────────────────────────────
@@ -138,6 +138,8 @@ describe("MeetingPage — editor vs transcript panel", () => {
 
     renderPage();
 
+    // Editor + transcript live under the "Transcript" sub-tab.
+    fireEvent.click(await screen.findByRole("button", { name: "transcript" }));
     await waitFor(() => expect(screen.getByTestId("refine-editor")).toBeInTheDocument());
     expect(screen.queryByTestId("transcript-panel")).toBeNull();
   });
@@ -156,6 +158,8 @@ describe("MeetingPage — editor vs transcript panel", () => {
 
     renderPage();
 
+    // Transcript lives under the "Transcript" sub-tab.
+    fireEvent.click(await screen.findByRole("button", { name: "transcript" }));
     await waitFor(() => expect(screen.getByTestId("transcript-panel")).toBeInTheDocument());
     expect(screen.queryByTestId("refine-editor")).toBeNull();
   });
@@ -174,6 +178,8 @@ describe("MeetingPage — editor vs transcript panel", () => {
 
     renderPage();
 
+    // Transcript lives under the "Transcript" sub-tab.
+    fireEvent.click(await screen.findByRole("button", { name: "transcript" }));
     await waitFor(() => expect(screen.getByTestId("transcript-panel")).toBeInTheDocument());
     expect(screen.queryByTestId("refine-editor")).toBeNull();
   });

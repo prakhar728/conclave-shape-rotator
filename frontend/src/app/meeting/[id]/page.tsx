@@ -17,9 +17,10 @@
  */
 "use client";
 
+import { ArrowLeft, Check, Clock, Copy, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { OwnerControls } from "@/components/owner-controls";
@@ -32,6 +33,7 @@ import { RefineEditor } from "@/components/refine/refine-editor";
 import { useRefineDraft } from "@/components/refine/use-refine-draft";
 import { RetentionControl } from "@/components/retention-control";
 import { TranscriptPanel } from "@/components/transcript-panel";
+import { cn } from "@/lib/utils";
 import {
   ApiError,
   auth,
@@ -40,6 +42,7 @@ import {
   type MeResponse,
   type MeetingView,
   type Signal,
+  type TranscriptSegment,
 } from "@/lib/api";
 
 export default function MeetingPage({
@@ -56,6 +59,11 @@ export default function MeetingPage({
   const { draft, setDraft, preparing } = useRefineDraft(id);
   // True while a post-approve re-derive is running (insights regenerating in the bg).
   const [regenerating, setRegenerating] = useState(false);
+  // Transcript segments — powers the header's duration + copy-to-clipboard.
+  const [segments, setSegments] = useState<TranscriptSegment[] | null>(null);
+  const [copied, setCopied] = useState(false);
+  // Which sub-tab is shown: the summary/insights or the transcript.
+  const [tab, setTab] = useState<"summary" | "transcript">("summary");
 
   // A freshly-recorded in-person meeting lands here while the background finalize runs (DiariZen
   // authoritative re-diarization → VFTE names → enrichment). The diart transcript is shown immediately;
@@ -155,6 +163,21 @@ export default function MeetingPage({
     };
   }, [id, router]);
 
+  // Pull the transcript once the viewer is allowed to see it — used for the
+  // header's duration readout and the copy-to-clipboard button.
+  const canViewTranscript = meeting?.can_view_transcript ?? false;
+  useEffect(() => {
+    if (!canViewTranscript) return;
+    let cancelled = false;
+    meetingsApi
+      .transcript(id)
+      .then((r) => !cancelled && setSegments(r.segments))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewTranscript, id, reloadKey]);
+
   if (error) {
     return (
       <PageError message={error}>
@@ -169,43 +192,117 @@ export default function MeetingPage({
   }
   if (!me || !meeting) return <PageLoading />;
 
+  const durationSec =
+    segments && segments.length
+      ? Math.max(0, ...segments.map((s) => s.end ?? 0))
+      : 0;
+
+  async function copyTranscript() {
+    if (!segments?.length) return;
+    const text = segments
+      .map((s) => `${s.speaker_name ?? s.speaker}: ${s.text}`)
+      .join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard blocked (insecure context / permissions) — no-op
+    }
+  }
+
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="mx-auto max-w-5xl px-6 py-10">
         <Link
           href="/dashboard"
-          className="text-xs font-bold uppercase tracking-widest text-muted-foreground hover:text-foreground border-b border-transparent hover:border-foreground pb-0.5"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
-          &larr; Back to Dashboard
+          <ArrowLeft className="size-4" aria-hidden />
+          Back to dashboard
         </Link>
-        
-        <div className="mt-8 mb-10 border-b border-border pb-6">
-          <h1 className="font-heading text-3xl font-black uppercase tracking-tight leading-none text-foreground sm:text-4xl">
-            {meeting.summary || `${meeting.source} — ${meeting.date}`}
+
+        <div className="mt-6 mb-8 border-b border-border pb-6">
+          <div className="flex items-center justify-end gap-2">
+              {canViewTranscript ? (
+                <button
+                  onClick={copyTranscript}
+                  disabled={!segments?.length}
+                  title="Copy transcript to clipboard"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50"
+                >
+                  {copied ? (
+                    <Check className="size-4" aria-hidden />
+                  ) : (
+                    <Copy className="size-4" aria-hidden />
+                  )}
+                  {copied ? "Copied" : "Copy transcript"}
+                </button>
+              ) : null}
+              {meeting.is_owner ? (
+                <>
+                  <IconPopover icon={Share2} label="Sharing">
+                    <OwnerControls
+                      bare
+                      sessionId={meeting.session_id}
+                      initialVisibility={
+                        (meeting.effective_visibility as "owner-only" | "shared") ??
+                        "owner-only"
+                      }
+                      initialSharedToWorkspace={meeting.shared_to_workspace ?? false}
+                      initialOwnerOnly={meeting.owner_only ?? false}
+                    />
+                  </IconPopover>
+                  <IconPopover icon={Clock} label="Retention">
+                    <RetentionControl
+                      bare
+                      sessionId={meeting.session_id}
+                      initialOverride={meeting.retention_override}
+                      rawDeleted={meeting.raw_transcript_deleted}
+                    />
+                  </IconPopover>
+                </>
+              ) : null}
+          </div>
+          <h1 className="mt-4 font-heading text-2xl font-bold tracking-tight text-foreground md:text-3xl">
+            {meeting.summary || `${meeting.source} · ${meeting.date}`}
           </h1>
-          <p className="mt-3 font-mono text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            {meeting.date} &bull; {meeting.source} &bull; {meeting.session_id}
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+            <span>{meeting.date}</span>
+            <span aria-hidden>·</span>
+            <span className="capitalize">{meeting.source}</span>
+            {durationSec > 0 ? (
+              <>
+                <span aria-hidden>·</span>
+                <span>{fmtDuration(durationSec)}</span>
+              </>
+            ) : null}
+            {meeting.meeting_intent_version ? (
+              <>
+                <span aria-hidden>·</span>
+                <span
+                  data-testid="agenda-grounded"
+                  title={`meeting_intent_version: ${meeting.meeting_intent_version}`}
+                  className="inline-flex items-center gap-1.5 text-foreground"
+                >
+                  <span className="size-1.5 rounded-full bg-attested" aria-hidden />
+                  Agenda-grounded
+                </span>
+              </>
+            ) : null}
+          </div>
+          <p className="mt-1 font-mono text-xs text-muted-foreground/60">
+            {meeting.session_id}
           </p>
-
-          {meeting.meeting_intent_version ? (
-            <p
-              data-testid="agenda-grounded"
-              title={`meeting_intent_version: ${meeting.meeting_intent_version}`}
-              className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] font-bold uppercase tracking-wider text-primary"
-            >
-              <span className="size-1.5 rounded-full bg-primary" />
-              Agenda-grounded insights
-            </p>
-          ) : null}
-
         </div>
 
         {processing ? (
-          <div className="mb-8 flex items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <div className="mb-8 flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/5 px-4 py-3">
             <span className="size-2 animate-pulse rounded-full bg-primary" />
-            <p className="text-xs text-muted-foreground">
-              Post-processing — showing the live diart transcript. The final re-diarized transcript,
-              speaker names, and summary will appear here automatically when ready.
+            <p className="text-sm text-muted-foreground">
+              Post-processing. Showing the live diart transcript; the final
+              re-diarized transcript, speaker names, and summary appear here when ready.
             </p>
           </div>
         ) : null}
@@ -213,79 +310,85 @@ export default function MeetingPage({
         {regenerating ? (
           <div
             data-testid="insights-updating"
-            className="mb-8 flex items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/5 px-4 py-3"
+            className="mb-8 flex items-center gap-3 rounded-lg border border-signal-entity/30 bg-signal-entity/5 px-4 py-3"
           >
-            <span className="size-2 animate-pulse rounded-full bg-blue-500" />
-            <p className="text-xs text-muted-foreground">
-              Updating insights — re-deriving the summary &amp; signals with the latest speaker names…
+            <span className="size-2 animate-pulse rounded-full bg-signal-entity" />
+            <p className="text-sm text-muted-foreground">
+              Updating insights. Re-deriving the summary and signals with the latest speaker names…
             </p>
           </div>
         ) : null}
 
-        <SignalGroup
-          title="Action items"
-          signals={meeting.signals_by_kind.action_items}
-          accent="action"
-        />
-        <SignalGroup
-          title="Open questions"
-          signals={meeting.signals_by_kind.open_questions}
-          accent="open_question"
-        />
-        <SignalGroup
-          title="Insights"
-          signals={meeting.signals_by_kind.insights}
-          accent="insight"
-        />
+        {/* Sub-tabs: summary/insights vs the full transcript. */}
+        <div className="mb-6 flex items-center gap-1 border-b border-border">
+          {(["summary", "transcript"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={cn(
+                "relative px-4 py-2 text-sm font-medium capitalize transition-colors",
+                tab === t
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t}
+              {tab === t ? (
+                <span className="absolute inset-x-0 -bottom-px h-0.5 bg-foreground" aria-hidden />
+              ) : null}
+            </button>
+          ))}
+        </div>
 
-        {meeting.signals_by_kind.action_items.length === 0 &&
-        meeting.signals_by_kind.open_questions.length === 0 &&
-        meeting.signals_by_kind.insights.length === 0 ? (
-          <InsightsPlaceholder status={meeting.enrichment_status} />
-        ) : null}
-
-        {meeting.is_owner ? (
-          <div className="space-y-6 mt-12 border-t border-border pt-8">
-            <OwnerControls
-              sessionId={meeting.session_id}
-              initialVisibility={
-                (meeting.effective_visibility as "owner-only" | "shared") ??
-                "owner-only"
-              }
-              initialSharedToWorkspace={meeting.shared_to_workspace ?? false}
-              initialOwnerOnly={meeting.owner_only ?? false}
+        {tab === "summary" ? (
+          <>
+            {meeting.entities.length > 0 ? (
+              <section className="mb-8">
+                <h2 className="mb-2.5 text-sm font-semibold text-foreground">
+                  Entities
+                </h2>
+                <ul className="flex flex-wrap gap-1.5">
+                  {meeting.entities.map((e, idx) => (
+                    <li key={`${e.name}-${idx}`}>
+                      <Link
+                        href={`/entity/${encodeURIComponent(e.name)}`}
+                        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-0.5 text-xs transition-colors hover:bg-secondary"
+                      >
+                        <span className="text-foreground">{e.name}</span>
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          {e.type}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+            <SignalGroup
+              title="Action items"
+              signals={meeting.signals_by_kind.action_items}
+              accent="action"
             />
-            <RetentionControl
-              sessionId={meeting.session_id}
-              initialOverride={meeting.retention_override}
-              rawDeleted={meeting.raw_transcript_deleted}
+            <SignalGroup
+              title="Open questions"
+              signals={meeting.signals_by_kind.open_questions}
+              accent="open_question"
             />
-          </div>
-        ) : null}
+            <SignalGroup
+              title="Insights"
+              signals={meeting.signals_by_kind.insights}
+              accent="insight"
+            />
 
-        {meeting.entities.length > 0 ? (
-          <section className="mt-10 border-t border-border pt-8">
-            <h2 className="mb-4 font-heading text-xs font-bold uppercase tracking-widest text-muted-foreground">
-              Entities Mentioned
-            </h2>
-            <ul className="flex flex-wrap gap-2.5">
-              {meeting.entities.map((e, idx) => (
-                <li key={`${e.name}-${idx}`}>
-                  <Link
-                    href={`/entity/${encodeURIComponent(e.name)}`}
-                    className="inline-block rounded-none border border-border bg-card px-3.5 py-1.5 text-xs font-semibold tracking-wide transition-colors hover:border-foreground hover:bg-secondary"
-                  >
-                    <span className="text-foreground uppercase">{e.name}</span>
-                    <span className="ml-2.5 text-[10px] font-mono text-muted-foreground uppercase">{e.type}</span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
+            {meeting.signals_by_kind.action_items.length === 0 &&
+            meeting.signals_by_kind.open_questions.length === 0 &&
+            meeting.signals_by_kind.insights.length === 0 ? (
+              <InsightsPlaceholder status={meeting.enrichment_status} />
+            ) : null}
 
-        {meeting.can_view_transcript !== undefined ? (
-          <div className="mt-10 border-t border-border pt-8">
+          </>
+        ) : meeting.can_view_transcript !== undefined ? (
+          <div>
             {/* Task #30 — audio player; self-hides when no audio was stored. */}
             <div className="mb-6">
               <MeetingAudioPlayer
@@ -327,24 +430,83 @@ export default function MeetingPage({
               />
             )}
           </div>
-        ) : null}
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No transcript available for this meeting.
+          </p>
+        )}
+
       </main>
     </AppShell>
   );
 }
 
+/** A header icon-button that toggles a bordered popover panel (no shadow). */
+function IconPopover({
+  icon: Icon,
+  label,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+  label: string;
+  children: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={label}
+        title={label}
+        aria-expanded={open}
+        className={cn(
+          "inline-flex size-9 items-center justify-center rounded-lg border border-border bg-card transition-colors",
+          open
+            ? "bg-secondary text-foreground"
+            : "text-muted-foreground hover:bg-secondary hover:text-foreground",
+        )}
+      >
+        <Icon className="size-4" aria-hidden />
+      </button>
+      {open ? (
+        <div className="absolute right-0 z-50 mt-2 max-h-[70vh] w-[24rem] max-w-[calc(100vw-2rem)] overflow-y-auto rounded-lg border border-border bg-card p-4 animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150">
+          {children}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function fmtDuration(sec: number): string {
+  const s = Math.round(sec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const ss = s % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, "0")}m`;
+  return `${m}:${String(ss).padStart(2, "0")}`;
+}
+
 /**
- * Per-signal-kind accent (UI-NOW.md §3): colored left bar on each card
- * makes the readout scannable in 2 seconds — same color language as the
- * obligations board (action=cyber-green, open_question=amber, insight=sky).
+ * Per-signal-kind accent: a colored left bar keeps the readout scannable via
+ * signal-token colors (action=attested green, open_question=warn amber,
+ * insight=entity blue).
  */
 const SIGNAL_ACCENT: Record<string, { bar: string; dot: string }> = {
   action: { bar: "border-l-attested", dot: "bg-attested" },
   open_question: {
-    bar: "border-l-yellow-500",
-    dot: "bg-yellow-500",
+    bar: "border-l-signal-warn",
+    dot: "bg-signal-warn",
   },
-  insight: { bar: "border-l-blue-500", dot: "bg-blue-500" },
+  insight: { bar: "border-l-signal-entity", dot: "bg-signal-entity" },
 };
 
 function SignalGroup({
@@ -360,17 +522,17 @@ function SignalGroup({
   const { bar, dot } = SIGNAL_ACCENT[accent];
   return (
     <section className="mb-8">
-      <h2 className="mb-4 flex items-center gap-2 font-heading text-xs font-bold uppercase tracking-widest text-foreground">
-        <span className={`size-2 rounded-none ${dot}`} aria-hidden />
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
+        <span className={`size-2 rounded-sm ${dot}`} aria-hidden />
         {title}
       </h2>
       <ul className="flex flex-col gap-3">
         {signals.map((s, idx) => (
           <li
             key={`${s.kind}-${idx}`}
-            className={`rounded-none border border-border border-l-4 bg-card p-4 shadow-sm ${bar}`}
+            className={`rounded-lg border border-border border-l-4 bg-card p-4 ${bar}`}
           >
-            <p className="text-xs font-bold uppercase tracking-wide leading-relaxed">{s.text}</p>
+            <p className="text-sm leading-relaxed text-foreground">{s.text}</p>
             {s.source_quote ? (
               <p className="mt-2 text-xs italic leading-relaxed text-muted-foreground">
                 &ldquo;{s.source_quote}&rdquo;

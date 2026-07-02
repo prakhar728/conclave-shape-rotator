@@ -32,6 +32,11 @@ const nextConfig: NextConfig = {
         source: "/api/transcripts/:path*",
         destination: `${apiBase}/transcripts/:path*`,
       },
+      // Attestation lives at /attestation (no /api prefix on FastAPI).
+      {
+        source: "/api/attestation",
+        destination: `${apiBase}/attestation`,
+      },
       // Everything else (workspaces, etc.) — FastAPI already mounts them
       // under /api.
       {
