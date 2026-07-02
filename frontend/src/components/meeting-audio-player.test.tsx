@@ -1,12 +1,17 @@
 /**
  * Task #30 — audio player + URL helper.
  */
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { createRef } from "react";
+
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 
 import { meetings } from "@/lib/api";
 
-import { MeetingAudioPlayer } from "./meeting-audio-player";
+import {
+  MeetingAudioPlayer,
+  type MeetingAudioPlayerHandle,
+} from "./meeting-audio-player";
 
 describe("meetings.audioUrl", () => {
   it("builds the full-recording path", () => {
@@ -48,5 +53,65 @@ describe("MeetingAudioPlayer", () => {
     expect(screen.getByLabelText("Delete audio")).toBeTruthy();
     rerender(<MeetingAudioPlayer sessionId="s9" storeAudio={true} isOwner={false} />);
     expect(screen.queryByLabelText("Delete audio")).toBeNull();
+  });
+});
+
+describe("MeetingAudioPlayer — seek handle + availability (Task #41)", () => {
+  it("seekTo(seconds) sets currentTime and starts playback", () => {
+    const play = vi
+      .spyOn(window.HTMLMediaElement.prototype, "play")
+      .mockResolvedValue(undefined);
+    const ref = createRef<MeetingAudioPlayerHandle>();
+    const { container } = render(
+      <MeetingAudioPlayer ref={ref} sessionId="s9" storeAudio={true} />,
+    );
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    ref.current?.seekTo(42);
+    expect(audio.currentTime).toBe(42);
+    expect(play).toHaveBeenCalled();
+    play.mockRestore();
+  });
+
+  it("clamps a negative seek to 0", () => {
+    vi.spyOn(window.HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const ref = createRef<MeetingAudioPlayerHandle>();
+    const { container } = render(
+      <MeetingAudioPlayer ref={ref} sessionId="s9" storeAudio={true} />,
+    );
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    ref.current?.seekTo(-10);
+    expect(audio.currentTime).toBe(0);
+  });
+
+  it("reports availability true once <audio> metadata loads", () => {
+    const onAvail = vi.fn();
+    const { container } = render(
+      <MeetingAudioPlayer
+        sessionId="s9"
+        storeAudio={true}
+        onAvailabilityChange={onAvail}
+      />,
+    );
+    const audio = container.querySelector("audio") as HTMLAudioElement;
+    fireEvent.loadedMetadata(audio);
+    expect(onAvail).toHaveBeenCalledWith(true);
+  });
+
+  it("reports availability false when the meeting opted out of audio", () => {
+    const onAvail = vi.fn();
+    render(
+      <MeetingAudioPlayer
+        sessionId="s9"
+        storeAudio={false}
+        onAvailabilityChange={onAvail}
+      />,
+    );
+    expect(onAvail).toHaveBeenCalledWith(false);
+  });
+
+  it("seekTo is a safe no-op when the player has self-hidden (no audio element)", () => {
+    const ref = createRef<MeetingAudioPlayerHandle>();
+    render(<MeetingAudioPlayer ref={ref} sessionId="s9" storeAudio={false} />);
+    expect(() => ref.current?.seekTo(5)).not.toThrow();
   });
 });

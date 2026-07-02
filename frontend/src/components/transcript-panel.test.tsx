@@ -78,3 +78,63 @@ describe("TranscriptPanel — proposed name", () => {
     expect(nameInput.value).toBe("Ada Lovelace");
   });
 });
+
+describe("TranscriptPanel — click-to-seek (Task #41)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function mountWithSeek(
+    segments: TranscriptSegment[],
+    onSeek?: (s: number) => void,
+  ) {
+    vi.spyOn(meetings, "transcript").mockResolvedValue({
+      session_id: "s1",
+      segment_count: segments.length,
+      segments,
+    });
+    return render(
+      <TranscriptPanel
+        sessionId="s1"
+        canView={true}
+        canTag={false}
+        workspaceId="ws1"
+        onSeek={onSeek}
+      />,
+    );
+  }
+
+  it("clicking a segment seeks to its start when audio is available", async () => {
+    const onSeek = vi.fn();
+    mountWithSeek([seg({ text: "first line", start: 12.5, end: 15 })], onSeek);
+    const row = await screen.findByTestId("seek-segment");
+    fireEvent.click(row);
+    expect(onSeek).toHaveBeenCalledWith(12.5);
+  });
+
+  it("does NOT seek while the user has a text selection (drag-select preserved)", async () => {
+    const onSeek = vi.fn();
+    mountWithSeek([seg({ text: "selectable text", start: 3, end: 5 })], onSeek);
+    const row = await screen.findByTestId("seek-segment");
+    const orig = window.getSelection;
+    // Simulate an active selection.
+    window.getSelection = (() =>
+      ({ toString: () => "selectable" }) as unknown as Selection);
+    fireEvent.click(row);
+    window.getSelection = orig;
+    expect(onSeek).not.toHaveBeenCalled();
+  });
+
+  it("renders no seek affordance when there is no audio (onSeek undefined)", async () => {
+    mountWithSeek([seg({ text: "no audio", start: 1, end: 2 })], undefined);
+    await screen.findByText("no audio");
+    expect(screen.queryByTestId("seek-segment")).toBeNull();
+  });
+
+  it("renders no seek affordance for a segment without a start time", async () => {
+    const onSeek = vi.fn();
+    mountWithSeek([seg({ text: "no timestamp", start: null, end: null })], onSeek);
+    await screen.findByText("no timestamp");
+    expect(screen.queryByTestId("seek-segment")).toBeNull();
+  });
+});

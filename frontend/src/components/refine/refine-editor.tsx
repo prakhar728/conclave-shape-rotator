@@ -1,5 +1,6 @@
 "use client";
 
+import { Play } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { SpeakerTagForm } from "@/components/speaker-tag-form";
@@ -32,6 +33,11 @@ type Props = {
   workspaceId?: string | null;
   canTag?: boolean;
   resolvedSpeakers?: Record<string, unknown>;
+  // Task #41 — when set (audio available), a per-segment "play from here" control
+  // seeks the audio to that segment. The editor is token-based (words are for
+  // editing/tagging), so seek lives on an explicit affordance, not the word click.
+  // The page resolves segment_id → the raw start time (segment_id mirrors raw index).
+  onSeekSegment?: (segmentId: number) => void;
 };
 
 export function RefineEditor({
@@ -41,6 +47,7 @@ export function RefineEditor({
   workspaceId = null,
   canTag = false,
   resolvedSpeakers,
+  onSeekSegment,
 }: Props) {
   // The single SELECTED token. Clicking ANY word selects it and opens an inline panel
   // (edit + tag) — so tagging is available on every word (including ones you just
@@ -221,6 +228,19 @@ export function RefineEditor({
                 <span className="rounded-md border border-signal-warn/50 px-2 py-0.5 text-[0.7rem] text-signal-warn">
                   pending: {pending[seg.speaker_label]}
                 </span>
+              ) : null}
+              {onSeekSegment ? (
+                <button
+                  type="button"
+                  data-testid="seek-segment"
+                  data-segment={seg.segment_id}
+                  onClick={() => onSeekSegment(seg.segment_id)}
+                  title="Play from here"
+                  aria-label="Play from here"
+                  className="text-muted-foreground/60 transition-colors hover:text-foreground"
+                >
+                  <Play className="size-3" fill="currentColor" strokeWidth={0} />
+                </button>
               ) : null}
             </div>
 

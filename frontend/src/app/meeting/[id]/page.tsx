@@ -20,12 +20,15 @@
 import { ArrowLeft, Check, Clock, Copy, Share2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { use, useEffect, useRef, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 
 import { AppShell } from "@/components/app-shell";
 import { OriginBadge } from "@/components/origin-badge";
 import { OwnerControls } from "@/components/owner-controls";
-import { MeetingAudioPlayer } from "@/components/meeting-audio-player";
+import {
+  MeetingAudioPlayer,
+  type MeetingAudioPlayerHandle,
+} from "@/components/meeting-audio-player";
 import { PageError, PageLoading } from "@/components/page-state";
 import { ContributeShapeOS } from "@/components/refine/contribute-shapeos";
 import { InsightsPlaceholder } from "@/components/refine/insights-placeholder";
@@ -61,9 +64,17 @@ export default function MeetingPage({
   const { draft, setDraft, preparing } = useRefineDraft(id);
   // True while a post-approve re-derive is running (insights regenerating in the bg).
   const [regenerating, setRegenerating] = useState(false);
-  // Transcript segments — powers the header's duration + copy-to-clipboard.
+  // Transcript segments — powers the header's duration + copy-to-clipboard, and
+  // (Task #41) resolves an editor segment_id → its raw start time for seeking.
   const [segments, setSegments] = useState<TranscriptSegment[] | null>(null);
   const [copied, setCopied] = useState(false);
+  // Task #41 — imperative handle on the audio player + whether audio is actually
+  // playable, so transcript segments become seek-clickable only when useful.
+  const playerRef = useRef<MeetingAudioPlayerHandle>(null);
+  const [audioReady, setAudioReady] = useState(false);
+  const seekTo = useCallback((seconds: number) => {
+    playerRef.current?.seekTo(seconds);
+  }, []);
   // Which sub-tab is shown: the summary/insights or the transcript.
   const [tab, setTab] = useState<"summary" | "transcript">("summary");
 
@@ -400,9 +411,11 @@ export default function MeetingPage({
             {/* Task #30 — audio player; self-hides when no audio was stored. */}
             <div className="mb-6">
               <MeetingAudioPlayer
+                ref={playerRef}
                 sessionId={meeting.session_id}
                 isOwner={Boolean(meeting.is_owner)}
                 storeAudio={meeting.store_audio}
+                onAvailabilityChange={setAudioReady}
               />
             </div>
             {meeting.is_owner && draft && !preparing ? (
@@ -416,6 +429,17 @@ export default function MeetingPage({
                   onDraftChange={(d) => {
                     setDraft(d);
                   }}
+                  // Task #41 — seek from a segment's speaker row. The editor is
+                  // token-based (no per-segment start), so resolve segment_id →
+                  // the raw segment's start here (segment_id mirrors raw index).
+                  onSeekSegment={
+                    audioReady
+                      ? (segmentId) => {
+                          const start = segments?.[segmentId]?.start;
+                          if (start != null) seekTo(start);
+                        }
+                      : undefined
+                  }
                 />
                 <RefineActions
                   draft={draft}
@@ -435,6 +459,8 @@ export default function MeetingPage({
                 workspaceId={meeting.workspace_id ?? null}
                 canTag={Boolean(meeting.is_owner)}
                 reloadKey={reloadKey}
+                // Task #41 — click a segment to seek+play, only when audio is available.
+                onSeek={audioReady ? seekTo : undefined}
               />
             )}
           </div>

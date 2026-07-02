@@ -42,6 +42,27 @@ describe("RefineEditor", () => {
     expect(screen.getByText("DStack")).toBeInTheDocument();
   });
 
+  it("Task #41 — shows a per-segment 'play from here' control that seeks by segment_id", () => {
+    const onSeekSegment = vi.fn();
+    render(
+      <RefineEditor
+        draft={makeDraft()}
+        sessionId="s1"
+        onDraftChange={vi.fn()}
+        onSeekSegment={onSeekSegment}
+      />,
+    );
+    const seeks = screen.getAllByTestId("seek-segment");
+    expect(seeks).toHaveLength(2); // one per segment
+    fireEvent.click(seeks[1]);
+    expect(onSeekSegment).toHaveBeenCalledWith(1);
+  });
+
+  it("Task #41 — renders no seek control when audio is unavailable (no onSeekSegment)", () => {
+    renderEditor(); // no onSeekSegment
+    expect(screen.queryByTestId("seek-segment")).toBeNull();
+  });
+
   it("applies the right token-state tints (F1c)", () => {
     const { container } = renderEditor();
     expect(container.querySelector('[data-token="0"][data-segment="0"]')!.className).toContain("tok-known");

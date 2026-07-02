@@ -39,6 +39,7 @@ export function TranscriptPanel({
   workspaceId = null,
   canTag = false,
   reloadKey = 0,
+  onSeek,
 }: {
   sessionId: string;
   canView: boolean;
@@ -47,6 +48,10 @@ export function TranscriptPanel({
   // Bump to force a re-fetch — the meeting page increments this while post-processing so the diart
   // preview swaps to DiariZen's authoritative transcript (+ names) when the background finalize lands.
   reloadKey?: number;
+  // Task #41 — when set (audio available), clicking a segment's text seeks the
+  // meeting audio player to that segment's start and plays. Undefined = no audio,
+  // segments are not seek-clickable (no dead affordance).
+  onSeek?: (seconds: number) => void;
 }) {
   const [state, setState] = useState<LoadState>({ kind: "loading" });
   const [openIdx, setOpenIdx] = useState<number | null>(null);
@@ -143,6 +148,7 @@ export function TranscriptPanel({
         submitTag={submitTag}
         busy={busy}
         err={err}
+        onSeek={onSeek}
       />
     </section>
   );
@@ -161,6 +167,7 @@ function Body({
   submitTag,
   busy,
   err,
+  onSeek,
 }: {
   sessionId: string;
   state: LoadState;
@@ -174,6 +181,7 @@ function Body({
   submitTag: (label: string, name: string, email: string) => void;
   busy: boolean;
   err: string | null;
+  onSeek?: (seconds: number) => void;
 }) {
   if (!canView) {
     return (
@@ -270,7 +278,31 @@ function Body({
                 onSubmit={submitTag}
               />
             ) : null}
-            <p className="mt-0.5 text-sm leading-relaxed text-foreground/90">{seg.text}</p>
+            {onSeek && seg.start != null ? (
+              <p
+                data-testid="seek-segment"
+                role="button"
+                tabIndex={0}
+                title="Jump the audio to here"
+                // Don't hijack drag-to-select: only seek on a plain click with no
+                // active text selection.
+                onClick={() => {
+                  if (window.getSelection()?.toString()) return;
+                  onSeek(seg.start as number);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onSeek(seg.start as number);
+                  }
+                }}
+                className="mt-0.5 cursor-pointer rounded-sm text-sm leading-relaxed text-foreground/90 transition-colors hover:text-foreground"
+              >
+                {seg.text}
+              </p>
+            ) : (
+              <p className="mt-0.5 text-sm leading-relaxed text-foreground/90">{seg.text}</p>
+            )}
             {seg.start != null && seg.end != null ? (
               <AudioSegmentPlayer sessionId={sessionId} start={seg.start} end={seg.end} />
             ) : null}

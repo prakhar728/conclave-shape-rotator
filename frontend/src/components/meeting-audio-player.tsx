@@ -21,11 +21,27 @@
 "use client";
 
 import { Pause, Play, Trash2, Volume2, VolumeX } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
 import { meetings as meetingsApi } from "@/lib/api";
 
 const WAVEFORM_BARS = 96;
+
+/**
+ * Imperative handle exposed to the meeting page (Task #41 click-to-seek):
+ * `seekTo(seconds)` moves the playhead and starts playback. A no-op when the
+ * media element isn't mounted (audio opted-out / deleted / 404 self-hide).
+ */
+export type MeetingAudioPlayerHandle = {
+  seekTo: (seconds: number) => void;
+};
 
 function fmtTime(seconds: number): string {
   const s = Number.isFinite(seconds) && seconds > 0 ? Math.floor(seconds) : 0;
@@ -51,15 +67,21 @@ function computePeaks(buffer: AudioBuffer, bars: number): number[] {
   return peaks.map((p) => p / loudest);
 }
 
-export function MeetingAudioPlayer({
-  sessionId,
-  isOwner = false,
-  storeAudio,
-}: {
-  sessionId: string;
-  isOwner?: boolean;
-  storeAudio?: boolean | null;
-}) {
+export const MeetingAudioPlayer = forwardRef<
+  MeetingAudioPlayerHandle,
+  {
+    sessionId: string;
+    isOwner?: boolean;
+    storeAudio?: boolean | null;
+    // Task #41 — called with whether the meeting has playable audio (true once
+    // <audio> metadata loads, false when the player self-hides / opts out). Lets
+    // the meeting page make transcript segments seek-clickable only when useful.
+    onAvailabilityChange?: (available: boolean) => void;
+  }
+>(function MeetingAudioPlayer(
+  { sessionId, isOwner = false, storeAudio, onAvailabilityChange },
+  ref,
+) {
   const [gone, setGone] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [playing, setPlaying] = useState(false);
@@ -69,6 +91,31 @@ export function MeetingAudioPlayer({
   const [peaks, setPeaks] = useState<number[] | null>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const trackRef = useRef<HTMLDivElement>(null);
+
+  // Task #41 — imperative seek used by transcript click-to-seek. Clamp to >= 0;
+  // duration is enforced by the media element. Starts playback so a click both
+  // jumps and plays.
+  useImperativeHandle(
+    ref,
+    () => ({
+      seekTo(seconds: number) {
+        const a = audioRef.current;
+        if (!a) return;
+        const t = Math.max(0, seconds);
+        a.currentTime = t;
+        setCurrent(t);
+        void a.play();
+      },
+    }),
+    [],
+  );
+
+  // Task #41 — report loss of availability (opted out / deleted / 404 self-hide)
+  // so the page stops offering seek affordances. Availability becomes true from
+  // the <audio> onLoadedMetadata handler below.
+  useEffect(() => {
+    if (storeAudio === false || gone) onAvailabilityChange?.(false);
+  }, [storeAudio, gone, onAvailabilityChange]);
 
   // Decode the recording into a static waveform (best-effort, never self-hides).
   useEffect(() => {
@@ -166,7 +213,10 @@ export function MeetingAudioPlayer({
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e) => {
+          setDuration(e.currentTarget.duration);
+          onAvailabilityChange?.(true); // Task #41 — audio is playable/seekable
+        }}
         className="hidden"
       >
         Your browser does not support audio playback.
@@ -255,4 +305,4 @@ export function MeetingAudioPlayer({
       ) : null}
     </div>
   );
-}
+});
