@@ -103,7 +103,7 @@ function SearchPageInner() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <form
           className="mb-8"
           onSubmit={(e) => {

@@ -245,7 +245,7 @@ export default function MeetingPage({
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <Link
           href="/dashboard"
           className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"

@@ -71,7 +71,7 @@ export default function EntityDetailPage() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-3xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         {notFound ? (
           <div className="rounded-none border border-dashed border-border p-10 text-center">
             <p className="text-sm font-medium">Entity not found</p>

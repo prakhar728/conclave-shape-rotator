@@ -85,7 +85,7 @@ export default function EntitiesPage() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-5xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <div className="mb-8">
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight md:text-3xl">
             <Tags className="size-6 shrink-0 text-muted-foreground" aria-hidden />

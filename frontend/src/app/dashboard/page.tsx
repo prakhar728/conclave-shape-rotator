@@ -154,7 +154,7 @@ export default function DashboardPage() {
     <AppShell user={me.user}>
       {/* Brutalist clean background canvas */}
       <main className="flex-1 bg-background">
-        <div className="mx-auto w-full max-w-5xl px-6 py-8 md:py-10">
+        <div className="w-full px-6 py-8 md:px-8 md:py-10">
           
           {/* Brutalist Greeting Header */}
           <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between border-b border-border pb-6">

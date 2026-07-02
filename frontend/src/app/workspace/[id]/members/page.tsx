@@ -131,7 +131,7 @@ export default function MembersPage({
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-2xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <div className="mb-8">
           <Link
             href={`/workspace/${id}`}

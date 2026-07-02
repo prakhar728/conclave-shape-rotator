@@ -86,7 +86,7 @@ export default function WorkspacePage({
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-4xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
             {workspace.name}

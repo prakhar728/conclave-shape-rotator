@@ -47,7 +47,7 @@ export default function AdminFeedbackPage() {
 
   return (
     <AppShell user={me.user}>
-      <main className="mx-auto max-w-2xl px-6 py-10">
+      <main className="w-full px-6 py-10 md:px-8">
         <h1 className="text-2xl font-bold tracking-tight">Feedback inbox</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Submissions from the in-app feedback page, newest first.
