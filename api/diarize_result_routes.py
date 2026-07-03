@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import logging
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Header, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel
 
@@ -153,18 +153,33 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
     return "reconciled"
 
 
-@router.post("/result")
-async def post_diarize_result(body: _DiarizeResult,
-                              authorization: str | None = Header(default=None)) -> dict:
-    """Receive a worker's diarization result → identify + reconcile + chain enrich. Idempotent."""
-    if not _check_service_token(authorization, settings.diarize_result_token):
-        raise HTTPException(status_code=401, detail="invalid or missing service token")
+async def _reconcile_bg(job_id: str, segments: list[dict], authoritative: bool | None) -> None:
+    """Run the (potentially slow) identify + reconcile + enrich OFF the request path — see /result."""
     client = queue.get_client()
     if client is None:
+        logger.error("diarize result bg: job queue not configured for job %s", job_id)
+        return
+    try:
+        label = await _reconcile_result(job_id, segments, authoritative, client=client)
+        logger.info("diarize result bg: job %s → %s", job_id, label)
+    except Exception:  # noqa: BLE001 — a bg failure leaves the job un-acked → reclaimed + retried
+        logger.exception("diarize result bg: job %s reconcile failed", job_id)
+
+
+@router.post("/result")
+async def post_diarize_result(body: _DiarizeResult, background_tasks: BackgroundTasks,
+                              authorization: str | None = Header(default=None)) -> dict:
+    """Accept a worker's diarization result → **ack-fast**, then identify + reconcile + chain enrich
+    in the BACKGROUND. Returning immediately keeps the remote worker's result POST from timing out on
+    long recordings (the sync reconcile — per-segment VFTE identify + summary — can exceed the
+    worker's read timeout). The server acks the stream entry inside the bg reconcile; a bg failure
+    leaves the job un-acked so the reclaimer re-offers it. Idempotent via the `reconciled` flag."""
+    if not _check_service_token(authorization, settings.diarize_result_token):
+        raise HTTPException(status_code=401, detail="invalid or missing service token")
+    if queue.get_client() is None:
         raise HTTPException(status_code=503, detail="job queue not configured (REDIS_URL unset)")
-    status_label = await _reconcile_result(body.job_id, body.segments, body.authoritative,
-                                           client=client)
-    return {"job_id": body.job_id, "status": status_label}
+    background_tasks.add_task(_reconcile_bg, body.job_id, body.segments, body.authoritative)
+    return {"job_id": body.job_id, "status": "accepted"}
 
 
 class _ClaimRequest(BaseModel):
