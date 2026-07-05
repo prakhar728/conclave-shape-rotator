@@ -51,6 +51,51 @@ def _apply_migrations() -> None:
 _apply_migrations()
 
 
+def _seed_workspace_from_env() -> None:
+    """Task #9 — idempotent boot seeder for strict link-only auth.
+
+    Under link-only ``/auth/v1/exchange-token`` a user can only connect if they
+    already have a workspace membership. This seeds the first one: if
+    ``CONCLAVE_SEED_OWNER_EMAIL`` is set, ensure a workspace named
+    ``CONCLAVE_SEED_WORKSPACE`` (default ``demo-ws``) exists and that the email
+    holds a standing *owner* invite — so the admin's first "Connect to Conclave"
+    lands them in a real workspace. Idempotent: guarded on the workspace already
+    existing, so reboots don't re-seed. Never blocks boot (can't reach the DB from
+    outside the sealed CVM, so seeding must happen here at startup).
+    """
+    import os as _os
+
+    email = _os.environ.get("CONCLAVE_SEED_OWNER_EMAIL", "").strip().lower()
+    if not email:
+        return
+    ws_name = _os.environ.get("CONCLAVE_SEED_WORKSPACE", "").strip() or "demo-ws"
+    try:
+        from infra import identity, workspaces
+
+        # A synthetic seed-admin owns the workspace; the real admin joins via the
+        # email-matched invite (works regardless of their Google `sub`).
+        seed_admin = identity.upsert_user_by_supabase(
+            supabase_id="seed-admin", email="seed-admin@conclave.local"
+        )
+        already = [
+            w for w in workspaces.list_user_workspaces(seed_admin["id"])
+            if w["name"] == ws_name
+        ]
+        if already:
+            return  # already seeded — don't re-invite on every reboot
+        ws = workspaces.create_workspace(ws_name, seed_admin["id"])
+        workspaces.create_invite(
+            ws["id"], email, role="owner", invited_by=seed_admin["id"]
+        )
+    except Exception as exc:  # noqa: BLE001 — seeding must never block boot
+        import sys as _sys
+
+        _sys.stderr.write(f"[seed] workspace seed skipped: {exc}\n")
+
+
+_seed_workspace_from_env()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await scheduler.start_all()

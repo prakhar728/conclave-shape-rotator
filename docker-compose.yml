@@ -69,6 +69,14 @@ services:
       # ── Task #16: durable job queue + HTTP-fronted diarize claim (Option A) ──────────────────
       # Redis is CO-LOCATED below (private to this CVM's compose network). Both the in-process
       # conclave_jobs worker and the diarize submit/claim path use it. Default points at that service.
+      # Prod hardening (safe-by-default): dev-login OFF (email-only bypass), contribute WRITES to Shape-OS.
+      # Both default to "0" here so an empty/absent sealed-env value can never silently enable dev-login
+      # or silently drop contributions — override in the sealed env only with intent.
+      CONCLAVE_DEV_LOGIN: ${CONCLAVE_DEV_LOGIN:-0}
+      CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN: ${CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN:-0}
+      # Task #9 — boot seeder for strict link-only auth (create demo-ws + owner invite).
+      CONCLAVE_SEED_OWNER_EMAIL: ${CONCLAVE_SEED_OWNER_EMAIL:-}
+      CONCLAVE_SEED_WORKSPACE: ${CONCLAVE_SEED_WORKSPACE:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       # "queue" → finalize submits a durable diarize job (remote DiariZen worker pulls it over HTTPS);
       # "blocking" → legacy in-process call. ON for the live #16 round.
