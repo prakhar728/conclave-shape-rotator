@@ -1,6 +1,6 @@
-"""Personal memory — a permission-scoped lens over the KB for one user.
+"""Scoped corpus — a permission-scoped lens over the KB for one user.
 
-A :class:`PersonalMemory` binds to ``(user, workspace)`` and answers
+A :class:`ScopedCorpus` binds to ``(user, workspace)`` and answers
 questions using ONLY the sessions that user is permitted to see. The
 visible set is computed once, via the canonical resolver
 ``api.kb_routes._visible_session_ids`` — the *same* source of truth the
@@ -23,7 +23,7 @@ from __future__ import annotations
 from typing import Optional
 
 
-class PersonalMemory:
+class ScopedCorpus:
     """One user's permission-bounded view of the knowledge base."""
 
     def __init__(
@@ -49,7 +49,7 @@ class PersonalMemory:
     def __repr__(self) -> str:
         who = self.user.get("email") or self.user.get("id")
         return (
-            f"PersonalMemory(user={who!r}, workspace={self.workspace_id!r}, "
+            f"ScopedCorpus(user={who!r}, workspace={self.workspace_id!r}, "
             f"sessions={len(self.session_ids)})"
         )
 
@@ -167,8 +167,8 @@ class PersonalMemory:
         }
 
 
-def personal_memory(
+def scoped_corpus(
     user: dict, workspace_id: str, *, session_ids: Optional[list[str]] = None
-) -> PersonalMemory:
-    """Convenience factory for :class:`PersonalMemory`."""
-    return PersonalMemory(user, workspace_id, session_ids=session_ids)
+) -> ScopedCorpus:
+    """Convenience factory for :class:`ScopedCorpus`."""
+    return ScopedCorpus(user, workspace_id, session_ids=session_ids)

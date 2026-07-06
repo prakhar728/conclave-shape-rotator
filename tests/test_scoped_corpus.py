@@ -1,6 +1,6 @@
-"""Phase 2 — PersonalMemory permission-boundary tests.
+"""Phase 2 — ScopedCorpus permission-boundary tests.
 
-The core property under test: a person's personal agent reads ONLY what
+The core property under test: a person's scoped corpus reads ONLY what
 that person is permitted to see, by construction. Disjoint-visibility users
 get disjoint scope / entities / obligations / search results; shared and
 workspace visibility resolve correctly; an empty scope returns nothing.
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from companion.personal_agent import PersonalMemory
+from companion.scoped_corpus import ScopedCorpus
 from infra import identity, workspaces
 from storage import kb, kb_graph
 from storage.sqlite import _get_conn, _now
@@ -94,8 +94,8 @@ def world():
 # ---------------------------------------------------------------------------
 
 def test_scope_excludes_other_users_private_sessions(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
-    bob = PersonalMemory(world["bob"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
+    bob = ScopedCorpus(world["bob"], world["wsid"])
 
     assert "s-alice" in alice.session_ids
     assert "s-shared" in alice.session_ids   # alice owns it
@@ -113,8 +113,8 @@ def test_scope_excludes_other_users_private_sessions(world):
 # ---------------------------------------------------------------------------
 
 def test_entities_respect_scope(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
-    bob = PersonalMemory(world["bob"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
+    bob = ScopedCorpus(world["bob"], world["wsid"])
     a_names = {e["canonical_name"] for e in alice.entities()}
     b_names = {e["canonical_name"] for e in bob.entities()}
 
@@ -126,15 +126,15 @@ def test_entities_respect_scope(world):
 
 
 def test_entities_mention_counts_reuse_route_projection(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
     proj = next(e for e in alice.entities() if e["canonical_name"] == "AliceProj")
     assert proj["mention_count"] == 2      # two add_mentions calls
     assert proj["meeting_count"] == 1
 
 
 def test_obligations_respect_scope(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
-    bob = PersonalMemory(world["bob"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
+    bob = ScopedCorpus(world["bob"], world["wsid"])
     a_descs = {o["description"] for o in alice.obligations()}
     b_descs = {o["description"] for o in bob.obligations()}
 
@@ -149,7 +149,7 @@ def test_obligations_respect_scope(world):
 # ---------------------------------------------------------------------------
 
 def test_search_never_crosses_scope(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
     # "secret" appears in BOTH s-alice and s-bob private chunks.
     hits = alice.search("secret roadmap", top_k=10)
     sids = {h["session_id"] for h in hits}
@@ -163,7 +163,7 @@ def test_search_never_crosses_scope(world):
 # ---------------------------------------------------------------------------
 
 def test_empty_scope_returns_nothing(world):
-    pm = PersonalMemory(world["alice"], world["wsid"], session_ids=[])
+    pm = ScopedCorpus(world["alice"], world["wsid"], session_ids=[])
     assert pm.has_scope is False
     assert pm.entities() == []
     assert pm.obligations() == []
@@ -174,7 +174,7 @@ def test_empty_scope_returns_nothing(world):
 
 def test_nonmember_cannot_see_private_entities(world):
     carol = identity.upsert_user_by_supabase("sb-carol", "carol@ex.com", "Carol")
-    pm = PersonalMemory(carol, world["wsid"])
+    pm = ScopedCorpus(carol, world["wsid"])
     names = {e["canonical_name"] for e in pm.entities()}
     # Carol is not owner/shared/member of the private sessions.
     assert "AliceProj" not in names
@@ -186,7 +186,7 @@ def test_nonmember_cannot_see_private_entities(world):
 # ---------------------------------------------------------------------------
 
 def test_profile_is_scope_bounded(world):
-    alice = PersonalMemory(world["alice"], world["wsid"])
+    alice = ScopedCorpus(world["alice"], world["wsid"])
     prof = alice.profile()
     names = {e["canonical_name"] for e in prof["top_entities"]}
     assert "BobProj" not in names

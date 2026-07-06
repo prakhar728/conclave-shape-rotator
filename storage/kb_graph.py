@@ -239,7 +239,7 @@ def entities_for_sessions(
     """Entities mentioned in the given sessions, ranked by mention count.
 
     Single source of truth for the workspace "entities" projection (the
-    query api.kb_routes.list_entities builds inline; PersonalMemory reuses
+    query api.kb_routes.list_entities builds inline; ScopedCorpus reuses
     this so the two can't drift). Returns ``[]`` for an empty session set so
     no caller can accidentally trigger an unscoped, permission-blind scan.
     """
