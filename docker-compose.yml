@@ -150,5 +150,39 @@ services:
       MKL_NUM_THREADS: "2"
     restart: always
 
+  # ── Option A: TLS-PASSTHROUGH INGRESS — the real fix for the gateway killing long-lived WS ──────
+  # Path: browser → wss://capture.conclavehq.org → Phala gateway does SNI PASSTHROUGH (forwards raw
+  # encrypted TCP, never parses the WebSocket → the HTTP-layer recycle class is gone) → THIS HAProxy
+  # terminates TLS with a real Let's Encrypt cert (DNS-01 via Cloudflare, key sealed in-TEE) and
+  # forwards raw TCP to capture-diart:8086 (WS transparent). HAProxy is OURS to tune — TIMEOUT_CLIENT/
+  # SERVER hold the socket open, the knob the sealed gateway never gave us. Prebuilt image, env-only.
+  # See WS-PASSTHROUGH-PLAN.md. NOTE: needs CLOUDFLARE_API_TOKEN + CERTBOT_EMAIL in the sealed env, and
+  # capture.conclavehq.org as a DNS-only (gray-cloud) record (the ingress auto-creates it via the token).
+  capture-ingress:
+    image: dstacktee/dstack-ingress:2.2@sha256:d05a7b343c37c1cca1bba8dbf7e8f3c6d2118158af2d41c455103796db4f67f0
+    ports:
+      - "443:443"          # browser → capture.conclavehq.org:443 via gateway passthrough
+    depends_on:
+      - capture-diart
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - /var/run/tappd.sock:/var/run/tappd.sock
+      - cert-data:/etc/letsencrypt
+      - evidences:/evidences
+    environment:
+      DOMAIN: ${CAPTURE_INGRESS_DOMAIN:-capture.conclavehq.org}
+      TARGET_ENDPOINT: capture-diart:8086            # HAProxy → diart (raw TCP; WebSocket transparent)
+      GATEWAY_DOMAIN: ${CONCLAVE_GATEWAY_DOMAIN:-_.dstack-pha-prod5.phala.network}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}              # Let's Encrypt registration email
+      DNS_PROVIDER: cloudflare
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}   # Zone:DNS:Edit on conclavehq.org (DNS-01 + auto CNAME/TXT/CAA)
+      SET_CAA: "true"
+      # ⭐ LOAD-BEARING: keep long-lived WebSockets alive — HAProxy tcp-mode connection timeouts.
+      TIMEOUT_CLIENT: ${INGRESS_TIMEOUT_CLIENT:-3600s}
+      TIMEOUT_SERVER: ${INGRESS_TIMEOUT_SERVER:-3600s}
+    restart: always
+
 volumes:
   conclave-data:
+  cert-data:
+  evidences:
