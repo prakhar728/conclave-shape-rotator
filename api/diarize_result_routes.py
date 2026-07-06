@@ -108,6 +108,27 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
         queue.set_status(job_id, "failed", client=client, error="session not found", reconciled="1")
         return "no_session"
 
+    # Task #9 fix: in-person sessions occasionally land UNBOUND from the finalize webhook (workspace_id
+    # NULL), which 403s the owner on the transcript + audio read gates (they require workspace membership).
+    # The diarize job carries the workspace, so (re)bind here if it's missing — idempotent, best-effort.
+    if workspace:
+        try:
+            wf = store.get_workspace_fields(session_id)
+            if not wf or not wf.get("workspace_id"):
+                from infra.workspaces import get_workspace
+                ws_row = get_workspace(workspace)
+                if ws_row:
+                    recorder = (wf or {}).get("recorder_user_id")
+                    store.set_workspace(
+                        session_id=session_id,
+                        workspace_id=workspace,
+                        owner_user_id=recorder or ws_row.get("created_by"),
+                        visibility="owner-only",
+                    )
+                    logger.info("diarize result: re-bound unbound session %s → workspace %s", session_id, workspace)
+        except Exception:  # noqa: BLE001 — never wedge reconcile on a bind
+            logger.warning("diarize result: workspace re-bind for %s failed", session_id, exc_info=True)
+
     audio = _assemble_audio(native_id) if native_id else b""
     vfte_ws = settings.fpm_workspace_for(workspace)
     # Task #32: identify host = the meeting's recorder (stamped on the session), else the
