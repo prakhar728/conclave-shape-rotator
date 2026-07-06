@@ -157,20 +157,31 @@ def exchange_token_route(
     user = identity.upsert_user_by_supabase(
         supabase_id=supabase_user_id, email=email
     )
-    workspace = workspaces.ensure_personal_workspace(user["id"])
-    token = auth_session.issue_session(user["id"])
-    auth_session.set_session_cookie(response, token, request=request)
-
-    # Mirror /verify-otp's meeting_shares.user_id backfill (Phase 2.11) so the
-    # OAuth path doesn't bypass the auto-grant.
+    # Task #9 — LINK-ONLY auth. Accept any pending invites first (so a seeded /
+    # admin-issued invite links this email now), then backfill meeting_shares so a
+    # meeting shared with this email is linked to the new user_id.
+    workspaces.accept_pending_invites_for_email(email, user["id"])
     from storage.sqlite import _get_conn
     _get_conn().execute(
         "UPDATE meeting_shares SET user_id = ? "
         "WHERE user_email = ? AND user_id IS NULL",
         (user["id"], email),
     )
-    # Task #32 — accept-on-signup (OAuth/magic-link path mirrors verify-otp).
-    workspaces.accept_pending_invites_for_email(email, user["id"])
+    # Gate: NO auto personal-workspace. Admit only identities that were invited in
+    # some form — a workspace member, OR the recipient of a specific meeting share
+    # (external #31/#15 share links must keep working). True strangers get 403.
+    memberships = workspaces.list_user_workspaces(user["id"])
+    has_share = _get_conn().execute(
+        "SELECT 1 FROM meeting_shares WHERE user_id = ? LIMIT 1", (user["id"],)
+    ).fetchone() is not None
+    if not memberships and not has_share:
+        raise HTTPException(
+            status_code=403,
+            detail="No Conclave workspace membership — ask an admin to invite you.",
+        )
+    workspace = memberships[0] if memberships else None
+    token = auth_session.issue_session(user["id"])
+    auth_session.set_session_cookie(response, token, request=request)
 
     return {"user": _user_to_public(user), "workspace": workspace}
 

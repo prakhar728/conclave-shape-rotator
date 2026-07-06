@@ -72,6 +72,10 @@ def contribute_shapeos(session_id: str, request: Request) -> dict:
     meta = session.metadata if session else None
     date: Optional[str] = getattr(meta, "date", None)
     source: Optional[str] = getattr(meta, "source", None)
+    # Task #12 agenda: stashed at record time (record/agenda) → applied as
+    # `metadata.raw_intent` at finalize. Carry it into the Shape OS submission so
+    # "raw transcript + agenda" is literal (the inbox stores it in the row metadata).
+    agenda: Optional[str] = getattr(meta, "raw_intent", None)
     ws = None
     try:
         ws = store.get_workspace_fields(session_id)
@@ -83,6 +87,7 @@ def contribute_shapeos(session_id: str, request: Request) -> dict:
         "conclave_session_id": session_id,
         **({"date": date} if date else {}),
         **({"source": source} if source else {}),
+        **({"agenda": agenda.strip()} if agenda and agenda.strip() else {}),
         **({"workspace_id": ws["workspace_id"]} if ws and ws.get("workspace_id") else {}),
     }
 

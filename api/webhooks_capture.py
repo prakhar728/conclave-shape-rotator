@@ -183,6 +183,9 @@ async def on_meeting_completed(
                     # auto-exposes a meeting. The owner opts in via "share to workspace".
                     visibility="owner-only",
                 )
+                _wf = transcripts_store.get_workspace_fields(session_id)
+                logger.info("in-person bind: session=%s payload_ws=%r ws_exists=%s → stored_ws=%r",
+                            session_id, payload_ws, bool(ws_row), (_wf or {}).get("workspace_id"))
             except Exception:  # noqa: BLE001 — never block finalize on a bad workspace binding
                 logger.warning("in-person workspace bind to %r failed for %s — session unbound",
                                payload_ws, native_id)

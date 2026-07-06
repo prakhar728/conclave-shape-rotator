@@ -2,8 +2,10 @@ services:
   conclave:
     # Pin via IMAGE_TAG env var (set in .env to the desired tag — usually a
     # short git SHA so each deploy changes the image reference and forces
-    # Phala to re-pull. `:latest` gets deduped on the platform side.)
-    image: prakharojha/conclave:${IMAGE_TAG:-latest}
+    # Phala to re-pull. NOTE: use a LITERAL tag here, not ${IMAGE_TAG} — dstack hashes the compose
+    # TEXT to decide what to re-pull, and `${IMAGE_TAG:-latest}` is constant text even when the env
+    # value changes, so an env-only bump silently keeps the OLD image. Bump this literal each deploy.)
+    image: prakharojha/conclave:272b51b
     ports:
       - "8000:8000"
     restart: always
@@ -69,9 +71,21 @@ services:
       # ── Task #16: durable job queue + HTTP-fronted diarize claim (Option A) ──────────────────
       # Redis is CO-LOCATED below (private to this CVM's compose network). Both the in-process
       # conclave_jobs worker and the diarize submit/claim path use it. Default points at that service.
+      # Prod hardening (safe-by-default): dev-login OFF (email-only bypass), contribute WRITES to Shape-OS.
+      # Both default to "0" here so an empty/absent sealed-env value can never silently enable dev-login
+      # or silently drop contributions — override in the sealed env only with intent.
+      CONCLAVE_DEV_LOGIN: ${CONCLAVE_DEV_LOGIN:-0}
+      CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN: ${CONCLAVE_SHAPEOS_CONTRIB_DRY_RUN:-0}
+      # Task #9 — boot seeder for strict link-only auth (create demo-ws + owner invite).
+      CONCLAVE_SEED_OWNER_EMAIL: ${CONCLAVE_SEED_OWNER_EMAIL:-}
+      CONCLAVE_SEED_WORKSPACE: ${CONCLAVE_SEED_WORKSPACE:-}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       # "queue" → finalize submits a durable diarize job (remote DiariZen worker pulls it over HTTPS);
       # "blocking" → legacy in-process call. ON for the live #16 round.
+      # Route the authoritative in-person post-pass to the CAPTURE/GPU-DiariZen queue (this deployment's
+      # architecture) instead of the retired FPM /diarize endpoint. Without this the identify path falls
+      # back to `fpm_consent.diarize_audio` → 404 (fpm-diarize deleted) and the GPU worker never gets a job.
+      CONCLAVE_INPERSON_VIA_CAPTURE: ${CONCLAVE_INPERSON_VIA_CAPTURE:-1}
       CONCLAVE_DIARIZE_JOBS: ${CONCLAVE_DIARIZE_JOBS:-blocking}
       # Master switch for the Conclave-internal queue (enrich/regen/KB) → retry + dead-letter durability.
       CONCLAVE_JOBS_QUEUE: ${CONCLAVE_JOBS_QUEUE:-}
@@ -110,8 +124,13 @@ services:
   # compose net. Its WS port is published so the browser can reach it over WSS via the Phala gateway.
   # NOTE: diart loads gated pyannote/segmentation-3.0 → it needs HF_TOKEN at RUNTIME (unlike DiariZen).
   capture-diart:
-    image: prakharojha/capture-diarize-diart:${CAPTURE_DIART_TAG:-v1}
-    command: ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8086"]
+    # LITERAL tag (see the conclave image note above): env-interpolated tags don't force a re-pull.
+    image: prakharojha/capture-diarize-diart:b137e10
+    # Effectively DISABLE uvicorn's WS keepalive ping (can't pass None via CLI; 0 would tight-loop in
+    # websockets 15, so use an ~infinite interval). The Phala gateway doesn't complete the ping/pong
+    # roundtrip in time, so the server was closing live in-person streams with 1011 "keepalive ping
+    # timeout" ~every 40-60s. The client streams audio frames continuously, which already proves liveness.
+    command: ["uvicorn", "service:app", "--host", "0.0.0.0", "--port", "8086", "--ws-ping-interval", "864000", "--ws-ping-timeout", "864000"]
     ports:
       - "8087:8086"        # browser → wss://<conclave-app-id>-8087.dstack-pha-prod5.phala.network/inperson
     depends_on:
@@ -131,5 +150,39 @@ services:
       MKL_NUM_THREADS: "2"
     restart: always
 
+  # ── Option A: TLS-PASSTHROUGH INGRESS — the real fix for the gateway killing long-lived WS ──────
+  # Path: browser → wss://capture.conclavehq.org → Phala gateway does SNI PASSTHROUGH (forwards raw
+  # encrypted TCP, never parses the WebSocket → the HTTP-layer recycle class is gone) → THIS HAProxy
+  # terminates TLS with a real Let's Encrypt cert (DNS-01 via Cloudflare, key sealed in-TEE) and
+  # forwards raw TCP to capture-diart:8086 (WS transparent). HAProxy is OURS to tune — TIMEOUT_CLIENT/
+  # SERVER hold the socket open, the knob the sealed gateway never gave us. Prebuilt image, env-only.
+  # See WS-PASSTHROUGH-PLAN.md. NOTE: needs CLOUDFLARE_API_TOKEN + CERTBOT_EMAIL in the sealed env, and
+  # capture.conclavehq.org as a DNS-only (gray-cloud) record (the ingress auto-creates it via the token).
+  capture-ingress:
+    image: dstacktee/dstack-ingress:2.2@sha256:d05a7b343c37c1cca1bba8dbf7e8f3c6d2118158af2d41c455103796db4f67f0
+    ports:
+      - "443:443"          # browser → capture.conclavehq.org:443 via gateway passthrough
+    depends_on:
+      - capture-diart
+    volumes:
+      - /var/run/dstack.sock:/var/run/dstack.sock
+      - /var/run/tappd.sock:/var/run/tappd.sock
+      - cert-data:/etc/letsencrypt
+      - evidences:/evidences
+    environment:
+      DOMAIN: ${CAPTURE_INGRESS_DOMAIN:-capture.conclavehq.org}
+      TARGET_ENDPOINT: capture-diart:8086            # HAProxy → diart (raw TCP; WebSocket transparent)
+      GATEWAY_DOMAIN: ${CONCLAVE_GATEWAY_DOMAIN:-_.dstack-pha-prod5.phala.network}
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL:-}              # Let's Encrypt registration email
+      DNS_PROVIDER: cloudflare
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}   # Zone:DNS:Edit on conclavehq.org (DNS-01 + auto CNAME/TXT/CAA)
+      SET_CAA: "true"
+      # ⭐ LOAD-BEARING: keep long-lived WebSockets alive — HAProxy tcp-mode connection timeouts.
+      TIMEOUT_CLIENT: ${INGRESS_TIMEOUT_CLIENT:-3600s}
+      TIMEOUT_SERVER: ${INGRESS_TIMEOUT_SERVER:-3600s}
+    restart: always
+
 volumes:
   conclave-data:
+  cert-data:
+  evidences:

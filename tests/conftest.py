@@ -94,6 +94,7 @@ def reset_workspace_domain_tables() -> None:
         "meeting_shares",
         "magic_links",
         "bot_invitations",
+        "workspace_invites",  # else an orphaned invite (→ deleted ws/user) FK-fails a later accept
         "workspace_members",
         "workspaces",
         "users",

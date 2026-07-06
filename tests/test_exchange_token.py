@@ -68,26 +68,46 @@ def test_missing_email_claim_returns_401(client: TestClient, monkeypatch):
     assert "email" in r.json()["detail"].lower()
 
 
-def test_oauth_creates_user_workspace_and_cookie(client: TestClient, monkeypatch):
+def _invite_email_to_new_ws(email: str, *, name: str = "demo-ws", role: str = "owner") -> dict:
+    """Seed a workspace + pending invite for `email` (mirrors the boot seeder)."""
+    from infra import identity
+    admin = identity.upsert_user_by_supabase("sb-seed-admin", "admin@example.com")
+    ws = workspaces.create_workspace(name, admin["id"])
+    workspaces.create_invite(ws["id"], email, role=role, invited_by=admin["id"])
+    return ws
+
+
+def test_invited_email_connects_and_lands_in_workspace(client: TestClient, monkeypatch):
+    # Task #9 link-only: a pre-issued invite → accept-on-connect → lands in that ws.
+    ws = _invite_email_to_new_ws("prakhar@example.com")
     _stub_validate(monkeypatch, email="prakhar@example.com", sub="sb-oauth-1")
     r = client.post("/auth/v1/exchange-token", json={"access_token": "ok"})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["user"]["email"] == "prakhar@example.com"
-    assert body["workspace"]["name"] == "Personal"
+    assert body["workspace"]["id"] == ws["id"]
+    assert body["workspace"]["name"] == "demo-ws"
     from auth.session import COOKIE_NAME
     assert COOKIE_NAME in client.cookies
-
-    # /me now resolves the new session.
     me = client.get("/auth/v1/me")
     assert me.status_code == 200
     assert me.json()["user"]["email"] == "prakhar@example.com"
 
 
+def test_uninvited_stranger_is_rejected_403(client: TestClient, monkeypatch):
+    # Task #9 link-only: no invite, no membership, no meeting share → 403.
+    _stub_validate(monkeypatch, email="stranger@example.com", sub="sb-stranger")
+    r = client.post("/auth/v1/exchange-token", json={"access_token": "ok"})
+    assert r.status_code == 403
+    assert "membership" in r.json()["detail"].lower()
+
+
 def test_oauth_is_idempotent_on_same_user(client: TestClient, monkeypatch):
+    _invite_email_to_new_ws("dup@example.com")
     _stub_validate(monkeypatch, email="dup@example.com", sub="sb-same")
     r1 = client.post("/auth/v1/exchange-token", json={"access_token": "a"})
     r2 = client.post("/auth/v1/exchange-token", json={"access_token": "b"})
+    assert r1.status_code == 200 and r2.status_code == 200
     assert r1.json()["user"]["id"] == r2.json()["user"]["id"]
 
 

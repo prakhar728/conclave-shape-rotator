@@ -1,5 +1,13 @@
 .env
 .env.*
+# Defense-in-depth: the two patterns above are ROOT-anchored and miss nested env files
+# (e.g. frontend/.env.local, external/**/.env). Exclude env files at ANY depth so a real
+# secret can never bake into the PUBLIC prakharojha/conclave image via `COPY . .`.
+**/.env
+**/.env.*
+# Large reference subtree not used by the API at runtime (Shape-OS integration ref; also
+# carries its own .env.example files) — keep it out of the image entirely.
+external/
 __pycache__
 **/__pycache__
 *.pyc
