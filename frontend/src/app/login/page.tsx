@@ -1,29 +1,17 @@
 /**
- * /login — email + OTP entry.
+ * /login — Google sign-in.
  *
- * v1 doesn't distinguish signup from login. `verify-otp` upserts the User
- * either way (1.4), so the same flow handles both cases. The `/signup`
- * route exists as a redirect for marketing-link compatibility.
- *
- * State machine:
- *   email-entry   → user types email, clicks Continue
- *   send pending  → POST /api/auth/v1/send-otp; on success → otp-entry
- *   otp-entry     → user types 6-digit code, clicks Sign in
- *   verify pending → POST /api/auth/v1/verify-otp; on success → /dashboard
- *   error         → inline message, return to previous step
+ * v1 doesn't distinguish signup from login: the OAuth callback upserts the User
+ * either way (1.4), so one button handles both. The email + 6-digit-OTP path was
+ * removed from the UI (2026-07-07 — Google-only for now); the send-otp / verify-otp
+ * backend (auth.sendOtp/verifyOtp) still exists if we want to re-surface it.
  */
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
-import { AttestedBadge } from "@/components/attested-badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Wordmark } from "@/components/wordmark";
-import { auth } from "@/lib/api";
-
-type Step = "email" | "otp";
 
 export default function LoginPage() {
   // useSearchParams must be wrapped in Suspense per Next 15+ rules.
@@ -35,65 +23,21 @@ export default function LoginPage() {
 }
 
 function LoginInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/dashboard";
-  const prefillEmail = searchParams.get("email") || "";
-  const [step, setStep] = useState<Step>("email");
-  const [email, setEmail] = useState(prefillEmail);
-  const [otp, setOtp] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSendOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      await auth.sendOtp(email.trim());
-      setStep("otp");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send code");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function handleVerifyOtp(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setBusy(true);
-    try {
-      await auth.verifyOtp(email.trim(), otp.trim());
-      // Sanity-check `next` so a crafted URL can't push to an external
-      // origin; only same-origin paths are honored.
-      const target = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-      router.push(target);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Invalid code");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-vault-atmosphere px-6">
       <div className="w-full max-w-sm">
-        {/* Trust cue before login: the wordmark + attested badge + the
-            one-line pitch. A prospect should know what's different here
-            before they type anything. */}
+        {/* Trust cue before login: the wordmark + the one-line pitch. */}
         <div className="mb-8 flex flex-col items-start gap-3">
-          <div className="flex items-baseline gap-3">
-            <Wordmark size="lg" />
-            <AttestedBadge />
-          </div>
+          <Wordmark size="lg" />
           <p className="text-sm text-muted-foreground">
             Meeting intelligence your provider can&apos;t read.
           </p>
         </div>
 
         <div className="rounded-none border border-border bg-card p-6">
-        {step === "email" ? (
           <div className="flex flex-col gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
@@ -106,72 +50,7 @@ function LoginInner() {
             </div>
 
             <GoogleButton next={next} />
-
-            <div className="flex items-center gap-3 py-1">
-              <span className="h-px flex-1 bg-border" />
-              <span className="text-xs text-muted-foreground">or email</span>
-              <span className="h-px flex-1 bg-border" />
-            </div>
-
-            <form onSubmit={handleSendOtp} className="flex flex-col gap-3">
-              <Input
-                type="email"
-                autoComplete="email"
-                required
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={busy}
-              />
-              <Button type="submit" disabled={busy || !email}>
-                {busy ? "Sending…" : "Send 6-digit code"}
-              </Button>
-            </form>
-
-            {error ? <p className="text-xs text-destructive">{error}</p> : null}
           </div>
-        ) : (
-          <form onSubmit={handleVerifyOtp} className="flex flex-col gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-                Enter the code
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Sent to <span className="text-foreground">{email}</span>.
-                Check your spam folder if it doesn&apos;t arrive in a minute.
-              </p>
-            </div>
-            <Input
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              autoFocus
-              required
-              maxLength={6}
-              placeholder="123456"
-              value={otp}
-              onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-              disabled={busy}
-            />
-            <Button type="submit" disabled={busy || otp.length !== 6}>
-              {busy ? "Verifying…" : "Sign in"}
-            </Button>
-            <button
-              type="button"
-              onClick={() => {
-                setStep("email");
-                setOtp("");
-                setError(null);
-              }}
-              className="text-xs text-muted-foreground hover:text-foreground"
-              disabled={busy}
-            >
-              Use a different email
-            </button>
-            {error ? (
-              <p className="text-xs text-destructive">{error}</p>
-            ) : null}
-          </form>
-        )}
         </div>
       </div>
     </div>
