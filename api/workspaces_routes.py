@@ -227,6 +227,11 @@ def add_workspace_member(
     hydrated by email, mirroring `meeting_shares`). Owner-only.
     """
     _require_owner(workspace_id, user["id"])
+    if workspaces.is_personal(workspace_id):   # Task #25 — personal workspaces are solo
+        raise HTTPException(
+            status_code=403,
+            detail="Personal workspaces are solo — create a team workspace to invite others.",
+        )
     if body.role not in workspaces.WORKSPACE_ROLES:
         raise HTTPException(status_code=422,
                             detail=f"role must be one of {list(workspaces.WORKSPACE_ROLES)}")

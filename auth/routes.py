@@ -167,19 +167,12 @@ def exchange_token_route(
         "WHERE user_email = ? AND user_id IS NULL",
         (user["id"], email),
     )
-    # Gate: NO auto personal-workspace. Admit only identities that were invited in
-    # some form — a workspace member, OR the recipient of a specific meeting share
-    # (external #31/#15 share links must keep working). True strangers get 403.
+    # Task #25 — every authenticated user gets a `Personal` workspace (no more 403 or
+    # seeded demo-ws). Team workspaces stay invite-only; Personal is auto-provisioned,
+    # solo, and non-invitable. A prior meeting-share recipient also lands in their Personal
+    # and still sees the shares (backfilled above).
     memberships = workspaces.list_user_workspaces(user["id"])
-    has_share = _get_conn().execute(
-        "SELECT 1 FROM meeting_shares WHERE user_id = ? LIMIT 1", (user["id"],)
-    ).fetchone() is not None
-    if not memberships and not has_share:
-        raise HTTPException(
-            status_code=403,
-            detail="No Conclave workspace membership — ask an admin to invite you.",
-        )
-    workspace = memberships[0] if memberships else None
+    workspace = memberships[0] if memberships else workspaces.ensure_personal_workspace(user["id"])
     token = auth_session.issue_session(user["id"])
     auth_session.set_session_cookie(response, token, request=request)
 

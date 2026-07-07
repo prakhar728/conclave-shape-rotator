@@ -93,7 +93,10 @@ def _seed_workspace_from_env() -> None:
         _sys.stderr.write(f"[seed] workspace seed skipped: {exc}\n")
 
 
-_seed_workspace_from_env()
+# Task #25 — the demo-ws boot seeder is RETIRED: every user now auto-gets a `Personal`
+# workspace on first login (auth/routes.py exchange gate), so no seed workspace/invite is
+# needed. Function left defined (unused) for one release in case a rollback wants it back.
+# _seed_workspace_from_env()
 
 
 @asynccontextmanager

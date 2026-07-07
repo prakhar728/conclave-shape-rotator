@@ -25,15 +25,28 @@ def _new_workspace_id() -> str:
 # --- Workspaces ---
 
 
-def create_workspace(name: str, owner_user_id: str) -> dict:
-    """Create a workspace and add owner_user_id as its 'owner' member."""
+WORKSPACE_TYPES = ("personal", "team")
+
+
+class PersonalWorkspaceInviteError(Exception):
+    """Raised on any attempt to invite/add a second member to a `personal` workspace.
+    Personal workspaces are solo by design; collaboration happens in `team` workspaces."""
+
+
+def create_workspace(name: str, owner_user_id: str, type: str = "team") -> dict:
+    """Create a workspace and add owner_user_id as its 'owner' member.
+
+    `type` is 'team' (default — invite-gated, many members) or 'personal'
+    (auto-provisioned on first login, solo, NON-invitable — see add_workspace_member)."""
+    if type not in WORKSPACE_TYPES:
+        raise ValueError(f"workspace type must be one of {WORKSPACE_TYPES}, got {type!r}")
     conn = _get_conn()
     ws_id = _new_workspace_id()
     now = _now()
     conn.execute(
-        "INSERT INTO workspaces (id, name, created_by, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?)",
-        (ws_id, name, owner_user_id, now, now),
+        "INSERT INTO workspaces (id, name, type, created_by, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (ws_id, name, type, owner_user_id, now, now),
     )
     conn.execute(
         "INSERT INTO workspace_members (workspace_id, user_id, role, added_at, added_by) "
@@ -43,6 +56,7 @@ def create_workspace(name: str, owner_user_id: str) -> dict:
     return {
         "id": ws_id,
         "name": name,
+        "type": type,
         "created_by": owner_user_id,
         "created_at": now,
         "updated_at": now,
@@ -51,10 +65,18 @@ def create_workspace(name: str, owner_user_id: str) -> dict:
 
 def get_workspace(workspace_id: str) -> Optional[dict]:
     row = _get_conn().execute(
-        "SELECT id, name, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
+        "SELECT id, name, type, created_by, created_at, updated_at FROM workspaces WHERE id = ?",
         (workspace_id,),
     ).fetchone()
     return dict(row) if row else None
+
+
+def is_personal(workspace_id: str) -> bool:
+    """True for a solo `personal` workspace (invites blocked)."""
+    row = _get_conn().execute(
+        "SELECT type FROM workspaces WHERE id = ?", (workspace_id,)
+    ).fetchone()
+    return bool(row) and row["type"] == "personal"
 
 
 def get_audio_store_default(workspace_id: str) -> bool:
@@ -82,7 +104,7 @@ def set_audio_store_default(workspace_id: str, enabled: bool) -> None:
 
 def list_user_workspaces(user_id: str) -> list[dict]:
     rows = _get_conn().execute(
-        "SELECT w.id, w.name, w.created_by, w.created_at, w.updated_at, m.role "
+        "SELECT w.id, w.name, w.type, w.created_by, w.created_at, w.updated_at, m.role "
         "FROM workspaces w "
         "JOIN workspace_members m ON m.workspace_id = w.id "
         "WHERE m.user_id = ? "
@@ -101,7 +123,7 @@ def ensure_personal_workspace(user_id: str) -> dict:
     existing = list_user_workspaces(user_id)
     if existing:
         return existing[0]
-    return create_workspace("Personal", user_id)
+    return create_workspace("Personal", user_id, type="personal")
 
 
 # --- Membership ---
@@ -368,6 +390,10 @@ def create_invite(
     """
     if role not in WORKSPACE_ROLES:
         raise ValueError(f"role must be one of {WORKSPACE_ROLES}, got {role!r}")
+    if is_personal(workspace_id):
+        raise PersonalWorkspaceInviteError(
+            f"cannot invite to personal workspace {workspace_id!r} — personal workspaces are solo"
+        )
     email = email.strip().lower()
     conn = _get_conn()
     now = _now()
