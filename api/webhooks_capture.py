@@ -139,6 +139,8 @@ async def on_meeting_completed(
 
     # 6. Bind to workspace/owner via the bot_invitation we created in 2.1.
     inv = bot_invitations.find_by_meeting(platform, native_id)
+    # #ownership: the in-person recorder (popped in the else branch below); stays None for gMeet.
+    recorder_uid: Optional[str] = None
     if inv is not None:
         transcripts_store.set_workspace(
             session_id=session_id,
@@ -167,14 +169,19 @@ async def on_meeting_completed(
         # bind the session to it so the transcript is visible in the workspace + identity can resolve.
         # Best-effort: a bad/non-existent workspace (e.g. a dev label) must NOT 500 the finalize (the FK
         # to `workspaces` would otherwise raise). In production the record UI passes a real workspace_id.
+        # #ownership: pop the record-start recorder stash here (consume-once) so it feeds BOTH the owner
+        # below AND set_recorder later — the person who RECORDED owns their own walk-up meeting.
+        from infra import inperson_recorder
+        recorder_uid = inperson_recorder.pop_recorder(native_id)
         payload_ws = meeting.get("workspace_id")
         if payload_ws:
             try:
-                # In-person has no inviter → default ownership to the workspace creator so they can
-                # manage/TAG the meeting (tagging is owner-gated; a NULL owner makes it un-taggable).
+                # In-person: the RECORDER owns their meeting — every owner-gated feature (share / editor /
+                # retention / delete / rename) keys off owner_user_id. Fall back to the workspace creator
+                # only if no recorder was bound at record-start (a NULL owner makes it un-manageable).
                 from infra.workspaces import get_workspace
                 ws_row = get_workspace(payload_ws)
-                owner = ws_row.get("created_by") if ws_row else None
+                owner = recorder_uid or (ws_row.get("created_by") if ws_row else None)
                 transcripts_store.set_workspace(
                     session_id=session_id,
                     workspace_id=payload_ws,
@@ -228,8 +235,9 @@ async def on_meeting_completed(
     # before the identity task below so `meeting_host_email` reads it. Best-effort.
     if status_label == "accepted":
         try:
-            from infra import inperson_recorder
-            recorder = inperson_recorder.pop_recorder(native_id)
+            # #ownership: reuse the recorder already popped in the in-person bind above (consume-once);
+            # for gMeet (no in-person stash) fall back to the inviter.
+            recorder = recorder_uid
             if recorder is None and inv is not None:
                 recorder = inv["user_id"]
             if recorder:

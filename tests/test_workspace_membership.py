@@ -275,6 +275,32 @@ def test_inperson_webhook_defaults_owner_private(client, monkeypatch):
     assert client.get(f"/transcripts/sessions/{native}").status_code == 403
 
 
+def test_inperson_webhook_makes_recorder_the_owner(client, monkeypatch):
+    """#ownership: the RECORDER owns their walk-up meeting, not the workspace creator — so the person
+    who recorded gets share/editor/retention/delete on their own recording even in someone else's ws."""
+    monkeypatch.delenv("CAPTURE_WEBHOOK_SECRET", raising=False)
+    ws_id, owner, member = _seed_owner_and_member(client)
+    native = "inperson-rec-owner-1"
+    from infra import inperson_recorder
+    inperson_recorder.set_recorder(native, member["id"], workspace_id=ws_id)  # the MEMBER recorded it
+    _sqlite.append_live_segment(native, 0,
+                                {"start": 0.0, "end": 1.0, "text": "hi", "speaker": "S1"})
+    body = {
+        "event_id": "evt_rec_owner", "event_type": "meeting.completed", "api_version": "v1",
+        "created_at": "2026-07-01T10:00:00Z",
+        "data": {"meeting": {"id": 2, "platform": "in_person",
+                             "native_meeting_id": native, "status": "completed",
+                             "workspace_id": ws_id}},
+    }
+    r = client.post("/api/webhooks/capture/meeting-completed", json=body)
+    assert r.status_code == 202 and r.json()["status"] == "accepted", r.text
+    # The recorder (member) now OWNS it — sees it + is_owner — despite not being the workspace creator.
+    _login(client, "member3@x.com")
+    got = client.get(f"/transcripts/sessions/{native}")
+    assert got.status_code == 200, got.text
+    assert got.json().get("is_owner") is True
+
+
 def test_owner_only_lock_blocks_workspace_share(client):
     ws_id, owner, member = _seed_owner_and_member(client)
     _seed_meeting(ws_id, owner["id"], "m-lock")
