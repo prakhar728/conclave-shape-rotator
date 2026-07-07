@@ -101,9 +101,18 @@ def test_meetings_endpoint_empty_for_new_workspace(client: TestClient):
 
 
 def test_owner_can_invite_member(client: TestClient):
-    """Task #32: the once-501 endpoint now creates a pending invite (owner-only)."""
+    """Task #32: the once-501 endpoint now creates a pending invite (owner-only). #25: invites target a
+    TEAM workspace — the default Personal workspace is non-invitable, so we create a team one first."""
     _login(client, "members@example.com")
-    ws_id = client.get("/api/workspaces").json()["workspaces"][0]["id"]
+    ws_id = client.post("/api/workspaces", json={"name": "Team WS"}).json()["workspace"]["id"]
     r = client.post(f"/api/workspaces/{ws_id}/members", json={"email": "invitee@example.com"})
     assert r.status_code == 201, r.text
     assert r.json()["invite"]["email"] == "invitee@example.com"
+
+
+def test_personal_workspace_rejects_invites(client: TestClient):
+    """#25: the auto-provisioned Personal workspace is solo — inviting into it is 403 (non-invitable)."""
+    _login(client, "solo@example.com")
+    ws_id = client.get("/api/workspaces").json()["workspaces"][0]["id"]  # the Personal workspace
+    r = client.post(f"/api/workspaces/{ws_id}/members", json={"email": "someone@example.com"})
+    assert r.status_code == 403, r.text
