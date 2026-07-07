@@ -56,6 +56,10 @@ export async function apiFetch<T>(
 ): Promise<T> {
   const token = getSessionToken();
   const res = await fetch(path, {
+    // Auth calls must never be served from a cache. Vercel stamps rewrite responses with
+    // `cache-control: public`, so without this a stale /me (from a prior session) can be replayed
+    // after sign-out → the login loop. no-store forces a fresh round-trip every time.
+    cache: "no-store",
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
