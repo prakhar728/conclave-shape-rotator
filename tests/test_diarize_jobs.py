@@ -123,6 +123,31 @@ async def test_result_authoritative_overwrites_raw(wiring, r):
 
 
 @pytest.mark.asyncio
+async def test_result_authoritative_writes_transcript_when_vfte_empty(wiring, r, monkeypatch):
+    """#37: VFTE identify-spans can SUCCEED-but-return-empty (no enrolled/matched voiceprints — the
+    common untagged-meeting case). The authoritative DiariZen transcript must STILL be written
+    (speakers as labels) instead of leaving the FE stuck on the LIVE preview."""
+    import api.diarize_result_routes as dr
+    import infra.fpm_consent as fpm
+    calls, _ = wiring
+
+    async def empty_identify(ws, audio, spans, *, tag="offline", meeting_id=None, host_user=None):
+        calls["identify_spans"] += 1
+        return []                      # VFTE found nothing — NO exception
+    monkeypatch.setattr(fpm, "identify_spans", empty_identify)
+
+    job_id = _enqueue_diarize_job(r, authoritative="1")
+    segs = [{"start": 0.0, "end": 4.0, "local_speaker": "speaker0"},
+            {"start": 4.0, "end": 8.0, "local_speaker": "speaker1"}]
+    status = await dr._reconcile_result(job_id, segs, None, client=r)
+
+    assert status == "reconciled"
+    # THE FIX: empty fpm_segs falls back to the raw diarized segments → transcript IS written.
+    assert calls["set_raw"] is not None, "empty VFTE must NOT block the authoritative transcript write"
+    assert calls["enrich"] == ["s1"], "enrichment must still chain"
+
+
+@pytest.mark.asyncio
 async def test_result_fallback_branch_does_not_overwrite_raw(wiring, r):
     import api.diarize_result_routes as dr
     calls, _ = wiring

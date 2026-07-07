@@ -145,6 +145,14 @@ async def _reconcile_result(job_id: str, segments: list[dict], authoritative: bo
         )
         fpm_segs = segments  # fall back to the diarized (identity-less) segments
 
+    # VFTE can also SUCCEED-but-return-empty (no enrolled/matched voiceprints — the common case for
+    # an untagged meeting). reconcile_identity() no-ops on empty fpm_segs, which would leave the
+    # authoritative DiariZen transcript unwritten and the FE stuck on the LIVE preview forever. Fall
+    # back to the raw diarized segments so the transcript still lands (speakers as labels; identity
+    # can be tagged later) — same treatment as the identify-spans exception above.
+    if not fpm_segs:
+        fpm_segs = segments
+
     reconcile_identity(session_id, session, fpm_segs, authoritative=bool(authoritative))
     # Task #3 Part (c): notify the consented subjects recognized in this meeting (best-effort).
     try:
