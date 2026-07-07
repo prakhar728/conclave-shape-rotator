@@ -109,6 +109,11 @@ class SessionMetadata(BaseModel):
     #: the meeting-page audio player (show only when True). None = unknown/legacy
     #: (player falls back to probing the serving endpoint). JSON metadata, no migration.
     store_audio: Optional[bool] = None
+    #: Task #39 — ISO-8601 UTC timestamp when the authoritative DiariZen post-pass
+    #: reconciled this session (stamped in ``reconcile_identity``'s authoritative branch).
+    #: None = post-pass not done yet. Drives the FE "finalized" state (LIVE badge → final,
+    #: voiceprint hint) so finality is a SERVER fact, not a client guess. JSON, no migration.
+    diarized_at: Optional[str] = None
 
 
 class Signal(BaseModel):

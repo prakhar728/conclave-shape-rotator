@@ -63,7 +63,13 @@ def reconcile_identity(session_id: str, session, fpm_segs: list[dict], *, author
                     entry["name"] = fs["name"]
                 resolved[ls] = entry
         store.set_raw_diarization(session_id, [s.model_dump() for s in new_raw])
-        md = session.metadata.model_copy(update={"resolved_speakers": resolved})
+        from datetime import datetime, timezone
+        md = session.metadata.model_copy(update={
+            "resolved_speakers": resolved,
+            # #39: the server "DiariZen post-pass complete" signal — the FE drives its finalized
+            # state (LIVE→final badge, voiceprint hint) off this, not a client-side guess.
+            "diarized_at": datetime.now(timezone.utc).isoformat(),
+        })
         store.set_metadata(session_id, md)
         logger.info("identify_meeting: %s — AUTHORITATIVE DiariZen overwrite (%d segs, %d speakers)",
                     session_id, len(new_raw), len(resolved))

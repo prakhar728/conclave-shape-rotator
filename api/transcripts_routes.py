@@ -139,6 +139,13 @@ def can_user_see(user: Optional[dict], row: dict) -> bool:
     if owner_user_id and owner_user_id == user["id"]:
         return True
 
+    # Task #39: the RECORDER can always see their own in-person recording's artifacts (transcript /
+    # audio / insights), even when the workspace CREATOR — not them — was stamped as owner at bind.
+    # Without this the person who recorded a walk-up meeting can 403 on their OWN audio. recorder_user_id
+    # is set when a logged-in OS-app user records (infra.inperson_recorder / set_recorder).
+    if row.get("recorder_user_id") and row.get("recorder_user_id") == user["id"]:
+        return True
+
     from infra.workspaces import (
         has_meeting_share,
         has_meeting_workspace_share,
@@ -185,6 +192,12 @@ def can_see_artifact(user: Optional[dict], row: dict, artifact: str) -> bool:
 
     owner_user_id = row.get("owner_user_id")
     if owner_user_id and owner_user_id == user["id"]:
+        return True
+
+    # Task #39: the RECORDER always sees their own in-person recording's artifacts (transcript /
+    # audio / insights), even when the workspace CREATOR — not them — was stamped as owner at bind.
+    # Without this the person who recorded a walk-up meeting 403s on their OWN audio.
+    if row.get("recorder_user_id") and row.get("recorder_user_id") == user["id"]:
         return True
 
     visibility = row.get("visibility") or "owner-only"
@@ -290,6 +303,9 @@ def to_card(session: Session) -> dict:
         # Task #30: whether this meeting's (encrypted) audio was stored — drives the
         # meeting-page audio player. None = unknown/legacy (the UI may probe).
         "store_audio": m.store_audio,
+        # Task #39: server "DiariZen post-pass complete" timestamp (None = not done yet). The
+        # in-person detail view keys its finalized state (LIVE→final badge, voiceprint hint) off this.
+        "diarized_at": m.diarized_at,
         "resolved_speakers": dict(m.resolved_speakers or {}),
         "topics": list(d.topics or []),
         "participants": list(participants) if participants else None,

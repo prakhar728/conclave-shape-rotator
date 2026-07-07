@@ -102,3 +102,15 @@ def test_public_link_and_anonymous_denied(alice, ws):
     assert can_see_transcript(None, row) is False
     other = identity.upsert_user_by_supabase("sb-o", "o@example.com", "O")
     assert can_see_transcript(other, row) is False
+
+
+def test_recorder_sees_own_recording_even_when_not_owner(alice, bob, ws):
+    """#39: the RECORDER can see their own in-person recording's artifacts even though the
+    workspace creator (alice) is the stamped owner and the recorder (bob) is neither owner,
+    a member-with-share, nor an explicit recipient. Fixes 'can't hear your own audio'."""
+    row = _row(workspace_id=ws["id"], owner_user_id=alice["id"], visibility="owner-only")
+    row["recorder_user_id"] = bob["id"]
+    assert can_see_transcript(bob, row) is True     # bob recorded it → grant
+    # a third party who didn't record it and isn't owner/member/shared stays denied
+    carol = identity.upsert_user_by_supabase("sb-carol", "carol@example.com", "C")
+    assert can_see_transcript(carol, row) is False
