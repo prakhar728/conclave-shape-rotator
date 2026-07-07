@@ -94,12 +94,16 @@ def test_invited_email_connects_and_lands_in_workspace(client: TestClient, monke
     assert me.json()["user"]["email"] == "prakhar@example.com"
 
 
-def test_uninvited_stranger_is_rejected_403(client: TestClient, monkeypatch):
-    # Task #9 link-only: no invite, no membership, no meeting share → 403.
+def test_uninvited_user_gets_personal_workspace(client: TestClient, monkeypatch):
+    # #25: no more link-only 403 — every authenticated user auto-gets a solo `Personal` workspace.
     _stub_validate(monkeypatch, email="stranger@example.com", sub="sb-stranger")
     r = client.post("/auth/v1/exchange-token", json={"access_token": "ok"})
-    assert r.status_code == 403
-    assert "membership" in r.json()["detail"].lower()
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["workspace"]["name"] == "Personal"
+    assert body["user"]["email"] == "stranger@example.com"
+    # web fix: the session token is returned in the body (Vercel rewrites eat the cookie)
+    assert body.get("session_token")
 
 
 def test_oauth_is_idempotent_on_same_user(client: TestClient, monkeypatch):

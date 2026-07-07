@@ -176,7 +176,11 @@ def exchange_token_route(
     token = auth_session.issue_session(user["id"])
     auth_session.set_session_cookie(response, token, request=request)
 
-    return {"user": _user_to_public(user), "workspace": workspace}
+    # Web fix: also return the session token in the body. Vercel rewrites (the FE proxies /api/* → the
+    # CVM) strip the Set-Cookie on the way back to the browser, so web clients store this token and send
+    # `Authorization: Bearer <token>` instead (require_current_user already accepts Bearer). Native/OS
+    # clients already do this. The cookie is still set for any same-origin (non-proxied) caller.
+    return {"user": _user_to_public(user), "workspace": workspace, "session_token": token}
 
 
 @router.get("/dev-login")

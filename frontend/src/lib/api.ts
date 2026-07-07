@@ -16,14 +16,38 @@ export class ApiError extends Error {
   }
 }
 
+// Web fix: Vercel rewrites strip the backend's Set-Cookie, so the httpOnly session cookie never
+// reaches the browser. We store the session token (returned by exchange-token) and send it as a
+// Bearer header instead — require_current_user accepts either. Same pattern the OS app already uses.
+const TOKEN_KEY = "conclave_session_token";
+export function getSessionToken(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    return window.localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+export function setSessionToken(t: string | null): void {
+  if (typeof window === "undefined") return;
+  try {
+    if (t) window.localStorage.setItem(TOKEN_KEY, t);
+    else window.localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable — fall back to cookie behavior */
+  }
+}
+
 export async function apiFetch<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
+  const token = getSessionToken();
   const res = await fetch(path, {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers ?? {}),
     },
     ...init,
@@ -54,6 +78,7 @@ export async function apiFetch<T>(
       typeof window !== "undefined" &&
       !["/login", "/signup"].includes(window.location.pathname)
     ) {
+      setSessionToken(null); // web fix: drop the stale bearer token too, else it re-401s in a loop
       try {
         await fetch("/api/auth/v1/logout", {
           method: "POST",
@@ -112,6 +137,7 @@ export type Workspace = {
 export type MeResponse = {
   user: User;
   workspace: Workspace | null;
+  session_token?: string; // web fix: bearer token returned by exchange-token (see setSessionToken)
 };
 
 // --- Attestation (TDX) ------------------------------------------------------
@@ -140,13 +166,18 @@ export const auth = {
       method: "POST",
       body: JSON.stringify({ email, token }),
     }),
-  exchangeToken: (accessToken: string) =>
-    apiFetch<MeResponse>("/api/auth/v1/exchange-token", {
+  exchangeToken: async (accessToken: string): Promise<MeResponse> => {
+    const r = await apiFetch<MeResponse>("/api/auth/v1/exchange-token", {
       method: "POST",
       body: JSON.stringify({ access_token: accessToken }),
-    }),
-  logout: () =>
-    apiFetch<{ ok: boolean }>("/api/auth/v1/logout", { method: "POST" }),
+    });
+    if (r.session_token) setSessionToken(r.session_token); // web fix: hold for Bearer auth
+    return r;
+  },
+  logout: async (): Promise<{ ok: boolean }> => {
+    setSessionToken(null);
+    return apiFetch<{ ok: boolean }>("/api/auth/v1/logout", { method: "POST" });
+  },
   me: () => apiFetch<MeResponse>("/api/auth/v1/me"),
 };
 
