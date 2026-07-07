@@ -36,6 +36,18 @@ export function setSessionToken(t: string | null): void {
   } catch {
     /* storage unavailable — fall back to cookie behavior */
   }
+  // Also mirror the token into a client-readable `conclave_session` cookie. The backend's Set-Cookie
+  // is eaten by the Vercel rewrite (response direction), and BOTH the edge middleware and a plain page
+  // navigation can only read cookies — never localStorage/Bearer. A client-set cookie makes the
+  // middleware let /dashboard load AND forwards to the CVM on /api/* requests (request-direction
+  // cookies forward fine). Same exposure as the localStorage token; the backend accepts either.
+  try {
+    const secure = window.location.protocol === "https:" ? "; secure" : "";
+    const maxAge = t ? 60 * 60 * 24 * 30 : 0;
+    document.cookie = `conclave_session=${t ?? ""}; path=/; max-age=${maxAge}; samesite=lax${secure}`;
+  } catch {
+    /* document.cookie unavailable */
+  }
 }
 
 export async function apiFetch<T>(
