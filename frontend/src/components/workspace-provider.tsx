@@ -40,12 +40,24 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [list, setList] = useState<Workspace[] | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const skipAuthFetch =
+    !!pathname &&
+    (pathname.startsWith("/login") ||
+      pathname.startsWith("/signup") ||
+      pathname.startsWith("/auth/callback"));
 
   // Fetch on mount, and RE-fetch on navigation while the list is empty:
-  // the provider mounts in the root layout, so the first fetch can happen
-  // on /login (401 → []). Without the retry, signing in and client-side
-  // navigating to /dashboard would leave the list permanently empty.
+  // the provider mounts in the root layout, so auth/public screens must not
+  // trigger protected calls. Without the retry, signing in and navigating to
+  // /dashboard after a skipped auth screen would leave the list empty.
   useEffect(() => {
+    if (skipAuthFetch) {
+      const id = window.setTimeout(() => {
+        setList((prev) => (prev !== null && prev.length === 0 ? prev : []));
+        setSelectedId(null);
+      }, 0);
+      return () => window.clearTimeout(id);
+    }
     if (list !== null && list.length > 0) return;
     let cancelled = false;
     workspacesApi
@@ -69,7 +81,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+  }, [pathname, skipAuthFetch]);
 
   const selectWorkspace = useCallback((id: string) => {
     setSelectedId(id);

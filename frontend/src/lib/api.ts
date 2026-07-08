@@ -88,11 +88,18 @@ export async function apiFetch<T>(
       "/api/auth/v1/logout",
     ];
     const isCredentialCall = credentialPaths.some((p) => path.startsWith(p));
+    const currentPath =
+      typeof window !== "undefined" ? window.location.pathname : "";
+    const isAuthRoute =
+      currentPath === "/login" ||
+      currentPath === "/signup" ||
+      currentPath === "/auth/callback" ||
+      currentPath.startsWith("/auth/callback/");
     if (
       res.status === 401 &&
       !isCredentialCall &&
       typeof window !== "undefined" &&
-      !["/login", "/signup"].includes(window.location.pathname)
+      !isAuthRoute
     ) {
       setSessionToken(null); // web fix: drop the stale bearer token too, else it re-401s in a loop
       try {

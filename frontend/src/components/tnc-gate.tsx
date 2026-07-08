@@ -26,15 +26,18 @@ export function TncGate({ children }: { children: React.ReactNode }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Never gate the auth screens — the user must be able to log in first.
+  // Never gate the auth screens — the user must be able to log in first, and
+  // the callback must finish exchanging the OAuth token before any auth probes.
   const skip =
     !!pathname &&
-    (pathname.startsWith("/login") || pathname.startsWith("/signup"));
+    (pathname.startsWith("/login") ||
+      pathname.startsWith("/signup") ||
+      pathname.startsWith("/auth/callback"));
 
   useEffect(() => {
     if (skip) {
-      setNeeds(false);
-      return;
+      const id = window.setTimeout(() => setNeeds(false), 0);
+      return () => window.clearTimeout(id);
     }
     let cancelled = false;
     (async () => {

@@ -8,13 +8,13 @@
  * (or wherever `?next=` says).
  *
  * Three end states:
- *  - success → router.push(next)
+ *  - success → full-page replace(next)
  *  - missing token → render "no token" error
  *  - backend rejected → render the upstream error
  */
 "use client";
 
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { Wordmark } from "@/components/wordmark";
@@ -29,7 +29,6 @@ export default function AuthCallbackPage() {
 }
 
 function CallbackInner() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/dashboard";
   const [error, setError] = useState<string | null>(null);
@@ -75,13 +74,12 @@ function CallbackInner() {
       // Same-origin guard mirroring /login.
       const target = next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
       // Strip the hash so it doesn't linger on the next page.
-      window.history.replaceState(null, "", target);
-      router.replace(target);
+      window.location.replace(target);
     })();
     return () => {
       cancelled = true;
     };
-  }, [next, router]);
+  }, [next]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-6">
